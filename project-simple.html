@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vereinfachte Projektdetails - Lauffer Zeiterfassung</title>
+    <!-- Firebase-SDKs einbinden -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    
+    <!-- PDF Export Bibliothek -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Datenservice und Hilfsfunktionen -->
+    <script src="js/data.js"></script>
+    <script src="js/report-functions.js"></script>
+    <script src="js/pdf-export.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        /* Verbessertes CSS für die Darstellung - an Lauffer-Design angepasst */
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 15px;
+        }
+        
+        .actions-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        h1, h2, h3 {
+            margin-top: 0;
+            color: #446d23; /* Lauffer-Grün für Überschriften */
+            font-weight: 600;
+        }
+        
+        h1 {
+            margin-bottom: 1rem;
+            color: #5e8c2f; /* Helleres Grün für H1 */
+            border-bottom: 2px solid #5e8c2f;
+            padding-bottom: 10px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 25px;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 0px;
+            border-top: 5px solid #5e8c2f; /* Grüner Rand oben */
+        }
+        
+        .info-box {
+            background-color: #f5f9ee; /* Helles Grün für Info-Box */
+            border-left: 5px solid #5e8c2f;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: #5e8c2f; /* Grün für Buttons */
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 2px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            border: none;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        
+        .btn:hover {
+            background-color: #446d23; /* Dunkleres Grün für Hover */
+        }
+        
+        .btn.btn-export {
+            background-color: #8b5a2b; /* Braun für Export-Button */
+        }
+        
+        .btn.btn-export:hover {
+            background-color: #704820; /* Dunkleres Braun für Hover */
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+        }
+        
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #5e8c2f; /* Grün für Tabellenkopf */
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        tr:hover {
+            background-color: #f5f9ee; /* Leicht grünlicher Hover */
+        }
+        
+        section {
+            margin-bottom: 25px;
+            padding-bottom: 5px;
+        }
+        
+        /* PDF-optimierte Galeriedarstellung */
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        /* Stile für den PDF-Export */
+        @media print {
+            .gallery {
+                grid-template-columns: 1fr 1fr;
+                page-break-inside: avoid;
+            }
+            .gallery-item {
+                page-break-inside: avoid;
+                margin-bottom: 15px;
+            }
+        }
+        .gallery-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        .gallery-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .gallery-img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 15px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background-color: #005a9e;
+        }
+        
+        /* Lightbox Stile */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .lightbox.active {
+            display: flex;
+        }
+        .lightbox-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 80%;
+            margin: 20px;
+        }
+        .lightbox-img {
+            max-width: 100%;
+            max-height: 80vh;
+            display: block;
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+        .lightbox-caption {
+            color: white;
+            margin-top: 10px;
+            padding: 10px 20px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 4px;
+            max-width: 80%;
+            text-align: center;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        .lightbox-controls {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .lightbox-prev, .lightbox-next {
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox-prev:hover, .lightbox-next:hover {
+            background: rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1 id="project-title">Projektbericht</h1>
+            <div class="actions-container">
+                <button id="export-btn" class="btn btn-export"><i class="fas fa-file-pdf"></i> PDF exportieren</button>
+                <a href="index.html" id="back-link" class="btn"><i class="fas fa-arrow-left"></i> Zurück zur Hauptseite</a>
+            </div>
+        </div>
+        <div class="info-box">
+            <p><i class="fas fa-info-circle"></i> Hier finden Sie alle Details zum ausgewählten Projekt sowie zugehörige Zeiterfassungseinträge, Baustellenfotos und Dokumente. Mit dem Export-Button können Sie einen vollständigen PDF-Bericht erstellen.</p>
+        </div>
+        
+        <div id="pdf-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="color: #5e8c2f;">LAUFFER Gartenbau - Projektbericht</h2>
+            </div>
+            
+            <section>
+                <h2><i class="fas fa-briefcase"></i> Projektdetails</h2>
+                <div class="info-box" id="project-info">
+                    Projektinformationen werden geladen...
+                </div>
+            </section>
+            
+            <section>
+                <h2><i class="fas fa-clock"></i> Zeiteinträge</h2>
+                <div id="time-entries-container">
+                    <p>Zeiteinträge werden geladen...</p>
+                    <table id="time-entries-table">
+                        <thead>
+                            <tr>
+                                <th>Mitarbeiter</th>
+                                <th>Datum</th>
+                                <th>Stempelzeit Ein</th>
+                                <th>Stempelzeit Aus</th>
+                                <th>Arbeitszeit</th>
+                                <th>Notizen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="time-entries-body">
+                            <!-- Zeiteinträge werden hier eingefügt -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <section>
+                <h2><i class="fas fa-camera"></i> Baustellenbilder</h2>
+                <div id="construction-images" class="gallery">
+                    <p>Bilder werden geladen...</p>
+                </div>
+            </section>
+            
+            <section>
+                <h2><i class="fas fa-file-alt"></i> Lieferscheine und Dokumente</h2>
+                <div id="documents-gallery" class="gallery">
+                    <p>Dokumente werden geladen...</p>
+                </div>
+            </section>
+        </div>
+    </div>
+    
+    <script>
+        // Initialisierung der Firebase-Konfiguration
+        const firebaseConfig = {
+            apiKey: "REDACTED_FIREBASE_WEB_API_KEY_ROTATE",
+            authDomain: "lauffer-zeiterfassung.firebaseapp.com",
+            projectId: "lauffer-zeiterfassung",
+            storageBucket: "lauffer-zeiterfassung.appspot.com",
+            messagingSenderId: "705180999548",
+            appId: "1:705180999548:web:e2f9c090efe67fa3af9ab6"
+        };
+        
+        // Firebase initialisieren
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        
+        // Globale Variablen
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+        let projectId = null;
+        
+        // DOM-Elemente
+        const pdfContent = document.getElementById('pdf-content');
+        const exportBtn = document.getElementById('export-btn');
+        const projectTitleEl = document.getElementById('project-title');
+        const projectInfoEl = document.getElementById('project-info');
+        const timeEntriesBodyEl = document.getElementById('time-entries-body');
+        const constructionImagesEl = document.getElementById('construction-images');
+        const documentsGalleryEl = document.getElementById('documents-gallery');
+        const backLinkEl = document.getElementById('back-link');
+        
+        // Seite initialisieren
+        document.addEventListener('DOMContentLoaded', function() {
+            // Projekt-ID aus der URL auslesen
+            const urlParams = new URLSearchParams(window.location.search);
+            projectId = urlParams.get('id');
+            
+            if (!projectId) {
+                showError('Keine Projekt-ID in der URL gefunden.');
+                return;
+            }
+            
+            // Back-Link aktualisieren
+            backLinkEl.href = `index.html`;
+            
+            // Daten laden
+            loadProject();
+        });
+        
+        // Hilfsfunktion: Fehler anzeigen
+        function showError(message) {
+            alert('Fehler: ' + message);
+            console.error(message);
+        }
+        
+        // Projekt laden
+        async function loadProject() {
+            try {
+                // Projekt aus der Datenbank laden
+                const projectDoc = await db.collection('projects').doc(projectId).get();
+                
+                if (!projectDoc.exists) {
+                    showError('Projekt nicht gefunden.');
+                    return;
+                }
+                
+                const project = { id: projectDoc.id, ...projectDoc.data() };
+                
+                // Projektdaten anzeigen
+                projectTitleEl.textContent = project.name || 'Unbenanntes Projekt';
+                
+                let infoText = '';
+                if (project.client) infoText += `<strong>Kunde:</strong> ${project.client}<br>`;
+                if (project.location) infoText += `<strong>Standort:</strong> ${project.location}<br>`;
+                if (project.startDate) {
+                    const startDate = project.startDate instanceof firebase.firestore.Timestamp ?
+                        project.startDate.toDate() : new Date(project.startDate);
+                    infoText += `<strong>Startdatum:</strong> ${startDate.toLocaleDateString('de-DE')}<br>`;
+                }
+                if (project.endDate) {
+                    const endDate = project.endDate instanceof firebase.firestore.Timestamp ?
+                        project.endDate.toDate() : new Date(project.endDate);
+                    infoText += `<strong>Enddatum:</strong> ${endDate.toLocaleDateString('de-DE')}<br>`;
+                }
+                if (project.description) infoText += `<strong>Beschreibung:</strong> ${project.description}`;
+                
+                projectInfoEl.innerHTML = infoText;
+                
+                // Zeiteinträge, Bilder und Dokumente laden
+                loadTimeEntries();
+                loadProjectImages('construction_site');
+                loadProjectImages('delivery_note');
+                
+            } catch (error) {
+                console.error('Fehler beim Laden des Projekts:', error);
+                showError('Fehler beim Laden des Projekts.');
+            }
+        }
+        
+        // Zeiteinträge laden
+        async function loadTimeEntries() {
+            try {
+                const timeEntriesContainer = document.getElementById('time-entries-container');
+                timeEntriesContainer.innerHTML = '<p>Zeiteinträge werden geladen...</p>';
+                
+                // Zeiteinträge laden
+                const snapshot = await db.collection('timeEntries')
+                    .where('projectId', '==', projectId)
+                    .get();
+                
+                if (snapshot.empty) {
+                    timeEntriesContainer.innerHTML = '<p>Keine Zeiteinträge vorhanden.</p>';
+                    return;
+                }
+                
+                // Zeiteinträge verarbeiten
+                const timeEntries = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                // Nach Datum sortieren (neueste zuerst)
+                timeEntries.sort((a, b) => {
+                    // Sichere Konvertierung für verschiedene Timestamp-Formate
+                    const getDateFromTimestamp = (timestamp) => {
+                        if (!timestamp) return new Date(0);
+                        if (timestamp instanceof firebase.firestore.Timestamp) return timestamp.toDate();
+                        if (timestamp.seconds) return new Date(timestamp.seconds * 1000);
+                        return new Date(timestamp);
+                    };
+                    
+                    // Zuerst clockOutTime prüfen, dann clockInTime
+                    const dateA = getDateFromTimestamp(a.clockOutTime || a.clockInTime);
+                    const dateB = getDateFromTimestamp(b.clockOutTime || b.clockInTime);
+                    
+                    return dateB - dateA; // Absteigend (neuste zuerst)
+                });
+                
+                // Mitarbeiterdaten laden
+                const employeePromises = timeEntries.map(entry => 
+                    entry.employeeId ? db.collection('employees').doc(entry.employeeId).get() : Promise.resolve({ exists: false })
+                );
+                
+                const employeeDocs = await Promise.all(employeePromises);
+                const employees = employeeDocs.map(doc => 
+                    doc.exists ? { id: doc.id, ...doc.data() } : { name: 'Unbekannt' }
+                );
+                
+                // Zeiteinträge anzeigen
+                timeEntriesContainer.innerHTML = `
+                    <table id="time-entries-table">
+                        <thead>
+                            <tr>
+                                <th>Mitarbeiter</th>
+                                <th>Datum</th>
+                                <th>Einstempelzeit</th>
+                                <th>Ausstempelzeit</th>
+                                <th>Arbeitszeit</th>
+                                <th>Notizen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="time-entries-body"></tbody>
+                    </table>
+                `;
+                
+                const tableBody = document.getElementById('time-entries-body');
+                
+                timeEntries.forEach((entry, index) => {
+                    const employee = employees[index] || { name: 'Unbekannt' };
+                    
+                    // Datum formatieren
+                    let date = 'Unbekannt';
+                    let clockInTime = '-';
+                    let clockOutTime = '-';
+                    let workHours = '-';
+                    
+                    // Hilfsfunktion zum Sicheren Konvertieren von Zeitstempeln
+                    function safelyConvertTimestamp(timestamp) {
+                        if (!timestamp) return null;
+                        
+                        try {
+                            // Firestore Timestamp konvertieren
+                            if (timestamp instanceof firebase.firestore.Timestamp) {
+                                return timestamp.toDate();
+                            }
+                            
+                            // Unix-Timestamp als Nummer (Sekunden)
+                            if (typeof timestamp === 'number') {
+                                return new Date(timestamp * 1000);
+                            }
+                            
+                            // Unix-Timestamp als String (Millisekunden)
+                            if (typeof timestamp === 'string' && !isNaN(timestamp)) {
+                                return new Date(parseInt(timestamp));
+                            }
+                            
+                            // ISO-Datumsstring
+                            if (typeof timestamp === 'string') {
+                                const d = new Date(timestamp);
+                                return isNaN(d.getTime()) ? null : d;
+                            }
+                            
+                            // Date-Objekt
+                            if (timestamp instanceof Date) {
+                                return timestamp;
+                            }
+                            
+                            // Firestore Servervalue-Timestamp-Objekt
+                            if (timestamp && timestamp._seconds) {
+                                return new Date(timestamp._seconds * 1000);
+                            }
+                            
+                            return null;
+                        } catch (e) {
+                            console.error('Fehler bei der Zeitkonvertierung:', e, timestamp);
+                            return null;
+                        }
+                    }
+                    
+                    // Einstempelzeit konvertieren und formatieren
+                    const clockInDateObj = safelyConvertTimestamp(entry.clockInTime);
+                    if (clockInDateObj) {
+                        date = clockInDateObj.toLocaleDateString('de-DE');
+                        clockInTime = clockInDateObj.toLocaleTimeString('de-DE', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        });
+                    }
+                    
+                    // Ausstempelzeit konvertieren und formatieren
+                    if (entry.clockOutTime) {
+                        const clockOutDateObj = safelyConvertTimestamp(entry.clockOutTime);
+                        if (clockOutDateObj) {
+                            clockOutTime = clockOutDateObj.toLocaleTimeString('de-DE', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                            });
+                            
+                            // Arbeitszeit berechnen, wenn beide Zeitstempel gültig sind
+                            if (clockInDateObj) {
+                                const pauseTotalTime = entry.pauseTotalTime || 0;
+                                const totalTimeMs = clockOutDateObj.getTime() - clockInDateObj.getTime();
+                                const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
+                                
+                                if (actualWorkTimeMs > 0) {
+                                    const totalMinutes = Math.floor(actualWorkTimeMs / 60000);
+                                    const hours = Math.floor(totalMinutes / 60);
+                                    const minutes = totalMinutes % 60;
+                                    workHours = `${hours}h ${minutes}min`;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Zeile erstellen
+                    const row = document.createElement('tr');
+                    
+                    // Zellen hinzufügen
+                    row.innerHTML = `
+                        <td>${employee.name}</td>
+                        <td>${date}</td>
+                        <td>${clockInTime}</td>
+                        <td>${clockOutTime}</td>
+                        <td>${workHours}</td>
+                        <td>${entry.notes || '-'}</td>
+                    `;
+                    
+                    tableBody.appendChild(row);
+                });
+                
+                console.log(`${timeEntries.length} Zeiteinträge angezeigt`);
+                
+            } catch (error) {
+                console.error('Fehler beim Laden der Zeiteinträge:', error);
+                const timeEntriesContainer = document.getElementById('time-entries-container');
+                timeEntriesContainer.innerHTML = '<p class="error">Fehler beim Laden der Zeiteinträge.</p>';
+            }
+        }
+        
+        // Bilder laden
+        async function loadProjectImages(type) {
+            try {
+                const containerId = type === 'construction_site' ? 'construction-images' : 'documents-gallery';
+                
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.error(`Container mit ID ${containerId} nicht gefunden`);
+                    return;
+                }
+                
+                // Container leeren
+                container.innerHTML = '<p>Bilder werden geladen...</p>';
+                
+                // Zeiteinträge laden, um daraus die Bilder zu extrahieren
+                const timeEntriesSnapshot = await db.collection('timeEntries')
+                    .where('projectId', '==', projectId)
+                    .get();
+                
+                if (timeEntriesSnapshot.empty) {
+                    container.innerHTML = `<p>Keine Zeiteinträge für dieses Projekt gefunden.</p>`;
+                    return;
+                }
+                
+                // Alle relevanten Datei-IDs aus den Zeiteinträgen sammeln
+                const timeEntries = timeEntriesSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                console.log('Alle Zeiteinträge für Bilder:', timeEntries);
+                
+                let fileIds = [];
+                let directFiles = [];
+                
+                timeEntries.forEach(entry => {
+                    // Je nach Typ die richtigen Datei-IDs oder Objekte sammeln
+                    if (type === 'construction_site') {
+                        // Prüfe zuerst auf sitePhotos (neues Format)
+                        if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
+                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
+                            if (entry.sitePhotos.length > 0 && typeof entry.sitePhotos[0] === 'object' && entry.sitePhotos[0].url) {
+                                console.log('Direkte Bildobjekte gefunden in sitePhotos:', entry.id);
+                                // Alle Bilder mit ihren individuellen Kommentaren hinzufügen
+                                entry.sitePhotos.forEach(photo => {
+                                    console.log('Füge direktes Bildobjekt aus sitePhotos hinzu:', photo);
+                                    // Zusätzliche Informationen zum Bild hinzufügen
+                                    directFiles.push({
+                                        ...photo,  // Enthält URL und Kommentar
+                                        timeEntryId: entry.id,
+                                        employeeId: entry.employeeId,
+                                        timestamp: entry.clockOutTime || entry.clockInTime
+                                    });
+                                });
+                            } else {
+                                // IDs sammeln
+                                fileIds = [...fileIds, ...entry.sitePhotos];
+                            }
+                        }
+                        
+                        // Alternativ photos prüfen (altes Format)
+                        if (entry.photos && Array.isArray(entry.photos)) {
+                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
+                            if (entry.photos.length > 0 && typeof entry.photos[0] === 'object' && entry.photos[0].url) {
+                                console.log('Direkte Bildobjekte gefunden in photos:', entry.id);
+                                // Alle Bilder mit ihren individuellen Kommentaren hinzufügen
+                                entry.photos.forEach(photo => {
+                                    console.log('Füge direktes Bildobjekt aus photos hinzu:', photo);
+                                    // Zusätzliche Informationen zum Bild hinzufügen
+                                    directFiles.push({
+                                        ...photo,  // Enthält URL und Kommentar
+                                        timeEntryId: entry.id,
+                                        employeeId: entry.employeeId,
+                                        timestamp: entry.clockOutTime || entry.clockInTime
+                                    });
+                                });
+                            } else {
+                                // IDs sammeln
+                                fileIds = [...fileIds, ...entry.photos];
+                            }
+                        }
+                    } else { // delivery_note
+                        if (entry.documents && Array.isArray(entry.documents)) {
+                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
+                            if (entry.documents.length > 0 && typeof entry.documents[0] === 'object' && entry.documents[0].url) {
+                                console.log('Direkte Dokumentobjekte gefunden in Zeiteintrag:', entry.id);
+                                // Alle Dokumente mit ihren individuellen Kommentaren hinzufügen
+                                entry.documents.forEach(doc => {
+                                    console.log('Füge direktes Dokumentobjekt hinzu:', doc);
+                                    directFiles.push({
+                                        ...doc,  // Enthält URL und Kommentar
+                                        timeEntryId: entry.id,
+                                        employeeId: entry.employeeId,
+                                        timestamp: entry.clockOutTime || entry.clockInTime
+                                    });
+                                });
+                            } else {
+                                // IDs sammeln
+                                fileIds = [...fileIds, ...entry.documents];
+                            }
+                        }
+                        if (entry.deliveryNotes && Array.isArray(entry.deliveryNotes)) {
+                            fileIds = [...fileIds, ...entry.deliveryNotes];
+                        }
+                    }
+                });
+                
+                // Duplikate entfernen
+                fileIds = [...new Set(fileIds)].filter(id => id && typeof id === 'string');
+                
+                console.log(`${fileIds.length} eindeutige Datei-IDs gefunden`);
+                console.log(`${directFiles.length} direkte Dateiobjekte gefunden`);
+                
+                // Wenn keine Dateien vorhanden sind
+                if (fileIds.length === 0 && directFiles.length === 0) {
+                    container.innerHTML = `<p>Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden.</p>`;
+                    return;
+                }
+                
+                let files = [];
+                
+                // Wenn ID-basierte Dateien vorhanden sind, diese laden
+                if (fileIds.length > 0) {
+                    // Dateien anhand der IDs abrufen
+                    const filePromises = fileIds.map(id => db.collection('fileUploads').doc(id).get());
+                    const fileDocs = await Promise.all(filePromises);
+                    
+                    // Gültige Dateien filtern
+                    files = fileDocs
+                        .filter(doc => doc.exists)
+                        .map(doc => ({ id: doc.id, ...doc.data() }));
+                }
+                
+                // Direkte Dateiobjekte hinzufügen
+                if (directFiles.length > 0) {
+                    files = [...files, ...directFiles];
+                }
+                
+                console.log(`Insgesamt ${files.length} Dateien gefunden:`, files);
+                
+                if (files.length === 0) {
+                    container.innerHTML = `<p>Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden.</p>`;
+                    return;
+                }
+                
+                // Mitarbeiterdaten laden
+                const employeePromises = files.map(file => 
+                    file.employeeId ? db.collection('employees').doc(file.employeeId).get() : Promise.resolve({ exists: false })
+                );
+                
+                const employeeDocs = await Promise.all(employeePromises);
+                const employees = employeeDocs.map(doc => 
+                    doc.exists ? { id: doc.id, ...doc.data() } : { name: 'Unbekannt' }
+                );
+                
+                // Galerie aktualisieren
+                container.innerHTML = '';
+                
+                const galleryEl = container; // Der Container selbst ist die Galerie
+                
+                // Zähler für geladene Bilder (für Initialisierung der Lightbox)
+                let loadedImages = 0;
+                const totalImages = files.length;
+                
+                files.forEach((file, index) => {
+                    const employee = employees[index] || { name: 'Unbekannt' };
+                    
+                    // Datum formatieren mit der sicheren Konvertierungsfunktion
+                    let dateStr = 'Unbekanntes Datum';
+                    
+                    // Hilfsfunktion zum Sicheren Konvertieren von Zeitstempeln
+                    function safelyConvertTimestamp(timestamp) {
+                        if (!timestamp) return null;
+                        
+                        try {
+                            // Firestore Timestamp konvertieren
+                            if (timestamp instanceof firebase.firestore.Timestamp) {
+                                return timestamp.toDate();
+                            }
+                            
+                            // Unix-Timestamp als Nummer (Sekunden)
+                            if (typeof timestamp === 'number') {
+                                return new Date(timestamp * 1000);
+                            }
+                            
+                            // Unix-Timestamp als String (Millisekunden)
+                            if (typeof timestamp === 'string' && !isNaN(timestamp)) {
+                                return new Date(parseInt(timestamp));
+                            }
+                            
+                            // ISO-Datumsstring
+                            if (typeof timestamp === 'string') {
+                                const d = new Date(timestamp);
+                                return isNaN(d.getTime()) ? null : d;
+                            }
+                            
+                            // Date-Objekt
+                            if (timestamp instanceof Date) {
+                                return timestamp;
+                            }
+                            
+                            // Firestore Servervalue-Timestamp-Objekt
+                            if (timestamp && timestamp._seconds) {
+                                return new Date(timestamp._seconds * 1000);
+                            }
+                            
+                            return null;
+                        } catch (e) {
+                            console.error('Fehler bei der Zeitkonvertierung:', e, timestamp);
+                            return null;
+                        }
+                    }
+                    
+                    // Versuche verschiedene Zeitstempel-Eigenschaften
+                    let dateObj = null;
+                    
+                    if (file.timestamp) {
+                        dateObj = safelyConvertTimestamp(file.timestamp);
+                    } 
+                    
+                    if (!dateObj && file.uploadDate) {
+                        dateObj = safelyConvertTimestamp(file.uploadDate);
+                    }
+                    
+                    if (!dateObj && file.uploadTime) {
+                        dateObj = safelyConvertTimestamp(file.uploadTime);
+                    }
+                    
+                    if (dateObj) {
+                        dateStr = dateObj.toLocaleDateString('de-DE');
+                    }
+                    
+                    // Galerie-Element erstellen
+                    const galleryItem = document.createElement('div');
+                    galleryItem.className = 'gallery-item';
+                    
+                    // Bild-Element erstellen
+                    const img = document.createElement('img');
+                    img.className = 'gallery-img';
+                    img.src = file.url || file.downloadURL || '';
+                    img.alt = 'Bild';
+                    
+                    // Bild-Ladeüberwachung für Lightbox-Initialisierung
+                    img.onload = function() {
+                        loadedImages++;
+                        // Initialisiere Lightbox, wenn alle Bilder geladen sind
+                        if (loadedImages === totalImages) {
+                            setupLightbox();
+                        }
+                    };
+                    
+                    img.onerror = function() {
+                        loadedImages++;
+                        // Selbst bei Fehler überprüfen, ob wir mit der Initialisierung fortfahren können
+                        if (loadedImages === totalImages) {
+                            setupLightbox();
+                        }
+                    };
+                    
+                    // Beschreibung erstellen
+                    const description = document.createElement('p');
+                    description.textContent = `${employee.name} - ${dateStr}`;
+                    
+                    // Debug-Ausgabe der kompletten Bilddaten
+                    console.log(`Bild ${index+1} Eigenschaften:`, file);
+                    
+                    // Verwende immer den Bildkommentar (comment), nicht die Arbeitsbeschreibung (notes)
+                    if (file.comment) {
+                        const commentContainer = document.createElement('div');
+                        commentContainer.className = 'image-comment-container';
+                        
+                        const commentLabel = document.createElement('strong');
+                        commentLabel.textContent = 'Kommentar:'; 
+                        
+                        const commentContent = document.createElement('p');
+                        commentContent.textContent = file.comment;
+                        commentContent.className = 'image-comment-text';
+                        
+                        commentContainer.appendChild(commentLabel);
+                        commentContainer.appendChild(commentContent);
+                        galleryItem.appendChild(commentContainer);
+                    }
+                    
+                    // Bei Baustellen-Uploads sollten wir keine Arbeitsbeschreibung als Bildkommentar anzeigen
+                    // Das kommt nur als Fallback für die alten Daten
+                    if (!file.comment && file.notes) {
+                        console.log('Fallback: Verwende notes statt comment für Bild', index+1);
+                        const commentContainer = document.createElement('div');
+                        commentContainer.className = 'image-comment-container';
+                        
+                        const commentLabel = document.createElement('strong');
+                        commentLabel.textContent = 'Beschreibung:'; 
+                        
+                        const notesContent = document.createElement('p');
+                        notesContent.textContent = file.notes;
+                        notesContent.className = 'image-comment-text';
+                        
+                        commentContainer.appendChild(commentLabel);
+                        commentContainer.appendChild(notesContent);
+                        galleryItem.appendChild(commentContainer);
+                    }
+                    
+                    // Elemente zusammenfügen
+                    galleryItem.appendChild(img);
+                    galleryItem.appendChild(description);
+                    
+                    // In die Galerie einfügen
+                    galleryEl.appendChild(galleryItem);
+                });
+                
+                console.log(`${files.length} ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} angezeigt`);
+                
+            } catch (error) {
+                console.error(`Fehler beim Laden der ${type}-Bilder:`, error);
+                const containerId = type === 'construction_site' ? 'photos-container' : 'documents-container';
+                const container = document.getElementById(containerId);
+                container.innerHTML = `<p class="error">Fehler beim Laden der ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'}.</p>`;
+            }
+        }
+    </script>
+    <!-- Lightbox Container -->
+    <div class="lightbox" id="lightbox">
+        <div class="lightbox-content">
+            <button class="lightbox-close">&times;</button>
+            <img class="lightbox-img" id="lightbox-img" src="" alt="Vergrößertes Bild">
+            <div class="lightbox-controls">
+                <button class="lightbox-prev">&lsaquo;</button>
+                <button class="lightbox-next">&rsaquo;</button>
+            </div>
+        </div>
+        <div class="lightbox-caption" id="lightbox-caption"></div>
+    </div>
+
+    <script>
+        // Lightbox-Funktionalität
+        let currentGallery = [];
+        let currentImageIndex = 0;
+        
+        function setupLightbox() {
+            // Alle Bilder in den Galerien mit Click-Event versehen
+            document.querySelectorAll('.gallery-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const img = this.querySelector('img');
+                    const imgSrc = img.src;
+                    const caption = this.querySelector('p')?.textContent || '';
+                    
+                    // Prüfen, in welcher Galerie wir sind
+                    const galleryContainer = this.closest('.gallery');
+                    currentGallery = Array.from(galleryContainer.querySelectorAll('.gallery-item'));
+                    currentImageIndex = currentGallery.indexOf(this);
+                    
+                    openLightbox(imgSrc, caption);
+                });
+            });
+            
+            // Lightbox schließen bei Klick auf Schließen-Button
+            document.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
+            
+            // Schließen bei Klick außerhalb des Bildes
+            document.getElementById('lightbox').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeLightbox();
+                }
+            });
+            
+            // Vor- und Zurück-Buttons
+            document.querySelector('.lightbox-prev').addEventListener('click', function(e) {
+                e.stopPropagation();
+                navigateLightbox(-1);
+            });
+            
+            document.querySelector('.lightbox-next').addEventListener('click', function(e) {
+                e.stopPropagation();
+                navigateLightbox(1);
+            });
+            
+            // Tastaturnavigation
+            document.addEventListener('keydown', function(e) {
+                if (!document.getElementById('lightbox').classList.contains('active')) return;
+                
+                if (e.key === 'Escape') {
+                    closeLightbox();
+                } else if (e.key === 'ArrowLeft') {
+                    navigateLightbox(-1);
+                } else if (e.key === 'ArrowRight') {
+                    navigateLightbox(1);
+                }
+            });
+        }
+        
+        function openLightbox(imgSrc, caption) {
+            const lightbox = document.getElementById('lightbox');
+            const lightboxImg = document.getElementById('lightbox-img');
+            const lightboxCaption = document.getElementById('lightbox-caption');
+            
+            lightboxImg.src = imgSrc;
+            lightboxCaption.textContent = caption;
+            lightbox.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Verhindert Scrollen im Hintergrund
+        }
+        
+        function closeLightbox() {
+            const lightbox = document.getElementById('lightbox');
+            lightbox.classList.remove('active');
+            document.body.style.overflow = ''; // Scrollen wieder erlauben
+        }
+        
+        function navigateLightbox(direction) {
+            currentImageIndex = (currentImageIndex + direction + currentGallery.length) % currentGallery.length;
+            const newItem = currentGallery[currentImageIndex];
+            const newImg = newItem.querySelector('img');
+            const newCaption = newItem.querySelector('p')?.textContent || '';
+            
+            document.getElementById('lightbox-img').src = newImg.src;
+            document.getElementById('lightbox-caption').textContent = newCaption;
+        }
+        
+        // Lightbox initialisieren, wenn Seite geladen ist
+        document.addEventListener('DOMContentLoaded', setupLightbox);
+        
+        // Lightbox initialisieren, wenn Bilder dynamisch geladen werden
+        function initializeLightboxAfterLoad() {
+            setupLightbox();
+        }
+        
+        // Die PDF-Export-Funktion wurde in pdf-export.js ausgelagert
+    </script>
+</body>
+</html>

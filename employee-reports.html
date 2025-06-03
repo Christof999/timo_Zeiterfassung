@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mitarbeiter-Zeitberichte - Lauffer Zeiterfassung</title>
+    
+    <!-- Firebase-SDKs einbinden -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    
+    <!-- PDF Export Bibliothek -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- Datenservice und Hilfsfunktionen -->
+    <script src="js/data.js"></script>
+    <script src="js/pdf-export-new.js"></script>
+    <script src="js/employee-report.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/time-entries.css">
+    
+    <style>
+        /* Zusätzliche Styles für die Berichtsseite */
+        .report-filters {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: flex-end;
+        }
+        
+        .form-group {
+            margin-bottom: 0;
+        }
+        
+        .employee-report-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        
+        .employee-report-header {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #5e8c2f;
+        }
+        
+        .employee-report-summary {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-weight: bold;
+        }
+        
+        .report-table-container {
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+        
+        .entry-with-pause {
+            background-color: #fff9e6;
+        }
+        
+        .pause-time {
+            color: #ff6b00;
+            font-weight: bold;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 30px;
+            font-style: italic;
+            color: #666;
+        }
+        
+        .error-message {
+            background-color: #ffecec;
+            color: #d8000c;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .actions-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            body {
+                padding: 0;
+                background: white;
+            }
+            
+            .employee-report-container {
+                box-shadow: none;
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>Lauffer Zeiterfassung</h1>
+                <p>Gartenbau • Erdbau • Natursteinhandel</p>
+            </div>
+            <nav class="no-print">
+                <ul class="nav-links">
+                    <li><a href="index.html">Startseite</a></li>
+                    <li><a href="admin.html">Admin-Bereich</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <main>
+            <section class="page-section">
+                <h2>Mitarbeiter-Zeitberichte</h2>
+                <p>Hier können Sie Zeitberichte für einzelne Mitarbeiter erstellen und exportieren.</p>
+                
+                <div class="report-filters no-print">
+                    <div class="form-group">
+                        <label for="employee-select">Mitarbeiter:</label>
+                        <select id="employee-select" required>
+                            <option value="">-- Mitarbeiter auswählen --</option>
+                            <!-- Wird durch JavaScript gefüllt -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="report-start-date">Von:</label>
+                        <input type="date" id="report-start-date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="report-end-date">Bis:</label>
+                        <input type="date" id="report-end-date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button id="generate-employee-report-btn" class="btn primary-btn">
+                            <i class="fas fa-search"></i> Bericht erstellen
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="employee-report-container" class="employee-report-container hidden">
+                    <div id="employee-report-header" class="employee-report-header">
+                        <!-- Wird durch JavaScript gefüllt -->
+                    </div>
+                    
+                    <div class="report-table-container">
+                        <table id="employee-report-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Datum</th>
+                                    <th>Projekt</th>
+                                    <th>Einstempelzeit</th>
+                                    <th>Ausstempelzeit</th>
+                                    <th>Dauer</th>
+                                    <th>Pausenzeit</th>
+                                    <th>Notizen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Wird durch JavaScript gefüllt -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div id="employee-report-summary" class="employee-report-summary">
+                        <!-- Wird durch JavaScript gefüllt -->
+                    </div>
+                    
+                    <div class="actions-bar no-print">
+                        <button onclick="window.print()" class="btn secondary-btn">
+                            <i class="fas fa-print"></i> Drucken
+                        </button>
+                        
+                        <button id="export-employee-report-btn" class="btn primary-btn" disabled>
+                            <i class="fas fa-file-csv"></i> Als CSV exportieren
+                        </button>
+                        
+                        <button id="export-pdf-btn" class="btn primary-btn" onclick="generateEmployeeReportPDF()">
+                            <i class="fas fa-file-pdf"></i> Als PDF exportieren
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="no-print">
+            <p>&copy; 2025 Lauffer Gartenbau Erdbau Natursteinhandel</p>
+        </footer>
+    </div>
+
+    <!-- Firebase Konfiguration -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/config.js"></script>
+    
+    <!-- PDF Export für Mitarbeiterberichte -->
+    <script>
+        // PDF-Export-Funktion für Mitarbeiterberichte
+        async function generateEmployeeReportPDF() {
+            // Prüfen, ob Berichtsdaten vorhanden sind
+            if (currentReportEntries.length === 0) {
+                alert('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+            
+            try {
+                // Mitarbeiter-Informationen laden
+                const employee = await DataService.getEmployeeById(currentEmployeeId);
+                
+                // Ladeindikator erstellen
+                const loadingIndicator = document.createElement('div');
+                loadingIndicator.style.position = 'fixed';
+                loadingIndicator.style.top = '0';
+                loadingIndicator.style.left = '0';
+                loadingIndicator.style.width = '100%';
+                loadingIndicator.style.height = '100%';
+                loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.7)';
+                loadingIndicator.style.display = 'flex';
+                loadingIndicator.style.justifyContent = 'center';
+                loadingIndicator.style.alignItems = 'center';
+                loadingIndicator.style.zIndex = '9999';
+                loadingIndicator.innerHTML = '<div style="background-color: white; padding: 20px; border-radius: 5px; text-align: center;"><h3>PDF wird erstellt...</h3><p>Bitte warten Sie, die Daten werden vorbereitet...</p></div>';
+                document.body.appendChild(loadingIndicator);
+                
+                // Ausblenden der "Kein Druck"-Elemente
+                const noPrintElements = document.querySelectorAll('.no-print');
+                noPrintElements.forEach(el => el.style.display = 'none');
+                
+                try {
+                    // Hole den Container mit dem Berichtsinhalt
+                    const reportContainer = document.getElementById('employee-report-container');
+                    
+                    // Dateiname generieren
+                    const fileName = `Zeitbericht_${employee?.name.replace(/\s+/g, '_') || 'Mitarbeiter'}_${formatDate(currentStartDate).replace(/\./g, '-')}.pdf`;
+                    
+                    // PDF-Optionen
+                    const options = {
+                        margin: 10,
+                        filename: fileName,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                    };
+                    
+                    // PDF generieren
+                    await html2pdf().from(reportContainer).set(options).save();
+                    
+                    // Erfolgsmeldung
+                    alert('PDF wurde erfolgreich erstellt!');
+                } catch (error) {
+                    console.error('Fehler beim PDF-Export:', error);
+                    alert('Fehler beim PDF-Export: ' + (error.message || 'Unbekannter Fehler'));
+                } finally {
+                    // "Kein Druck"-Elemente wieder anzeigen
+                    noPrintElements.forEach(el => el.style.display = '');
+                    
+                    // Ladeindikator entfernen
+                    if (document.body.contains(loadingIndicator)) {
+                        document.body.removeChild(loadingIndicator);
+                    }
+                }
+            } catch (error) {
+                console.error('Fehler beim PDF-Export:', error);
+                alert('Fehler beim PDF-Export: ' + (error.message || 'Unbekannter Fehler'));
+            }
+        }
+    </script>
+</body>
+</html>

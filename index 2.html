@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lauffer Zeiterfassung</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>Lauffer Zeiterfassung</h1>
+                <p>Gartenbau • Erdbau • Natursteinhandel</p>
+            </div>
+        </header>
+
+        <main>
+            <div id="login-section" class="section">
+                <h2>Anmeldung</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">Benutzername:</label>
+                        <input type="text" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Passwort:</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit" class="btn primary-btn">Anmelden</button>
+                </form>
+                <p class="admin-link"><a href="admin.html">Admin-Bereich</a></p>
+            </div>
+
+            <div id="time-tracking-section" class="section hidden">
+                <h2>Zeiterfassung</h2>
+                <div class="user-info">
+                    <p>Angemeldet als: <span id="user-name"></span></p>
+                    <button id="logout-btn" class="btn secondary-btn">Abmelden</button>
+                </div>
+
+                <div class="time-status">
+                    <h3>Status: <span id="status-text">Nicht eingestempelt</span></h3>
+                    <div class="clock">
+                        <span id="current-time">00:00:00</span>
+                    </div>
+                </div>
+
+                <div id="clock-in-form" class="form-group">
+                    <label for="project-select">Projekt auswählen:</label>
+                    <select id="project-select" required>
+                        <option value="" disabled selected>Bitte wählen</option>
+                        <!-- Projekte werden per JavaScript hinzugefügt -->
+                    </select>
+                    <button id="clock-in-btn" class="btn primary-btn">Einstempeln</button>
+                </div>
+
+                <div id="clock-out-form" class="form-group hidden">
+                    <p>Aktives Projekt: <span id="active-project"></span></p>
+                    <p>Eingestempelt seit: <span id="clock-in-time"></span></p>
+                    <div class="clock-out-buttons">
+                        <button id="simple-clock-out-btn" class="btn secondary-btn">Einfach Ausstempeln</button>
+                        <button id="pause-btn" class="btn secondary-btn">Pause stempeln</button>
+                        <button id="resume-btn" class="btn secondary-btn hidden">Pause beenden</button>
+                        <button id="extended-clock-out-btn" class="btn primary-btn">Mit Dokumentation Ausstempeln</button>
+                    </div>
+                </div>
+                
+                <!-- Erweitertes Ausstempel-Formular mit Dokumentation -->
+                <div id="extended-clock-out-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Arbeitsende dokumentieren</h3>
+                            <button type="button" class="close-modal-btn">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="extended-clock-out-form">
+                                <div class="form-group">
+                                    <label for="clock-out-notes">Notizen zur durchgeführten Arbeit:</label>
+                                    <textarea id="clock-out-notes" rows="4" placeholder="Beschreiben Sie die durchgeführten Arbeiten..."></textarea>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Fotos von der Baustelle:</label>
+                                    <div class="file-upload-container">
+                                        <input type="file" id="site-photos" multiple accept="image/*" class="file-input">
+                                        <label for="site-photos" class="file-label">Baustellen-Fotos auswählen</label>
+                                        <div id="site-photos-preview" class="image-preview"></div>
+                                        <div id="site-photos-comments" class="image-comments-container">
+                                            <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Lieferscheine oder Rechnungen:</label>
+                                    <div class="file-upload-container">
+                                        <input type="file" id="document-photos" multiple accept="image/*" class="file-input">
+                                        <label for="document-photos" class="file-label">Dokumente fotografieren</label>
+                                        <div id="document-photos-preview" class="image-preview"></div>
+                                        <div id="document-photos-comments" class="image-comments-container">
+                                            <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group text-center">
+                                    <button type="submit" id="submit-clock-out" class="btn primary-btn">Ausstempeln und Speichern</button>
+                                    <button type="button" id="cancel-clock-out" class="btn secondary-btn">Abbrechen</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activities">
+                    <h3>Letzte Aktivitäten</h3>
+                    <ul id="activities-list">
+                        <!-- Aktivitäten werden per JavaScript hinzugefügt -->
+                    </ul>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Lauffer Gartenbau Erdbau Natursteinhandel</p>
+        </footer>
+    </div>
+
+    <!-- Firebase SDKs -->    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    
+    <!-- App JavaScript -->    
+    <script src="js/firebase-config.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

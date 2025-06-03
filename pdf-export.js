@@ -1,0 +1,98 @@
+/**
+ * PDF Export-Funktionalität für Lauffer Zeiterfassung
+ * Erstellt PDFs mit Projekt- und Zeitinformationen, Bildern und Dokumenten
+ * 
+ * HINWEIS: Diese Datei ist veraltet und dient nur als Wrapper für die neue Implementierung.
+ * Die eigentliche Implementierung befindet sich in pdf-export-new.js.
+ */
+
+// Wrapper-Funktionen, die die entsprechenden Funktionen aus pdf-export-new.js aufrufen
+
+/**
+ * Generiert ein PDF aus den Projektdaten und Zeiteinträgen
+ * @param {Object} projectData - Die Projektdaten
+ * @param {Array} timeEntries - Die Zeiteinträge für das Projekt
+ * @param {Array} projectImages - Die Bilder für das Projekt
+ * @param {Array} deliveryNotes - Die Lieferscheine für das Projekt
+ */
+async function generateProjectPDF(projectData, timeEntries = [], projectImages = [], deliveryNotes = []) {
+    console.log('Verwende neue PDF-Export-Funktion aus pdf-export-new.js');
+    
+    if (typeof generateProjectPDFNew === 'function') {
+        return await generateProjectPDFNew(projectData, timeEntries, projectImages, deliveryNotes);
+    } else {
+        console.error('Neue PDF-Export-Funktion ist nicht verfügbar');
+        alert('PDF-Export ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
+    }
+}
+
+/**
+ * Generiert ein PDF aus dem übergebenen HTML-Element
+ * @param {HTMLElement} element - Das Element, das als PDF exportiert werden soll
+ * @param {string} filename - Der Dateiname für das PDF
+ * @param {Object} options - Optionen für den PDF-Export
+ */
+async function generatePDF(element, filename, options = {}) {
+    console.log('Verwende neue PDF-Export-Funktion aus pdf-export-new.js');
+    
+    if (typeof generatePDFNew === 'function') {
+        return await generatePDFNew(element, filename, options);
+    } else {
+        console.error('Neue PDF-Export-Funktion ist nicht verfügbar');
+        alert('PDF-Export ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
+    }
+}
+
+/**
+ * Exportiert die aktuell angezeigte Tabelle als CSV-Datei
+ * @param {string} filename - Der Dateiname für die CSV-Datei
+ * @param {HTMLTableElement} table - Die Tabelle, die exportiert werden soll
+ */
+function exportTableAsCSV(filename, table) {
+    if (!table || !table.rows || table.rows.length === 0) {
+        console.error('Keine gültige Tabelle zum Exportieren gefunden');
+        alert('Es sind keine Daten zum Exportieren vorhanden.');
+        return;
+    }
+
+    let csv = [];
+    
+    // Header-Zeile
+    let headerRow = [];
+    for (let cell of table.rows[0].cells) {
+        headerRow.push('"' + cell.textContent.trim() + '"');
+    }
+    csv.push(headerRow.join(';'));
+    
+    // Datenzeilen (überspringe die Header-Zeile)
+    for (let i = 1; i < table.rows.length; i++) {
+        if (table.rows[i].style.display !== 'none') { // Nur sichtbare Zeilen exportieren
+            let row = [];
+            for (let cell of table.rows[i].cells) {
+                row.push('"' + cell.textContent.trim() + '"');
+            }
+            csv.push(row.join(';'));
+        }
+    }
+
+    // CSV-Datei erstellen und herunterladen
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    if (navigator.msSaveBlob) { // IE 10+
+        navigator.msSaveBlob(blob, filename);
+    } else {
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            alert('Ihr Browser unterstützt den CSV-Export nicht. Bitte verwenden Sie einen modernen Browser wie Chrome, Firefox oder Edge.');
+        }
+    }
+}
