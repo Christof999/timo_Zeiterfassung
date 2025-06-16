@@ -620,6 +620,7 @@ async function handleLiveDocumentationSave(event) {
             const liveSitePhotoComments = document.querySelectorAll('#live-site-photos-comments .image-comment-item');
             
             console.log(`🔄 Starte Upload von ${liveSitePhotosInput.files.length} Baustellenfotos...`);
+            console.log(`🔍 Verfügbare Dateien:`, Array.from(liveSitePhotosInput.files).map(f => f.name));
             
             for (let i = 0; i < liveSitePhotosInput.files.length; i++) {
                 try {
@@ -684,8 +685,12 @@ async function handleLiveDocumentationSave(event) {
                     
                     // Upload-Fehler protokollieren aber weitermachen
                     console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild (${i + 2}/${liveSitePhotosInput.files.length})...`);
+                    console.log(`📊 Aktuelle Anzahl erfolgreich hochgeladener Bilder: ${sitePhotoObjects.length}`);
                 }
             }
+            
+            console.log(`📊 Upload-Schleife für Baustellenfotos beendet`);
+            console.log(`🎯 Endergebnis: ${sitePhotoObjects.length}/${liveSitePhotosInput.files.length} Bilder erfolgreich hochgeladen`);
         }
         
         // Dokumente hochladen
