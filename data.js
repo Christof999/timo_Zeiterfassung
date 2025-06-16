@@ -1180,118 +1180,37 @@ const DataService = {
     },
     
     // Datei-Upload-Funktionen
-    uploadFile(file, projectId, employeeId, type = 'construction_site', notes = '', comment = '') {
-        return new Promise(async (resolve, reject) => {
-            try {
-                if (!file || !projectId || !employeeId) {
-                    throw new Error('Datei, Projekt-ID und Mitarbeiter-ID müssen angegeben werden');
-                }
-                
-                // Storage-Verfügbarkeit prüfen
-                if (!this.storage) {
-                    throw new Error('Firebase Storage ist nicht verfügbar');
-                }
-                
-                console.log(`🔄 Starte Upload: ${file.name} (${file.size} Bytes, Typ: ${type})`);
-                
-                // TEMP: Storage für lokale Entwicklung deaktivieren
-                console.log('🔧 Storage für lokale Entwicklung deaktiviert, verwende direkt Base64-Upload');
-                return await this.uploadFileAsBase64(file, projectId, employeeId, type, notes, comment);
-                
-                // Eindeutigen Dateinamen erstellen
-                const timestamp = new Date().getTime();
-                const fileName = `${employeeId}_${timestamp}_${file.name}`;
-                
-                // Speicherpfad auf Firebase Storage
-                const storagePath = `projects/${projectId}/${type}/${fileName}`;
-                const storageRef = this.storage.ref(storagePath);
-                
-                console.log(`📁 Upload-Pfad: ${storagePath}`);
-                
-                // Upload-Timeout-Handler (verkürzt für schnelleren Fallback)
-                const uploadTimeout = setTimeout(() => {
-                    console.error('⏰ Upload-Timeout erreicht (10s) - verwende Fallback');
-                    uploadTask.cancel();
-                    
-                    // Fallback-Upload starten
-                    console.log('🔄 Starte Fallback-Upload...');
-                    this.uploadFileAsBase64(file, projectId, employeeId, type, notes, comment)
-                        .then(result => resolve(result))
-                        .catch(fallbackError => {
-                            console.error('❌ Auch Fallback-Upload fehlgeschlagen:', fallbackError);
-                            reject(new Error('Upload fehlgeschlagen: Sowohl normaler Upload als auch Fallback-Upload sind fehlgeschlagen.'));
-                        });
-                }, 10000); // 10 Sekunden Timeout (verkürzt)
-                
-                // Datei hochladen
-                const uploadTask = storageRef.put(file);
-                
-                // Upload-Status überwachen
-                uploadTask.on('state_changed', 
-                    // Fortschritt
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        console.log(`📊 Upload-Fortschritt: ${progress.toFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} Bytes)`);
-                        
-                        // Bei Fortschritt > 0% ist die Verbindung ok
-                        if (progress > 0) {
-                            clearTimeout(uploadTimeout);
-                        }
-                    },
-                    // Fehler
-                    (error) => {
-                        clearTimeout(uploadTimeout);
-                        console.error('❌ Upload-Fehler:', error);
-                        console.error('Error Code:', error.code);
-                        console.error('Error Message:', error.message);
-                        reject(new Error(`Upload fehlgeschlagen: ${error.message}`));
-                    },
-                    // Erfolg
-                    async () => {
-                        clearTimeout(uploadTimeout);
-                        try {
-                            console.log('✅ Upload erfolgreich abgeschlossen');
-                            // Download-URL abrufen
-                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
-                            
-                            // Metadaten in Firestore speichern
-                            const fileData = {
-                                projectId,
-                                employeeId,
-                                name: file.name,
-                                path: storagePath,
-                                url: downloadURL,
-                                type, // 'construction_site', 'delivery_note', 'invoice'
-                                size: file.size,
-                                uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                                notes,
-                                comment, // Kommentar zum Bild
-                                isDraft: false, // Flag für Entwürfe
-                                reviewedBy: null, // Wer hat den Entwurf überprüft
-                                status: 'active' // Status des Uploads (active, draft, reviewed)
-                            };
-                            
-                            // Für Benutzer 'martin' als Entwurf markieren
-                            const user = this.getCurrentUser();
-                            if (user && user.username === 'martin') {
-                                fileData.isDraft = true;
-                                fileData.status = 'draft';
-                            }
-                            
-                            // In Firestore speichern
-                            const docRef = await this.fileUploadsCollection.add(fileData);
-                            resolve({ id: docRef.id, ...fileData });
-                        } catch (error) {
-                            console.error('Fehler beim Abrufen der Download-URL oder Speichern der Metadaten:', error);
-                            reject(error);
-                        }
-                    }
-                );
-            } catch (error) {
-                console.error('Fehler beim Datei-Upload:', error);
-                reject(error);
+    async uploadFile(file, projectId, employeeId, type = 'construction_site', notes = '', comment = '') {
+        try {
+            if (!file || !projectId || !employeeId) {
+                throw new Error('Datei, Projekt-ID und Mitarbeiter-ID müssen angegeben werden');
             }
-        });
+            
+            // Storage-Verfügbarkeit prüfen
+            if (!this.storage) {
+                throw new Error('Firebase Storage ist nicht verfügbar');
+            }
+            
+            console.log(`🔄 Starte Upload: ${file.name} (${file.size} Bytes, Typ: ${type})`);
+            
+            // TEMP: Storage für lokale Entwicklung deaktivieren
+            console.log('🔧 Storage für lokale Entwicklung deaktiviert, verwende direkt Base64-Upload');
+            
+            console.log('🚀 Rufe uploadFileAsBase64 auf...');
+            const base64Result = await this.uploadFileAsBase64(file, projectId, employeeId, type, notes, comment);
+            console.log('✅ uploadFileAsBase64 abgeschlossen, Ergebnis:', base64Result);
+            
+            if (!base64Result || !base64Result.id) {
+                throw new Error('Base64-Upload lieferte kein gültiges Ergebnis');
+            }
+            
+            console.log('🎯 uploadFile gibt Ergebnis zurück:', base64Result.id);
+            return base64Result;
+            
+        } catch (error) {
+            console.error('❌ uploadFile Fehler:', error);
+            throw error;
+        }
     },
 
     // Fallback-Upload-Methode für lokale Entwicklung (Base64)

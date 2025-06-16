@@ -639,6 +639,7 @@ async function handleLiveDocumentationSave(event) {
                     // Firebase Storage Check - aber nicht als Fehler behandeln
                     console.log(`🔧 Firebase Storage verfügbar: ${!!firebase.storage}`);
                     
+                    console.log(`🚀 Starte DataService.uploadFile für Bild ${i + 1}...`);
                     const upload = await DataService.uploadFile(
                         file,
                         timeEntry.projectId,
@@ -648,7 +649,13 @@ async function handleLiveDocumentationSave(event) {
                         imageComment
                     );
                     
-                    console.log(`✅ Baustellenfoto ${i + 1} erfolgreich hochgeladen:`, upload.id);
+                    console.log(`🎉 DataService.uploadFile abgeschlossen für Bild ${i + 1}:`, upload);
+                    console.log(`✅ Baustellenfoto ${i + 1} erfolgreich hochgeladen - ID: ${upload.id}`);
+                    
+                    // Null-Check für Upload-Ergebnis
+                    if (!upload || !upload.id) {
+                        throw new Error(`Upload-Ergebnis für Bild ${i + 1} ist leer oder ungültig`);
+                    }
                     
                     // Firebase-kompatibles Objekt erstellen - sichere Behandlung
                     const safeUpload = {
@@ -664,15 +671,19 @@ async function handleLiveDocumentationSave(event) {
                         safeUpload.uploadTime = new Date(upload.uploadTime.seconds * 1000);
                     }
                     
+                    console.log(`📦 Bereite Upload-Objekt für Bild ${i + 1} vor:`, safeUpload);
                     sitePhotoObjects.push(safeUpload);
                     console.log(`📸 Baustellenfoto ${i + 1} zu Objektliste hinzugefügt - Total: ${sitePhotoObjects.length}`);
+                    console.log(`📋 Aktuelle sitePhotoObjects:`, sitePhotoObjects.map(obj => ({ id: obj.id, fileName: obj.fileName })));
                     
                 } catch (uploadError) {
                     console.error(`❌ Fehler beim Hochladen des Baustellenfotos ${i + 1}:`, uploadError);
-                    console.error(`❌ Fehler-Details:`, uploadError.message, uploadError.stack);
+                    console.error(`❌ Fehler-Typ:`, uploadError.constructor.name);
+                    console.error(`❌ Fehler-Details:`, uploadError.message);
+                    console.error(`❌ Fehler-Stack:`, uploadError.stack);
                     
                     // Upload-Fehler protokollieren aber weitermachen
-                    console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild...`);
+                    console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild (${i + 2}/${liveSitePhotosInput.files.length})...`);
                 }
             }
         }
