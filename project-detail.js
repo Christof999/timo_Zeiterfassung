@@ -33,9 +33,14 @@ document.addEventListener('DOMContentLoaded', function() {
         sitePhotosGallery: !!document.getElementById('site-photos-gallery')
     });
     
-    // Projekt-ID aus der URL auslesen
+    // Projekt-ID aus der URL auslesen mit zusätzlicher Debugging-Information
+    const fullUrl = window.location.href;
+    console.log('Vollständige URL:', fullUrl);
+    
     const urlParams = new URLSearchParams(window.location.search);
     projectId = urlParams.get('id');
+    
+    console.log('Extrahierte Projekt-ID:', projectId);
     
     if (!projectId) {
         showError('Keine Projekt-ID in der URL gefunden.');
@@ -43,7 +48,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // DataService initialisieren
-    DataService.init();
+    try {
+        DataService.init();
+        console.log('DataService wurde initialisiert');
+    } catch (error) {
+        console.error('Fehler bei der Initialisierung des DataService:', error);
+        showError('Fehler bei der Initialisierung des DataService.');
+        return;
+    }
     
     // Projekt laden
     loadProject();
@@ -68,81 +80,327 @@ document.addEventListener('DOMContentLoaded', function() {
 // Hauptfunktionen
 async function loadProject() {
     try {
-        // Projekt aus der Datenbank laden
-        currentProject = await DataService.getProjectById(projectId);
+        console.log('Starte Projekt-Ladevorgang für ID:', projectId);
         
-        if (!currentProject) {
-            showError('Projekt nicht gefunden.');
+        if (!projectId) {
+            console.error('Keine gültige Projekt-ID vorhanden');
+            showError('Keine gültige Projekt-ID.');
             return;
         }
         
-        // Projektdaten anzeigen
-        displayProjectDetails(currentProject);
+        if (!DataService || !DataService.projectsCollection) {
+            console.error('DataService oder projectsCollection nicht initialisiert');
+            showError('Datenzugriffsschicht nicht bereit.');
+            return;
+        }
         
-        // Daten laden
-        loadProjectTimeEntries(projectId);
-        loadProjectImages(projectId, 'construction_site');
-        loadProjectImages(projectId, 'delivery_note');
+        // Direkter Zugriff auf Firestore für maximale Zuverlässigkeit
+        console.log('Versuche direkten Firestore-Zugriff für Projekt mit ID:', projectId);
+        
+        try {
+            const projectDoc = await DataService.projectsCollection.doc(projectId).get();
+            
+            if (!projectDoc.exists) {
+                console.error('Projekt-Dokument existiert nicht in Firestore');
+                showError('Projekt nicht gefunden.');
+                return;
+            }
+            
+            currentProject = { id: projectDoc.id, ...projectDoc.data() };
+            console.log('Projekt erfolgreich geladen:', currentProject);
+            
+            // Projektdaten anzeigen
+            displayProjectDetails(currentProject);
+            
+            // Zeit-Einträge laden
+            await loadTimeEntriesForProject(projectId);
+            
+            // Bilder laden
+            await loadImagesForProject(projectId);
+            
+        } catch (firestoreError) {
+            console.error('Firestore-Fehler beim direkten Zugriff:', firestoreError);
+            showError('Datenbankfehler: ' + (firestoreError.message || 'Unbekannter Fehler'));
+        }
         
     } catch (error) {
-        console.error('Fehler beim Laden des Projekts:', error);
-        showError('Fehler beim Laden des Projekts.');
+        console.error('Allgemeiner Fehler beim Laden des Projekts:', error);
+        showError('Fehler beim Laden des Projekts: ' + (error.message || 'Unbekannter Fehler'));
+    }
+}
+
+// Neue Funktion für das Laden von Zeiteinträgen
+async function loadTimeEntriesForProject(projectId) {
+    try {
+        console.log('Lade Zeiteinträge für Projekt:', projectId);
+        
+        const tableBody = document.getElementById('time-entries-table')?.querySelector('tbody');
+        if (!tableBody) {
+            console.error('Zeiteinträge-Tabellenkörper nicht gefunden');
+            return;
+        }
+        
+        // Ladeindikator anzeigen
+        tableBody.innerHTML = '<tr><td colspan="7" class="loading-indicator">Zeiteinträge werden geladen...</td></tr>';
+        
+        // Zeiteinträge direkt aus Firestore abrufen
+        const entriesSnapshot = await DataService.timeEntriesCollection
+            .where('projectId', '==', projectId)
+            .orderBy('clockInTime', 'desc')
+            .get();
+        
+        if (entriesSnapshot.empty) {
+            console.log('Keine Zeiteinträge für dieses Projekt gefunden');
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">Keine Zeiteinträge vorhanden</td></tr>';
+            return;
+        }
+        
+        const entries = entriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`${entries.length} Zeiteinträge gefunden:`, entries[0]);
+        
+        // Tabelle leeren
+        tableBody.innerHTML = '';
+        
+        // Zeiteinträge anzeigen
+        for (const entry of entries) {
+            const employeeSnapshot = await DataService.employeesCollection.doc(entry.employeeId).get();
+            const employee = employeeSnapshot.exists ? { id: employeeSnapshot.id, ...employeeSnapshot.data() } : { name: 'Unbekannt' };
+            
+            // Datum formatieren
+            const clockInDate = entry.clockInTime instanceof firebase.firestore.Timestamp ? 
+                entry.clockInTime.toDate() : new Date(entry.clockInTime);
+            
+            const date = clockInDate.toLocaleDateString('de-DE');
+            
+            // Zeiten formatieren
+            const clockInTime = formatTime(clockInDate);
+            const clockOutTime = entry.clockOutTime ? 
+                formatTime(entry.clockOutTime instanceof firebase.firestore.Timestamp ? 
+                    entry.clockOutTime.toDate() : new Date(entry.clockOutTime)) : '-';
+            
+            // Arbeitsstunden berechnen
+            let workHours = '-';
+            if (entry.clockOutTime) {
+                const clockOutDate = entry.clockOutTime instanceof firebase.firestore.Timestamp ? 
+                    entry.clockOutTime.toDate() : new Date(entry.clockOutTime);
+                
+                const durationMs = clockOutDate - clockInDate;
+                const durationHours = durationMs / (1000 * 60 * 60);
+                workHours = durationHours.toFixed(2) + ' h';
+            }
+            
+            // Zeile erstellen
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${date}</td>
+                <td>${employee.name}</td>
+                <td>${clockInTime}</td>
+                <td>${clockOutTime}</td>
+                <td>${workHours}</td>
+                <td>${entry.notes || '-'}</td>
+                <td>
+                    <button class="btn-icon view-entry-btn" data-entry-id="${entry.id}" title="Details anzeigen">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            `;
+            
+            tableBody.appendChild(row);
+        }
+        
+        // Event-Listener für Buttons hinzufügen
+        addTimeEntryButtonListeners();
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Zeiteinträge:', error);
+        const tableBody = document.getElementById('time-entries-table')?.querySelector('tbody');
+        if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="error-message">Fehler beim Laden der Zeiteinträge</td></tr>';
+        }
+    }
+}
+
+// Neue Funktion für das Laden von Bildern
+async function loadImagesForProject(projectId) {
+    try {
+        console.log('Lade Bilder für Projekt:', projectId);
+        
+        // Baustellenfotos laden
+        await loadImagesByType(projectId, 'construction_site');
+        
+        // Dokumente laden
+        await loadImagesByType(projectId, 'delivery_note');
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Bilder:', error);
+        showError('Fehler beim Laden der Bilder.');
+    }
+}
+
+// Neue Funktion für das Laden von Bildern nach Typ
+async function loadImagesByType(projectId, type) {
+    try {
+        const containerId = type === 'construction_site' ? 'site-photos-gallery' : 'documents-gallery';
+        const container = document.getElementById(containerId);
+        
+        if (!container) {
+            console.error(`Container für ${type}-Bilder nicht gefunden`);
+            return;
+        }
+        
+        // Ladeindikator anzeigen
+        container.innerHTML = '<div class="loading-indicator">Bilder werden geladen...</div>';
+        
+        // Bilder direkt aus Firestore abrufen
+        const filesSnapshot = await DataService.fileUploadsCollection
+            .where('projectId', '==', projectId)
+            .where('type', '==', type)
+            .get();
+        
+        if (filesSnapshot.empty) {
+            console.log(`Keine ${type}-Bilder für dieses Projekt gefunden`);
+            container.innerHTML = `<div class="no-content-message">Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden</div>`;
+            return;
+        }
+        
+        const files = filesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`${files.length} ${type}-Bilder gefunden`);
+        
+        // Container leeren
+        container.innerHTML = '';
+        
+        // Bilder anzeigen
+        for (const file of files) {
+            // Mitarbeiterinformationen abrufen
+            let employeeName = 'Unbekannt';
+            if (file.employeeId) {
+                const employeeSnapshot = await DataService.employeesCollection.doc(file.employeeId).get();
+                if (employeeSnapshot.exists) {
+                    employeeName = employeeSnapshot.data().name || 'Unbekannt';
+                }
+            }
+            
+            // Datum formatieren
+            let formattedDate = 'Unbekanntes Datum';
+            if (file.uploadTime) {
+                const date = file.uploadTime instanceof firebase.firestore.Timestamp ? 
+                    file.uploadTime.toDate() : new Date(file.uploadTime);
+                formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+            }
+            
+            // Galerie-Element erstellen
+            const galleryItem = document.createElement('div');
+            galleryItem.className = 'gallery-item';
+            
+            // URL prüfen
+            if (!file.url) {
+                console.error('Bild ohne URL gefunden:', file);
+                continue;
+            }
+            
+            galleryItem.innerHTML = `
+                <img src="${file.url}" alt="${type === 'construction_site' ? 'Baustellenfoto' : 'Dokument'}">
+                <div class="gallery-item-info">
+                    <div>${formattedDate}</div>
+                    <div>${employeeName}</div>
+                    ${file.comment ? `<div class="image-comment-display"><strong>Kommentar:</strong> ${file.comment}</div>` : ''}
+                </div>
+            `;
+            
+            // Event-Listener für Bild-Vorschau
+            galleryItem.addEventListener('click', () => {
+                showImagePreview(file, employeeName, formattedDate);
+            });
+            
+            container.appendChild(galleryItem);
+        }
+        
+    } catch (error) {
+        console.error(`Fehler beim Laden der ${type}-Bilder:`, error);
+        const container = document.getElementById(type === 'construction_site' ? 'site-photos-gallery' : 'documents-gallery');
+        if (container) {
+            container.innerHTML = `<div class="error-message">Fehler beim Laden der Bilder</div>`;
+        }
     }
 }
 
 function displayProjectDetails(project) {
-    // Titel und Projektnummer
-    projectTitle.textContent = project.name || 'Unbenanntes Projekt';
-    projectNumber.textContent = project.number || '';
-    
-    // Status
-    let statusText = 'Unbekannt';
-    let statusClass = '';
-    
-    switch (project.status) {
-        case 'active':
-            statusText = 'Aktiv';
-            statusClass = 'status-active';
-            break;
-        case 'completed':
-            statusText = 'Abgeschlossen';
-            statusClass = 'status-completed';
-            break;
-        case 'paused':
-            statusText = 'Pausiert';
-            statusClass = 'status-paused';
-            break;
-        case 'planned':
-            statusText = 'Geplant';
-            statusClass = 'status-planned';
-            break;
+    try {
+        console.log('Zeige Projektdetails an:', project);
+        
+        if (!project) {
+            console.error('Kein Projekt zum Anzeigen vorhanden');
+            return;
+        }
+        
+        // Titel und Projektnummer
+        if (projectTitle) projectTitle.textContent = project.name || 'Unbenanntes Projekt';
+        if (projectNumber) projectNumber.textContent = project.number || '';
+        
+        // Status
+        let statusText = 'Unbekannt';
+        let statusClass = '';
+        
+        if (project.status) {
+            switch (project.status) {
+                case 'active':
+                    statusText = 'Aktiv';
+                    statusClass = 'status-active';
+                    break;
+                case 'completed':
+                    statusText = 'Abgeschlossen';
+                    statusClass = 'status-completed';
+                    break;
+                case 'paused':
+                    statusText = 'Pausiert';
+                    statusClass = 'status-paused';
+                    break;
+                case 'planned':
+                    statusText = 'Geplant';
+                    statusClass = 'status-planned';
+                    break;
+            }
+        }
+        
+        if (detailStatus) {
+            detailStatus.textContent = statusText;
+            detailStatus.className = 'status-badge ' + statusClass;
+        }
+        
+        // Standort
+        if (detailLocation) detailLocation.textContent = project.location || '-';
+        
+        // Datumsangaben
+        if (detailStartDate) {
+            if (project.startDate) {
+                const startDate = project.startDate instanceof firebase.firestore.Timestamp ?
+                    project.startDate.toDate() : new Date(project.startDate);
+                detailStartDate.textContent = startDate.toLocaleDateString('de-DE');
+            } else {
+                detailStartDate.textContent = '-';
+            }
+        }
+        
+        if (detailEndDate) {
+            if (project.endDate) {
+                const endDate = project.endDate instanceof firebase.firestore.Timestamp ?
+                    project.endDate.toDate() : new Date(project.endDate);
+                detailEndDate.textContent = endDate.toLocaleDateString('de-DE');
+            } else {
+                detailEndDate.textContent = '-';
+            }
+        }
+        
+        // Beschreibung
+        if (detailDescription) {
+            detailDescription.textContent = project.description || 'Keine Beschreibung vorhanden.';
+        }
+        
+        console.log('Projektdetails erfolgreich angezeigt');
+        
+    } catch (error) {
+        console.error('Fehler beim Anzeigen der Projektdetails:', error);
     }
-    
-    detailStatus.textContent = statusText;
-    detailStatus.className = statusClass;
-    
-    // Standort
-    detailLocation.textContent = project.location || '-';
-    
-    // Datumsangaben
-    if (project.startDate) {
-        const startDate = project.startDate instanceof firebase.firestore.Timestamp ?
-            project.startDate.toDate() : new Date(project.startDate);
-        detailStartDate.textContent = startDate.toLocaleDateString('de-DE');
-    } else {
-        detailStartDate.textContent = '-';
-    }
-    
-    if (project.endDate) {
-        const endDate = project.endDate instanceof firebase.firestore.Timestamp ?
-            project.endDate.toDate() : new Date(project.endDate);
-        detailEndDate.textContent = endDate.toLocaleDateString('de-DE');
-    } else {
-        detailEndDate.textContent = '-';
-    }
-    
-    // Beschreibung
-    detailDescription.textContent = project.description || 'Keine Beschreibung vorhanden.';
 }
 
 function setupTabNavigation() {
@@ -199,15 +457,35 @@ function applyTimeEntriesFilter() {
 }
 
 function showError(message) {
-    // Fehlermeldung anzeigen
-    projectTitle.textContent = 'Fehler';
-    detailDescription.textContent = message;
+    console.error('FEHLER:', message);
+    
+    // Fehlermeldung in der Projektüberschrift anzeigen
+    if (projectTitle) {
+        projectTitle.innerHTML = `<span style="color: #d9534f;"><i class="fas fa-exclamation-triangle"></i> Fehler</span>`;
+    }
+    
+    // Detaillierte Fehlermeldung in der Beschreibung anzeigen
+    if (detailDescription) {
+        detailDescription.innerHTML = `<div class="error-message">${message}</div>`;
+    }
     
     // Lade-Indikatoren mit Fehlermeldung ersetzen
-    const loadingIndicators = document.querySelectorAll('.loading-indicator');
-    loadingIndicators.forEach(indicator => {
+    document.querySelectorAll('.loading-indicator').forEach(indicator => {
         indicator.textContent = 'Fehler beim Laden der Daten.';
         indicator.classList.add('error');
+    });
+    
+    // Fehlermeldung auch in den Tab-Inhalten anzeigen
+    document.querySelectorAll('.project-tab-content').forEach(tab => {
+        const errorElement = document.createElement('div');
+        errorElement.className = 'error-message';
+        errorElement.textContent = message;
+        
+        // Vorhandenen Inhalt leeren und Fehlermeldung einfügen
+        if (!tab.querySelector('.error-message')) {
+            tab.innerHTML = '';
+            tab.appendChild(errorElement);
+        }
     });
 }
 
@@ -249,7 +527,14 @@ async function loadProjectTimeEntries(projectId) {
         
         // Zeiteinträge laden
         let timeEntries = await DataService.getProjectTimeEntries(projectId);
-        console.log(`${timeEntries.length} Zeiteinträge gefunden`, timeEntries && timeEntries.length > 0 ? timeEntries[0] : 'Keine Einträge');
+        console.log(`${timeEntries?.length || 0} Zeiteinträge gefunden`, timeEntries && timeEntries.length > 0 ? timeEntries[0] : 'Keine Einträge');
+        
+        // Sicherstellen, dass timeEntries ein Array ist
+        if (!timeEntries || !Array.isArray(timeEntries)) {
+            console.error('Zeiteinträge konnten nicht geladen werden oder sind kein Array');
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">Fehler beim Laden der Zeiteinträge</td></tr>';
+            return;
+        }
         
         // Filter anwenden
         if (employeeFilter !== 'all') {
@@ -595,10 +880,10 @@ async function loadProjectImages(projectId, type = 'construction_site') {
         
         // Bilder laden
         const files = await DataService.getProjectFiles(projectId, type);
-        console.log(`${files.length} Bilder für ${type} gefunden`, files && files.length > 0 ? files[0] : 'Keine Dateien');
+        console.log(`${files?.length || 0} Bilder für ${type} gefunden`, files && files.length > 0 ? files[0] : 'Keine Dateien');
         
         // Wenn keine Bilder vorhanden sind
-        if (files.length === 0) {
+        if (!files || files.length === 0) {
             container.innerHTML = `<div class="no-content-message">Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden</div>`;
             return;
         }
@@ -934,5 +1219,25 @@ function showImagePreview(file, employeeName, formattedDate) {
 
 // Hilfsfunktion: Zeit formatieren
 function formatTime(date) {
-    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Hilfsfunktion für Event-Listener der Zeiteinträge
+function addTimeEntryButtonListeners() {
+    // Details anzeigen
+    document.querySelectorAll('.view-entry-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const entryId = this.dataset.entryId;
+            console.log('Details anzeigen für Zeiteintrag:', entryId);
+            
+            // Hier könnte die Detailanzeige implementiert werden
+            alert('Detailanzeige für Zeiteintrag ' + entryId + ' ist noch nicht implementiert.');
+        });
+    });
 }

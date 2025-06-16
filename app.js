@@ -235,13 +235,28 @@ function updateCurrentTime() {
 // Projekte laden
 async function loadProjects() {
     try {
+        console.log('Starte Laden der Projekte...');
+        
+        // DataService verfügbar prüfen
+        if (!DataService || !DataService.getActiveProjects) {
+            throw new Error('DataService oder getActiveProjects-Funktion nicht verfügbar');
+        }
+        
         const projects = await DataService.getActiveProjects();
+        console.log('Projekte von DataService erhalten:', projects);
         
         // Projektauswahl leeren
         projectSelect.innerHTML = '<option value="" disabled selected>Bitte wählen</option>';
         
         if (!projects || !Array.isArray(projects)) {
             console.error('Keine Projekte gefunden oder ungültiges Format:', projects);
+            projectSelect.innerHTML = '<option value="" disabled>Keine Projekte verfügbar</option>';
+            return;
+        }
+        
+        if (projects.length === 0) {
+            console.log('Keine Projekte verfügbar');
+            projectSelect.innerHTML = '<option value="" disabled>Keine Projekte verfügbar</option>';
             return;
         }
         
@@ -249,11 +264,15 @@ async function loadProjects() {
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.id;
-            option.textContent = project.name;
+            option.textContent = project.name || `Projekt ${project.id}`;
             projectSelect.appendChild(option);
         });
+        
+        console.log(`${projects.length} Projekte erfolgreich geladen`);
     } catch (error) {
         console.error('Fehler beim Laden der Projekte:', error);
+        console.error('Error details:', error.message, error.stack);
+        projectSelect.innerHTML = '<option value="" disabled>Fehler beim Laden der Projekte</option>';
     }
 }
 

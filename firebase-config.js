@@ -10,7 +10,7 @@ const firebaseConfig = {
   apiKey: "REMOVED_API_KEY",
   authDomain: "lauffer-zeiterfassung.firebaseapp.com",
   projectId: "lauffer-zeiterfassung",
-  storageBucket: "lauffer-zeiterfassung.firebasestorage.app",
+  storageBucket: "lauffer-zeiterfassung.appspot.com",
   messagingSenderId: "REMOVED_SENDER_ID",
   appId: "1:REMOVED_SENDER_ID:web:c177aeac4f8c126ab41f0b"
 };
@@ -26,9 +26,8 @@ const storage = firebase.storage();
 // Auth-Referenz nur erstellen, wenn das Auth-SDK geladen wurde
 const auth = typeof firebase.auth === 'function' ? firebase.auth() : null;
 
-// Timestamps aktivieren und merge:true verwenden, um Warnung zu vermeiden
+// Merge-Option für Dokument-Aktualisierungen verwenden
 db.settings({
-  timestampsInSnapshots: true,
   merge: true
 });
 

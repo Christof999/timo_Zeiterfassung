@@ -11,10 +11,15 @@
     
     <!-- PDF Export Bibliothek -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- Eruda für mobiles Debugging (optional) -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    
     <!-- Datenservice und Hilfsfunktionen -->
-    <script src="js/data.js"></script>
-    <script src="js/report-functions.js"></script>
-    <script src="js/pdf-export.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="data.js"></script>
+    <!-- Wir laden report-functions.js und pdf-export.js am Ende des Body-Tags -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
     <style>
@@ -329,6 +334,7 @@
     
     <script>
         // Initialisierung der Firebase-Konfiguration
+        console.log('=== FIREBASE INITIALISIERUNG ===');
         const firebaseConfig = {
             apiKey: "REDACTED_FIREBASE_WEB_API_KEY_ROTATE",
             authDomain: "lauffer-zeiterfassung.firebaseapp.com",
@@ -340,63 +346,182 @@
         
         // Firebase initialisieren
         if (!firebase.apps.length) {
+            console.log('Initialisiere Firebase App...');
             firebase.initializeApp(firebaseConfig);
+            console.log('Firebase App initialisiert');
+        } else {
+            console.log('Firebase App bereits initialisiert');
         }
+        
+        console.log('Firebase Apps:', firebase.apps.map(app => app.name));
+        console.log('Firestore verfügbar:', typeof firebase.firestore !== 'undefined');
+        console.log('Storage verfügbar:', typeof firebase.storage !== 'undefined');
+        
+        // DEBUG: Sofortige Ausgabe zur Verfolgung
+        console.log('=== PROJECT-SIMPLE.HTML SCRIPT WIRD AUSGEFÜHRT ===');
+        console.log('Zeitpunkt:', new Date().toISOString());
         
         // Globale Variablen
         const db = firebase.firestore();
         const storage = firebase.storage();
         let projectId = null;
+        let allProjectFiles = null; // Cache für alle Projektdateien
         
-        // DOM-Elemente
-        const pdfContent = document.getElementById('pdf-content');
-        const exportBtn = document.getElementById('export-btn');
-        const projectTitleEl = document.getElementById('project-title');
-        const projectInfoEl = document.getElementById('project-info');
-        const timeEntriesBodyEl = document.getElementById('time-entries-body');
-        const constructionImagesEl = document.getElementById('construction-images');
-        const documentsGalleryEl = document.getElementById('documents-gallery');
-        const backLinkEl = document.getElementById('back-link');
+        // DOM-Elemente - werden nach DOM-Load initialisiert
+        let pdfContent, exportBtn, projectTitleEl, projectInfoEl, timeEntriesBodyEl, constructionImagesEl, documentsGalleryEl, backLinkEl;
         
         // Seite initialisieren
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== PROJECT-SIMPLE.HTML DOMCONTENTLOADED AUSGEFÜHRT ===');
+            console.log('=== PROJECT-SIMPLE.HTML INITIALISIERUNG GESTARTET ===');
+            console.log('DOM Content Loaded - Starte Initialisierung');
+            console.log('Aktuelle URL:', window.location.href);
+            console.log('Document ready state:', document.readyState);
+            
+            // Kleiner Timeout, um sicherzustellen, dass alle anderen Scripts geladen sind
+            setTimeout(function() {
+                initializeProjectSimple();
+            }, 100);
+        });
+        
+        function initializeProjectSimple() {
+            console.log('=== INITIALISIERE PROJECT-SIMPLE ===');
+            
+            // DOM-Elemente nach DOM-Load finden
+            pdfContent = document.getElementById('pdf-content');
+            exportBtn = document.getElementById('export-btn');
+            projectTitleEl = document.getElementById('project-title');
+            projectInfoEl = document.getElementById('project-info');
+            timeEntriesBodyEl = document.getElementById('time-entries-body');
+            constructionImagesEl = document.getElementById('construction-images');
+            documentsGalleryEl = document.getElementById('documents-gallery');
+            backLinkEl = document.getElementById('back-link');
+            
+            // Debug: DOM-Elemente prüfen
+            console.log('=== DOM-ELEMENTE PRÜFUNG ===');
+            console.log('pdfContent:', pdfContent ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('exportBtn:', exportBtn ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('projectTitleEl:', projectTitleEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('projectInfoEl:', projectInfoEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('timeEntriesBodyEl:', timeEntriesBodyEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('constructionImagesEl:', constructionImagesEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('documentsGalleryEl:', documentsGalleryEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            console.log('backLinkEl:', backLinkEl ? 'gefunden' : 'NICHT GEFUNDEN');
+            
+            // Event-Listener für Export-Button
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    console.log('PDF-Export-Button geklickt');
+                    if (typeof generatePDF === 'function') {
+                        generatePDF();
+                    } else {
+                        console.error('generatePDF-Funktion nicht verfügbar');
+                        alert('PDF-Export-Funktion ist nicht verfügbar.');
+                    }
+                });
+            }
+            
             // Projekt-ID aus der URL auslesen
             const urlParams = new URLSearchParams(window.location.search);
             projectId = urlParams.get('id');
             
+            console.log('URL-Parameter:', window.location.search);
+            console.log('Alle URL-Parameter:', Object.fromEntries(urlParams));
+            console.log('Extrahierte Projekt-ID:', projectId);
+            
             if (!projectId) {
-                showError('Keine Projekt-ID in der URL gefunden.');
+                console.error('FEHLER: Keine Projekt-ID in der URL gefunden.');
+                showError('Keine Projekt-ID in der URL gefunden. Bitte wählen Sie ein Projekt von der Hauptseite aus.');
                 return;
             }
             
             // Back-Link aktualisieren
-            backLinkEl.href = `index.html`;
+            if (backLinkEl) {
+                backLinkEl.href = `index.html`;
+                console.log('Back-Link aktualisiert');
+            }
+            
+            // Debug-Ausgabe zur Verfolgung
+            console.log('=== STARTE LADEN DER PROJEKTDATEN ===');
+            console.log('Projekt-ID für Laden:', projectId);
             
             // Daten laden
-            loadProject();
-        });
+            console.log('Rufe loadProject() auf...');
+            loadProject().then(() => {
+                console.log('loadProject() abgeschlossen');
+            }).catch(error => {
+                console.error('loadProject() fehlgeschlagen:', error);
+                showError('Fehler beim Laden des Projekts: ' + error.message);
+            });
+        }
         
         // Hilfsfunktion: Fehler anzeigen
         function showError(message) {
+            console.error('FEHLER:', message);
+            
+            // Fehler in allen relevanten Containern anzeigen
+            const containers = [
+                document.getElementById('project-info'),
+                document.getElementById('time-entries-container'),
+                document.getElementById('construction-images'),
+                document.getElementById('documents-gallery')
+            ];
+            
+            containers.forEach(container => {
+                if (container) {
+                    container.innerHTML = `<div style="color: red; padding: 20px; border: 1px solid red; background-color: #ffe6e6; border-radius: 4px;">
+                        <strong>Fehler:</strong> ${message}
+                    </div>`;
+                }
+            });
+            
+            // Auch als Alert anzeigen
             alert('Fehler: ' + message);
-            console.error(message);
         }
         
         // Projekt laden
         async function loadProject() {
             try {
-                // Projekt aus der Datenbank laden
-                const projectDoc = await db.collection('projects').doc(projectId).get();
+                console.log('=== PROJEKT LADEN GESTARTET ===');
+                console.log('Versuche Projekt zu laden mit ID:', projectId);
                 
-                if (!projectDoc.exists) {
+                // DataService-Verfügbarkeit prüfen
+                if (typeof DataService === 'undefined') {
+                    throw new Error('DataService ist nicht verfügbar. Prüfen Sie, ob data.js geladen wurde.');
+                }
+                console.log('DataService ist verfügbar');
+                
+                // DataService initialisieren, falls noch nicht geschehen
+                if (!DataService.db) {
+                    console.log('Initialisiere DataService...');
+                    await DataService.init();
+                    console.log('DataService initialisiert');
+                } else {
+                    console.log('DataService bereits initialisiert');
+                }
+                
+                // Projekt aus der Datenbank laden über DataService
+                console.log('Lade Projektdokument über DataService...');
+                console.log('Verfügbare DataService-Methoden:', Object.getOwnPropertyNames(DataService).filter(name => typeof DataService[name] === 'function'));
+                
+                const project = await DataService.getProjectById(projectId);
+                
+                if (!project) {
+                    console.error('Projekt nicht gefunden für ID:', projectId);
                     showError('Projekt nicht gefunden.');
                     return;
                 }
                 
-                const project = { id: projectDoc.id, ...projectDoc.data() };
+                console.log('=== PROJEKT ERFOLGREICH GELADEN ===');
+                console.log('Projekt-Daten:', project);
                 
                 // Projektdaten anzeigen
-                projectTitleEl.textContent = project.name || 'Unbenanntes Projekt';
+                if (projectTitleEl) {
+                    projectTitleEl.textContent = project.name || 'Unbenanntes Projekt';
+                    console.log('Projekt-Titel gesetzt:', project.name);
+                } else {
+                    console.error('projectTitleEl nicht gefunden!');
+                }
                 
                 let infoText = '';
                 if (project.client) infoText += `<strong>Kunde:</strong> ${project.client}<br>`;
@@ -413,16 +538,32 @@
                 }
                 if (project.description) infoText += `<strong>Beschreibung:</strong> ${project.description}`;
                 
-                projectInfoEl.innerHTML = infoText;
+                if (projectInfoEl) {
+                    projectInfoEl.innerHTML = infoText;
+                    console.log('Projekt-Info gesetzt:', infoText);
+                } else {
+                    console.error('projectInfoEl nicht gefunden!');
+                }
                 
                 // Zeiteinträge, Bilder und Dokumente laden
-                loadTimeEntries();
-                loadProjectImages('construction_site');
-                loadProjectImages('delivery_note');
+                console.log('=== STARTE LADEN DER UNTERGEORDNETEN DATEN ===');
+                
+                console.log('1. Lade Zeiteinträge...');
+                await loadTimeEntries();
+                
+                console.log('2. Lade Baustellenbilder...');
+                await loadProjectImages('construction_site');
+                
+                console.log('3. Lade Dokumente...');
+                await loadProjectImages('delivery_note');
+                
+                console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
                 
             } catch (error) {
-                console.error('Fehler beim Laden des Projekts:', error);
-                showError('Fehler beim Laden des Projekts.');
+                console.error('=== FEHLER BEIM LADEN DES PROJEKTS ===');
+                console.error('Fehler-Details:', error);
+                console.error('Error Stack:', error.stack);
+                showError('Fehler beim Laden des Projekts: ' + (error.message || 'Unbekannter Fehler'));
             }
         }
         
@@ -432,21 +573,16 @@
                 const timeEntriesContainer = document.getElementById('time-entries-container');
                 timeEntriesContainer.innerHTML = '<p>Zeiteinträge werden geladen...</p>';
                 
-                // Zeiteinträge laden
-                const snapshot = await db.collection('timeEntries')
-                    .where('projectId', '==', projectId)
-                    .get();
+                // Zeiteinträge über DataService laden
+                const timeEntries = await DataService.getProjectTimeEntries(projectId);
                 
-                if (snapshot.empty) {
+                if (!timeEntries || timeEntries.length === 0) {
+                    console.log('Keine Zeiteinträge gefunden');
                     timeEntriesContainer.innerHTML = '<p>Keine Zeiteinträge vorhanden.</p>';
                     return;
                 }
                 
-                // Zeiteinträge verarbeiten
-                const timeEntries = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                console.log(`${timeEntries.length} Zeiteinträge gefunden`);
                 
                 // Nach Datum sortieren (neueste zuerst)
                 timeEntries.sort((a, b) => {
@@ -467,7 +603,7 @@
                 
                 // Mitarbeiterdaten laden
                 const employeePromises = timeEntries.map(entry => 
-                    entry.employeeId ? db.collection('employees').doc(entry.employeeId).get() : Promise.resolve({ exists: false })
+                    entry.employeeId ? DataService.employeesCollection.doc(entry.employeeId).get() : Promise.resolve({ exists: false })
                 );
                 
                 const employeeDocs = await Promise.all(employeePromises);
@@ -609,6 +745,8 @@
         // Bilder laden
         async function loadProjectImages(type) {
             try {
+                console.log(`=== LADE ${type.toUpperCase()}-BILDER ===`);
+                console.log(`Lade ${type}-Bilder für Projekt:`, projectId);
                 const containerId = type === 'construction_site' ? 'construction-images' : 'documents-gallery';
                 
                 const container = document.getElementById(containerId);
@@ -617,164 +755,56 @@
                     return;
                 }
                 
+                // Container leeren und Ladeindikator anzeigen
+                container.innerHTML = `<p>${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} werden geladen...</p>`;
+                
+                // ALLE Projektdateien über den verbesserten DataService laden
+                // Diese Funktion sucht in allen Quellen und Unterordnern
+                if (!allProjectFiles) {
+                    console.log('Lade alle Projektdateien erstmalig...');
+                    allProjectFiles = await DataService.getProjectAllFiles(projectId);
+                    console.log('Alle Projektdateien geladen:', allProjectFiles);
+                }
+                
+                // Dateien je nach Typ auswählen
+                const files = allProjectFiles[type] || [];
+                console.log(`Anzahl ${type}-Dateien gefunden:`, files.length);
+                
+                if (!files || files.length === 0) {
+                    console.log(`Keine ${type}-Bilder gefunden`);
+                    container.innerHTML = `<p>Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden.</p>`;
+                    return;
+                }
+                
+                console.log(`${files.length} ${type}-Bilder/Dokumente werden angezeigt`);
+                
                 // Container leeren
-                container.innerHTML = '<p>Bilder werden geladen...</p>';
-                
-                // Zeiteinträge laden, um daraus die Bilder zu extrahieren
-                const timeEntriesSnapshot = await db.collection('timeEntries')
-                    .where('projectId', '==', projectId)
-                    .get();
-                
-                if (timeEntriesSnapshot.empty) {
-                    container.innerHTML = `<p>Keine Zeiteinträge für dieses Projekt gefunden.</p>`;
-                    return;
-                }
-                
-                // Alle relevanten Datei-IDs aus den Zeiteinträgen sammeln
-                const timeEntries = timeEntriesSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                
-                console.log('Alle Zeiteinträge für Bilder:', timeEntries);
-                
-                let fileIds = [];
-                let directFiles = [];
-                
-                timeEntries.forEach(entry => {
-                    // Je nach Typ die richtigen Datei-IDs oder Objekte sammeln
-                    if (type === 'construction_site') {
-                        // Prüfe zuerst auf sitePhotos (neues Format)
-                        if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
-                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
-                            if (entry.sitePhotos.length > 0 && typeof entry.sitePhotos[0] === 'object' && entry.sitePhotos[0].url) {
-                                console.log('Direkte Bildobjekte gefunden in sitePhotos:', entry.id);
-                                // Alle Bilder mit ihren individuellen Kommentaren hinzufügen
-                                entry.sitePhotos.forEach(photo => {
-                                    console.log('Füge direktes Bildobjekt aus sitePhotos hinzu:', photo);
-                                    // Zusätzliche Informationen zum Bild hinzufügen
-                                    directFiles.push({
-                                        ...photo,  // Enthält URL und Kommentar
-                                        timeEntryId: entry.id,
-                                        employeeId: entry.employeeId,
-                                        timestamp: entry.clockOutTime || entry.clockInTime
-                                    });
-                                });
-                            } else {
-                                // IDs sammeln
-                                fileIds = [...fileIds, ...entry.sitePhotos];
-                            }
-                        }
-                        
-                        // Alternativ photos prüfen (altes Format)
-                        if (entry.photos && Array.isArray(entry.photos)) {
-                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
-                            if (entry.photos.length > 0 && typeof entry.photos[0] === 'object' && entry.photos[0].url) {
-                                console.log('Direkte Bildobjekte gefunden in photos:', entry.id);
-                                // Alle Bilder mit ihren individuellen Kommentaren hinzufügen
-                                entry.photos.forEach(photo => {
-                                    console.log('Füge direktes Bildobjekt aus photos hinzu:', photo);
-                                    // Zusätzliche Informationen zum Bild hinzufügen
-                                    directFiles.push({
-                                        ...photo,  // Enthält URL und Kommentar
-                                        timeEntryId: entry.id,
-                                        employeeId: entry.employeeId,
-                                        timestamp: entry.clockOutTime || entry.clockInTime
-                                    });
-                                });
-                            } else {
-                                // IDs sammeln
-                                fileIds = [...fileIds, ...entry.photos];
-                            }
-                        }
-                    } else { // delivery_note
-                        if (entry.documents && Array.isArray(entry.documents)) {
-                            // Prüfen, ob es sich um direkt gespeicherte Objekte handelt
-                            if (entry.documents.length > 0 && typeof entry.documents[0] === 'object' && entry.documents[0].url) {
-                                console.log('Direkte Dokumentobjekte gefunden in Zeiteintrag:', entry.id);
-                                // Alle Dokumente mit ihren individuellen Kommentaren hinzufügen
-                                entry.documents.forEach(doc => {
-                                    console.log('Füge direktes Dokumentobjekt hinzu:', doc);
-                                    directFiles.push({
-                                        ...doc,  // Enthält URL und Kommentar
-                                        timeEntryId: entry.id,
-                                        employeeId: entry.employeeId,
-                                        timestamp: entry.clockOutTime || entry.clockInTime
-                                    });
-                                });
-                            } else {
-                                // IDs sammeln
-                                fileIds = [...fileIds, ...entry.documents];
-                            }
-                        }
-                        if (entry.deliveryNotes && Array.isArray(entry.deliveryNotes)) {
-                            fileIds = [...fileIds, ...entry.deliveryNotes];
-                        }
-                    }
-                });
-                
-                // Duplikate entfernen
-                fileIds = [...new Set(fileIds)].filter(id => id && typeof id === 'string');
-                
-                console.log(`${fileIds.length} eindeutige Datei-IDs gefunden`);
-                console.log(`${directFiles.length} direkte Dateiobjekte gefunden`);
-                
-                // Wenn keine Dateien vorhanden sind
-                if (fileIds.length === 0 && directFiles.length === 0) {
-                    container.innerHTML = `<p>Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden.</p>`;
-                    return;
-                }
-                
-                let files = [];
-                
-                // Wenn ID-basierte Dateien vorhanden sind, diese laden
-                if (fileIds.length > 0) {
-                    // Dateien anhand der IDs abrufen
-                    const filePromises = fileIds.map(id => db.collection('fileUploads').doc(id).get());
-                    const fileDocs = await Promise.all(filePromises);
-                    
-                    // Gültige Dateien filtern
-                    files = fileDocs
-                        .filter(doc => doc.exists)
-                        .map(doc => ({ id: doc.id, ...doc.data() }));
-                }
-                
-                // Direkte Dateiobjekte hinzufügen
-                if (directFiles.length > 0) {
-                    files = [...files, ...directFiles];
-                }
-                
-                console.log(`Insgesamt ${files.length} Dateien gefunden:`, files);
-                
-                if (files.length === 0) {
-                    container.innerHTML = `<p>Keine ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} vorhanden.</p>`;
-                    return;
-                }
-                
-                // Mitarbeiterdaten laden
-                const employeePromises = files.map(file => 
-                    file.employeeId ? db.collection('employees').doc(file.employeeId).get() : Promise.resolve({ exists: false })
-                );
-                
-                const employeeDocs = await Promise.all(employeePromises);
-                const employees = employeeDocs.map(doc => 
-                    doc.exists ? { id: doc.id, ...doc.data() } : { name: 'Unbekannt' }
-                );
-                
-                // Galerie aktualisieren
                 container.innerHTML = '';
-                
-                const galleryEl = container; // Der Container selbst ist die Galerie
                 
                 // Zähler für geladene Bilder (für Initialisierung der Lightbox)
                 let loadedImages = 0;
                 const totalImages = files.length;
                 
-                files.forEach((file, index) => {
-                    const employee = employees[index] || { name: 'Unbekannt' };
+                // Bilder zur Galerie hinzufügen
+                for (let index = 0; index < files.length; index++) {
+                    const file = files[index];
+                    console.log(`Verarbeite Datei ${index + 1}/${files.length}:`, file);
                     
-                    // Datum formatieren mit der sicheren Konvertierungsfunktion
-                    let dateStr = 'Unbekanntes Datum';
+                    // Mitarbeiterinformationen abrufen (wenn vorhanden)
+                    let employeeName = 'Unbekannt';
+                    if (file.employeeId) {
+                        try {
+                            const employeeDoc = await DataService.employeesCollection.doc(file.employeeId).get();
+                            if (employeeDoc.exists) {
+                                employeeName = employeeDoc.data().name || 'Unbekannt';
+                            }
+                        } catch (error) {
+                            console.warn('Fehler beim Laden des Mitarbeiters:', error);
+                        }
+                    }
+                    
+                    // Datum formatieren mit sicherer Konvertierungsfunktion
+                    let formattedDate = 'Unbekanntes Datum';
                     
                     // Hilfsfunktion zum Sicheren Konvertieren von Zeitstempeln
                     function safelyConvertTimestamp(timestamp) {
@@ -835,7 +865,7 @@
                     }
                     
                     if (dateObj) {
-                        dateStr = dateObj.toLocaleDateString('de-DE');
+                        formattedDate = dateObj.toLocaleDateString('de-DE');
                     }
                     
                     // Galerie-Element erstellen
@@ -846,65 +876,38 @@
                     const img = document.createElement('img');
                     img.className = 'gallery-img';
                     img.src = file.url || file.downloadURL || '';
-                    img.alt = 'Bild';
+                    img.alt = type === 'construction_site' ? 'Baustellenfoto' : 'Dokument';
                     
                     // Bild-Ladeüberwachung für Lightbox-Initialisierung
                     img.onload = function() {
                         loadedImages++;
+                        console.log(`Bild ${loadedImages}/${totalImages} geladen`);
                         // Initialisiere Lightbox, wenn alle Bilder geladen sind
                         if (loadedImages === totalImages) {
-                            setupLightbox();
+                            console.log('Alle Bilder geladen, initialisiere Lightbox');
+                            initializeLightboxAfterLoad();
                         }
                     };
                     
                     img.onerror = function() {
                         loadedImages++;
+                        console.error('Fehler beim Laden des Bildes:', file.url || file.downloadURL);
                         // Selbst bei Fehler überprüfen, ob wir mit der Initialisierung fortfahren können
                         if (loadedImages === totalImages) {
-                            setupLightbox();
+                            console.log('Alle Bilder verarbeitet (mit Fehlern), initialisiere Lightbox');
+                            initializeLightboxAfterLoad();
                         }
                     };
                     
                     // Beschreibung erstellen
                     const description = document.createElement('p');
-                    description.textContent = `${employee.name} - ${dateStr}`;
+                    description.textContent = `${employeeName} - ${formattedDate}`;
                     
-                    // Debug-Ausgabe der kompletten Bilddaten
-                    console.log(`Bild ${index+1} Eigenschaften:`, file);
-                    
-                    // Verwende immer den Bildkommentar (comment), nicht die Arbeitsbeschreibung (notes)
+                    // Kommentar hinzufügen, wenn vorhanden
                     if (file.comment) {
                         const commentContainer = document.createElement('div');
-                        commentContainer.className = 'image-comment-container';
-                        
-                        const commentLabel = document.createElement('strong');
-                        commentLabel.textContent = 'Kommentar:'; 
-                        
-                        const commentContent = document.createElement('p');
-                        commentContent.textContent = file.comment;
-                        commentContent.className = 'image-comment-text';
-                        
-                        commentContainer.appendChild(commentLabel);
-                        commentContainer.appendChild(commentContent);
-                        galleryItem.appendChild(commentContainer);
-                    }
-                    
-                    // Bei Baustellen-Uploads sollten wir keine Arbeitsbeschreibung als Bildkommentar anzeigen
-                    // Das kommt nur als Fallback für die alten Daten
-                    if (!file.comment && file.notes) {
-                        console.log('Fallback: Verwende notes statt comment für Bild', index+1);
-                        const commentContainer = document.createElement('div');
-                        commentContainer.className = 'image-comment-container';
-                        
-                        const commentLabel = document.createElement('strong');
-                        commentLabel.textContent = 'Beschreibung:'; 
-                        
-                        const notesContent = document.createElement('p');
-                        notesContent.textContent = file.notes;
-                        notesContent.className = 'image-comment-text';
-                        
-                        commentContainer.appendChild(commentLabel);
-                        commentContainer.appendChild(notesContent);
+                        commentContainer.className = 'image-comment';
+                        commentContainer.innerHTML = `<strong>Kommentar:</strong> ${file.comment}`;
                         galleryItem.appendChild(commentContainer);
                     }
                     
@@ -913,16 +916,19 @@
                     galleryItem.appendChild(description);
                     
                     // In die Galerie einfügen
-                    galleryEl.appendChild(galleryItem);
-                });
+                    container.appendChild(galleryItem);
+                }
                 
-                console.log(`${files.length} ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} angezeigt`);
+                console.log(`=== ${files.length} ${type === 'construction_site' ? 'BAUSTELLENFOTOS' : 'DOKUMENTE'} ERFOLGREICH ANGEZEIGT ===`);
                 
             } catch (error) {
-                console.error(`Fehler beim Laden der ${type}-Bilder:`, error);
-                const containerId = type === 'construction_site' ? 'photos-container' : 'documents-container';
+                console.error(`=== FEHLER BEIM LADEN DER ${type.toUpperCase()}-BILDER ===`);
+                console.error('Fehler-Details:', error);
+                const containerId = type === 'construction_site' ? 'construction-images' : 'documents-gallery';
                 const container = document.getElementById(containerId);
-                container.innerHTML = `<p class="error">Fehler beim Laden der ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'}.</p>`;
+                if (container) {
+                    container.innerHTML = `<p class="error">Fehler beim Laden der ${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'}: ${error.message || 'Unbekannter Fehler'}</p>`;
+                }
             }
         }
     </script>
@@ -1032,6 +1038,11 @@
         }
         
         // Die PDF-Export-Funktion wurde in pdf-export.js ausgelagert
+        // Export-Button Event-Listener wird im DOMContentLoaded-Event gesetzt
     </script>
+    
+    <!-- Report-functions und PDF-Export am Ende laden -->
+    <script src="report-functions.js"></script>
+    <script src="pdf-export.js"></script>
 </body>
 </html>

@@ -59,6 +59,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Prüfen, ob ein Admin bereits angemeldet ist
     const savedAdmin = localStorage.getItem('lauffer_admin_user');
+    
+    // DataService initialisieren
+    DataService.init();
+    
     if (savedAdmin) {
         try {
             const admin = JSON.parse(savedAdmin);
@@ -215,8 +219,8 @@ async function loadDashboardData() {
         
         try {
             console.log('Suche Zeiteinträge zwischen', todayStart, 'und', new Date());
-            // Verwende direkt die Firestore-Abfrage statt der DataService-Methode
-            const entriesSnapshot = await db.collection('timeEntries')
+            // Verwende DataService.timeEntriesCollection statt direkt db
+            const entriesSnapshot = await DataService.timeEntriesCollection
                 .where('clockInTime', '>=', firebase.firestore.Timestamp.fromDate(todayStart))
                 .get();
             

@@ -17,28 +17,24 @@ const DataService = {
     // Initialisierung der Firebase-Verbindung
     async init() {
         this.db = firebase.firestore();
-        this.storage = firebase.storage();
+        
+        // Storage nur initialisieren, wenn verfügbar
+        if (firebase.storage) {
+            this.storage = firebase.storage();
+        } else {
+            console.warn('Firebase Storage nicht verfügbar');
+            this.storage = null;
+        }
+        
         this.employeesCollection = this.db.collection('employees');
         this.projectsCollection = this.db.collection('projects');
         this.timeEntriesCollection = this.db.collection('timeEntries');
         this.usersCollection = this.db.collection('users');
         this.fileUploadsCollection = this.db.collection('fileUploads');
         
-        // Bestehende Zeiteinträge aktualisieren
-        try {
-            // Warten bis zur nächsten Ausführungsschleife, damit die App zuerst lädt
-            setTimeout(() => {
-                this.updateExistingTimeEntriesWithEntryId()
-                    .then(result => {
-                        console.log('Aktualisierung der Zeiteinträge abgeschlossen:', result);
-                    })
-                    .catch(error => {
-                        console.error('Fehler bei der Aktualisierung der Zeiteinträge:', error);
-                    });
-            }, 5000); // 5 Sekunden warten, damit die App zuerst geladen wird
-        } catch (error) {
-            console.error('Fehler beim Initialisieren der Aktualisierung:', error);
-        }
+        // Anmerkung: Wir entfernen hier die updateExistingTimeEntriesWithEntryId-Funktion,
+        // da sie nur auf der Hauptseite benötigt wird, nicht für Projektdetails
+        console.log('DataService erfolgreich initialisiert');
     },
     
     // Admin-Verwaltung
@@ -244,35 +240,43 @@ const DataService = {
         }
     },
     
-    async getActiveProjects() {
-        try {
-            const snapshot = await this.projectsCollection
-                .where('status', '==', 'active')
-                .get();
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        } catch (error) {
-            console.error('Fehler beim Abrufen aktiver Projekte:', error);
-            return [];
+    async getProjectById(projectId) {
+        if (!projectId) {
+            console.error('Keine Projekt-ID angegeben');
+            return null;
         }
-    },
-    
-    async getProjectById(id) {
+        
         try {
-            console.log('Lade Projekt mit ID:', id);
-            if (!id) {
-                console.error('Keine gültige Projekt-ID angegeben');
+            const doc = await this.projectsCollection.doc(projectId).get();
+            if (!doc.exists) {
+                console.log(`Projekt mit ID ${projectId} nicht gefunden`);
                 return null;
             }
             
-            const doc = await this.projectsCollection.doc(id).get();
-            if (doc.exists) {
-                return { id: doc.id, ...doc.data() };
-            }
-            console.log('Projekt nicht gefunden');
-            return null;
+            return { id: doc.id, ...doc.data() };
         } catch (error) {
-            console.error(`Fehler beim Abrufen des Projekts ${id}:`, error);
+            console.error(`Fehler beim Abrufen des Projekts mit ID ${projectId}:`, error);
             return null;
+        }
+    },
+    
+    // Zeiteinträge für ein Projekt abrufen
+    async getProjectTimeEntries(projectId) {
+        if (!projectId) {
+            console.error('Keine Projekt-ID angegeben');
+            return [];
+        }
+        
+        try {
+            const snapshot = await this.timeEntriesCollection
+                .where('projectId', '==', projectId)
+                .orderBy('clockInTime', 'desc')
+                .get();
+                
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
+            console.error(`Fehler beim Abrufen der Zeiteinträge für Projekt ${projectId}:`, error);
+            return [];
         }
     },
     
@@ -1477,7 +1481,307 @@ const DataService = {
             console.error('Fehler beim Überprüfen der Dokumentation:', error);
             throw error;
         }
-    }
+    },
+    
+    // Dateien für ein Projekt nach Typ abrufen
+    async getProjectFilesByType(projectId, type) {
+        if (!projectId) {
+            console.error('Keine Projekt-ID angegeben');
+            return [];
+        }
+        
+        console.log(`Lade Dateien vom Typ ${type} für Projekt ${projectId}`);
+        
+        try {
+            // Zuerst in der fileUploads-Collection suchen
+            const filesSnapshot = await this.fileUploadsCollection
+                .where('projectId', '==', projectId)
+                .where('type', '==', type)
+                .get();
+            
+            let files = [];
+            
+            if (!filesSnapshot.empty) {
+                // Wenn Dateien gefunden wurden, diese verwenden
+                files = filesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log(`${files.length} ${type}-Dateien in fileUploads gefunden`);
+                return files;
+            }
+            
+            console.log(`Keine ${type}-Dateien in fileUploads gefunden, suche in Zeiteinträgen...`);
+            
+            // Fallback: Zeiteinträge laden, um daraus die Bilder/Dokumente zu extrahieren
+            const timeEntriesSnapshot = await this.timeEntriesCollection
+                .where('projectId', '==', projectId)
+                .get();
+            
+            if (timeEntriesSnapshot.empty) {
+                console.log('Keine Zeiteinträge für dieses Projekt gefunden');
+                return [];
+            }
+            
+            // Zeiteinträge extrahieren
+            const timeEntries = timeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log(`${timeEntries.length} Zeiteinträge gefunden, suche nach ${type}-Dateien...`);
+            
+            // Temporäres Array für direkt gespeicherte Dateien
+            let directFiles = [];
+            
+            // Durch alle Zeiteinträge gehen und Dateien sammeln
+            timeEntries.forEach(entry => {
+                // Je nach Typ die richtigen Felder prüfen
+                if (type === 'construction_site') {
+                    // sitePhotos prüfen (neues Format)
+                    if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
+                        if (entry.sitePhotos.length > 0 && typeof entry.sitePhotos[0] === 'object' && entry.sitePhotos[0].url) {
+                            entry.sitePhotos.forEach(photo => {
+                                directFiles.push({
+                                    ...photo,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'construction_site'
+                                });
+                            });
+                        }
+                    }
+                    
+                    // photos prüfen (altes Format)
+                    if (entry.photos && Array.isArray(entry.photos)) {
+                        if (entry.photos.length > 0 && typeof entry.photos[0] === 'object' && entry.photos[0].url) {
+                            entry.photos.forEach(photo => {
+                                directFiles.push({
+                                    ...photo,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'construction_site'
+                                });
+                            });
+                        }
+                    }
+                } else if (type === 'delivery_note') {
+                    // documents oder deliveryNotes für Dokumente prüfen
+                    if (entry.documents && Array.isArray(entry.documents)) {
+                        if (entry.documents.length > 0 && typeof entry.documents[0] === 'object' && entry.documents[0].url) {
+                            entry.documents.forEach(doc => {
+                                directFiles.push({
+                                    ...doc,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'delivery_note'
+                                });
+                            });
+                        }
+                    }
+                    
+                    if (entry.deliveryNotes && Array.isArray(entry.deliveryNotes)) {
+                        if (entry.deliveryNotes.length > 0 && typeof entry.deliveryNotes[0] === 'object' && entry.deliveryNotes[0].url) {
+                            entry.deliveryNotes.forEach(note => {
+                                directFiles.push({
+                                    ...note,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'delivery_note'
+                                });
+                            });
+                        }
+                    }
+                }
+            });
+            
+            console.log(`Insgesamt ${directFiles.length} direkte ${type}-Dateien in Zeiteinträgen gefunden`);
+            return directFiles;
+            
+        } catch (error) {
+            console.error(`Fehler beim Laden der ${type}-Dateien für Projekt ${projectId}:`, error);
+            return [];
+        }
+    },
+    
+    /**
+     * Verbesserte Funktion zum Laden aller Projekt-Dateien (Bilder und Dokumente)
+     * Durchsucht alle Ordner und Unterordner (construction_site, site, etc.)
+     */
+    async getProjectAllFiles(projectId) {
+        if (!projectId) {
+            console.error('Keine Projekt-ID angegeben');
+            return { construction_site: [], delivery_note: [] };
+        }
+        
+        console.log(`Lade ALLE Dateien für Projekt ${projectId} aus allen Quellen...`);
+        
+        try {
+            // Ergebnis-Objekt vorbereiten
+            const result = {
+                construction_site: [],
+                delivery_note: []
+            };
+            
+            // 1. Zuerst in der fileUploads-Collection nach Dateien mit dieser projectId suchen
+            console.log(`Suche in fileUploads nach Dateien für Projekt ${projectId}...`);
+            
+            const filesSnapshot = await this.fileUploadsCollection
+                .where('projectId', '==', projectId)
+                .get();
+            
+            if (!filesSnapshot.empty) {
+                // Dateien nach Typ sortieren
+                filesSnapshot.docs.forEach(doc => {
+                    const file = { id: doc.id, ...doc.data() };
+                    const fileType = file.type || 'construction_site'; // Default-Typ, falls nicht angegeben
+                    
+                    // In entsprechendes Array einfügen
+                    if (fileType === 'construction_site' || fileType === 'site') {
+                        result.construction_site.push(file);
+                    } else if (fileType === 'delivery_note' || fileType === 'document') {
+                        result.delivery_note.push(file);
+                    }
+                });
+                
+                console.log(`${filesSnapshot.docs.length} Dateien in fileUploads gefunden:`, 
+                    `${result.construction_site.length} Baustellenfotos, ${result.delivery_note.length} Dokumente`);
+            } else {
+                console.log(`Keine Dateien in fileUploads für Projekt ${projectId} gefunden`);
+            }
+            
+            // 2. In Zeiteinträgen suchen (für direktes Einbetten von Bildern und Dokumenten)
+            console.log(`Suche in Zeiteinträgen nach eingebetteten Dateien für Projekt ${projectId}...`);
+            
+            const timeEntriesSnapshot = await this.timeEntriesCollection
+                .where('projectId', '==', projectId)
+                .get();
+            
+            if (!timeEntriesSnapshot.empty) {
+                const timeEntries = timeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log(`${timeEntries.length} Zeiteinträge gefunden, extrahiere eingebettete Dateien...`);
+                
+                // Durch alle Zeiteinträge gehen und Dateien sammeln
+                timeEntries.forEach(entry => {
+                    // Baustellenfotos
+                    // 1. sitePhotos (neues Format)
+                    if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
+                        if (entry.sitePhotos.length > 0 && typeof entry.sitePhotos[0] === 'object' && entry.sitePhotos[0].url) {
+                            entry.sitePhotos.forEach(photo => {
+                                result.construction_site.push({
+                                    ...photo,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'construction_site'
+                                });
+                            });
+                        }
+                    }
+                    
+                    // 2. photos (altes Format)
+                    if (entry.photos && Array.isArray(entry.photos)) {
+                        if (entry.photos.length > 0 && typeof entry.photos[0] === 'object' && entry.photos[0].url) {
+                            entry.photos.forEach(photo => {
+                                result.construction_site.push({
+                                    ...photo,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'construction_site'
+                                });
+                            });
+                        }
+                    }
+                    
+                    // Dokumente und Lieferscheine
+                    // 1. documents
+                    if (entry.documents && Array.isArray(entry.documents)) {
+                        if (entry.documents.length > 0 && typeof entry.documents[0] === 'object' && entry.documents[0].url) {
+                            entry.documents.forEach(doc => {
+                                result.delivery_note.push({
+                                    ...doc,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'delivery_note'
+                                });
+                            });
+                        }
+                    }
+                    
+                    // 2. deliveryNotes
+                    if (entry.deliveryNotes && Array.isArray(entry.deliveryNotes)) {
+                        if (entry.deliveryNotes.length > 0 && typeof entry.deliveryNotes[0] === 'object' && entry.deliveryNotes[0].url) {
+                            entry.deliveryNotes.forEach(note => {
+                                result.delivery_note.push({
+                                    ...note,
+                                    timeEntryId: entry.id,
+                                    employeeId: entry.employeeId,
+                                    timestamp: entry.clockOutTime || entry.clockInTime,
+                                    type: 'delivery_note'
+                                });
+                            });
+                        }
+                    }
+                });
+                
+                console.log(`Aus Zeiteinträgen extrahiert: ${result.construction_site.length} Baustellenfotos, ${result.delivery_note.length} Dokumente`);
+            } else {
+                console.log(`Keine Zeiteinträge für Projekt ${projectId} gefunden`);
+            }
+            
+            // 3. Nach Timestamp sortieren (neueste zuerst)
+            result.construction_site.sort((a, b) => {
+                const dateA = a.timestamp instanceof firebase.firestore.Timestamp ? 
+                    a.timestamp.toDate() : new Date(a.timestamp || a.uploadTime || 0);
+                const dateB = b.timestamp instanceof firebase.firestore.Timestamp ? 
+                    b.timestamp.toDate() : new Date(b.timestamp || b.uploadTime || 0);
+                return dateB - dateA;
+            });
+            
+            result.delivery_note.sort((a, b) => {
+                const dateA = a.timestamp instanceof firebase.firestore.Timestamp ? 
+                    a.timestamp.toDate() : new Date(a.timestamp || a.uploadTime || 0);
+                const dateB = b.timestamp instanceof firebase.firestore.Timestamp ? 
+                    b.timestamp.toDate() : new Date(b.timestamp || b.uploadTime || 0);
+                return dateB - dateA;
+            });
+            
+            // 4. Abschließende Zählung
+            console.log(`Insgesamt gefunden: ${result.construction_site.length} Baustellenfotos, ${result.delivery_note.length} Dokumente`);
+            
+            return result;
+            
+        } catch (error) {
+            console.error(`Fehler beim Laden der Dateien für Projekt ${projectId}:`, error);
+            return { construction_site: [], delivery_note: [] };
+        }
+    },
+    
+    // Aktive Projekte für Mitarbeiter abrufen
+    async getActiveProjects() {
+        try {
+            console.log('Lade aktive Projekte...');
+            
+            // Einfacher Ansatz: Alle Projekte laden und clientseitig filtern
+            const snapshot = await this.projectsCollection.get();
+            
+            let projects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Nur aktive Projekte filtern (falls status-Feld existiert)
+            projects = projects.filter(project => 
+                !project.status || project.status === 'active' || project.status === 'aktiv'
+            );
+            
+            // Nach Namen sortieren
+            projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            
+            console.log(`${projects.length} aktive Projekte gefunden:`, projects);
+            return projects;
+        } catch (error) {
+            console.error('Fehler beim Abrufen aktiver Projekte:', error);
+            console.error('Error details:', error.message, error.code);
+            return [];
+        }
+    },
 };
 
 // Firebase initialisieren, wenn das Dokument geladen ist
