@@ -100,6 +100,7 @@ async function initApp() {
     // Neue Ausstempel-Buttons und erweitertes Formular
     const simpleClockOutBtn = document.getElementById('simple-clock-out-btn');
     const extendedClockOutBtn = document.getElementById('extended-clock-out-btn');
+    const liveDocumentationBtn = document.getElementById('live-documentation-btn');
     const extendedClockOutForm = document.getElementById('extended-clock-out-form');
     const cancelClockOutBtn = document.getElementById('cancel-clock-out');
     const closeModalBtns = document.querySelectorAll('.close-modal-btn');
@@ -110,6 +111,10 @@ async function initApp() {
     
     if (extendedClockOutBtn) {
         extendedClockOutBtn.addEventListener('click', showExtendedClockOutModal);
+    }
+    
+    if (liveDocumentationBtn) {
+        liveDocumentationBtn.addEventListener('click', showLiveDocumentationModal);
     }
     
     if (extendedClockOutForm) {
@@ -134,12 +139,34 @@ async function initApp() {
         });
     }
     
+    // Event-Listener für Live-Dokumentations-Modal
+    const liveDocumentationForm = document.getElementById('live-documentation-form');
+    const cancelLiveDocumentationBtn = document.getElementById('cancel-live-documentation');
+    
+    if (liveDocumentationForm) {
+        liveDocumentationForm.addEventListener('submit', handleLiveDocumentationSave);
+    }
+    
+    if (cancelLiveDocumentationBtn) {
+        cancelLiveDocumentationBtn.addEventListener('click', function() {
+            const modal = document.getElementById('live-documentation-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+    
     // Modal schließen-Buttons
     closeModalBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             const modal = this.closest('.modal');
             if (modal) {
-                modal.classList.remove('visible');
+                // Unterstützung für beide Modal-Stile
+                if (modal.classList.contains('visible')) {
+                    modal.classList.remove('visible');
+                } else {
+                    modal.style.display = 'none';
+                }
             }
         });
     });
@@ -473,6 +500,295 @@ function showExtendedClockOutModal() {
         if (documentPhotosComments) {
             documentPhotosComments.innerHTML = '';
         }
+        
+        // Datei-Vorschau-Funktion für die Formular-Inputs einrichten
+        setupFilePreview('site-photos', 'site-photos-preview');
+        setupFilePreview('document-photos', 'document-photos-preview');
+    }
+}
+
+// Live-Dokumentations-Modal anzeigen (während der Arbeitszeit)
+function showLiveDocumentationModal() {
+    // Prüfen, ob ein aktiver Zeiteintrag existiert
+    const timeEntry = getCurrentTimeEntry();
+    if (!timeEntry) {
+        alert('Es gibt keinen aktiven Zeiteintrag für die Dokumentation.');
+        return;
+    }
+    
+    console.log('Öffne Live-Dokumentation für Zeiteintrag:', timeEntry.id);
+    
+    // Modal anzeigen
+    const modal = document.getElementById('live-documentation-modal');
+    if (modal) {
+        modal.style.display = 'block';
+        
+        // Formular zurücksetzen
+        const notesTextarea = document.getElementById('live-notes');
+        if (notesTextarea) {
+            notesTextarea.value = '';
+        }
+        
+        // Datei-Vorschau zurücksetzen
+        const liveSitePhotosInput = document.getElementById('live-site-photos');
+        const liveDocumentPhotosInput = document.getElementById('live-document-photos');
+        
+        if (liveSitePhotosInput && liveSitePhotosInput.clearPreviews) {
+            liveSitePhotosInput.clearPreviews();
+        }
+        
+        if (liveDocumentPhotosInput && liveDocumentPhotosInput.clearPreviews) {
+            liveDocumentPhotosInput.clearPreviews();
+        }
+        
+        // Bildkommentar-Container zurücksetzen
+        const liveSitePhotosComments = document.getElementById('live-site-photos-comments');
+        const liveDocumentPhotosComments = document.getElementById('live-document-photos-comments');
+        
+        if (liveSitePhotosComments) {
+            liveSitePhotosComments.innerHTML = '';
+        }
+        
+        if (liveDocumentPhotosComments) {
+            liveDocumentPhotosComments.innerHTML = '';
+        }
+        
+        // Datei-Vorschau-Funktion für die neuen Inputs einrichten
+        setupFilePreview('live-site-photos', 'live-site-photos-preview');
+        setupFilePreview('live-document-photos', 'live-document-photos-preview');
+    } else {
+        console.error('Live-Dokumentations-Modal nicht gefunden');
+        alert('Fehler: Modal konnte nicht geöffnet werden.');
+    }
+}
+
+// Live-Dokumentation speichern
+// Flag um doppelte Ausführung zu verhindern
+let isSubmittingLiveDocumentation = false;
+
+async function handleLiveDocumentationSave(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    
+    // Doppelte Ausführung verhindern
+    if (isSubmittingLiveDocumentation) {
+        console.log('Live-Dokumentation wird bereits verarbeitet, überspringe...');
+        return;
+    }
+    
+    isSubmittingLiveDocumentation = true;
+    
+    try {
+        const timeEntry = getCurrentTimeEntry();
+        if (!timeEntry) {
+            alert('Kein aktiver Zeiteintrag gefunden.');
+            return;
+        }
+        
+        const user = getCurrentUser();
+        if (!user || !user.id) {
+            alert('Bitte loggen Sie sich ein, um fortzufahren.');
+            return;
+        }
+        
+        // Firebase-Verbindung prüfen
+        if (!firebase || !firebase.firestore || !firebase.storage) {
+            throw new Error('Firebase ist nicht verfügbar. Bitte prüfen Sie Ihre Internetverbindung.');
+        }
+        
+        console.log('🔄 Firebase-Verbindung erfolgreich überprüft');
+        
+        // Daten aus dem Formular abrufen
+        const notes = document.getElementById('live-notes').value;
+        const liveSitePhotosInput = document.getElementById('live-site-photos');
+        const liveDocumentPhotosInput = document.getElementById('live-document-photos');
+        
+        console.log('Starte Live-Dokumentation Speicherung:', {
+            timeEntryId: timeEntry.id,
+            notes,
+            sitePhotos: liveSitePhotosInput.files.length,
+            documents: liveDocumentPhotosInput.files.length
+        });
+        
+        // Arrays für die Upload-Objekte
+        const sitePhotoObjects = [];
+        const documentPhotoObjects = [];
+        
+        // Baustellenfotos hochladen
+        if (liveSitePhotosInput && liveSitePhotosInput.files.length > 0) {
+            const liveSitePhotoComments = document.querySelectorAll('#live-site-photos-comments .image-comment-item');
+            
+            console.log(`🔄 Starte Upload von ${liveSitePhotosInput.files.length} Baustellenfotos...`);
+            
+            for (let i = 0; i < liveSitePhotosInput.files.length; i++) {
+                try {
+                    const file = liveSitePhotosInput.files[i];
+                    console.log(`📷 Uploade Baustellenfoto ${i + 1}/${liveSitePhotosInput.files.length}: ${file.name}`);
+                    
+                    // Kommentar für dieses Bild finden
+                    let imageComment = '';
+                    const commentItem = liveSitePhotoComments[i];
+                    if (commentItem) {
+                        const commentTextarea = commentItem.querySelector('textarea');
+                        if (commentTextarea) {
+                            imageComment = commentTextarea.value;
+                        }
+                    }
+                    
+                    // Firebase Storage Check - aber nicht als Fehler behandeln
+                    console.log(`🔧 Firebase Storage verfügbar: ${!!firebase.storage}`);
+                    
+                    const upload = await DataService.uploadFile(
+                        file,
+                        timeEntry.projectId,
+                        timeEntry.employeeId,
+                        'construction_site',
+                        notes,
+                        imageComment
+                    );
+                    
+                    console.log(`✅ Baustellenfoto ${i + 1} erfolgreich hochgeladen:`, upload.id);
+                    
+                    // Firebase-kompatibles Objekt erstellen - sichere Behandlung
+                    const safeUpload = {
+                        ...upload,
+                        uploadTime: upload.uploadTime || new Date()
+                    };
+                    
+                    // Firestore Timestamp korrekt konvertieren falls vorhanden
+                    if (upload.uploadTime && typeof upload.uploadTime.toDate === 'function') {
+                        safeUpload.uploadTime = upload.uploadTime.toDate();
+                    } else if (upload.uploadTime && upload.uploadTime.seconds) {
+                        // Falls es ein Firestore Timestamp-Objekt ist
+                        safeUpload.uploadTime = new Date(upload.uploadTime.seconds * 1000);
+                    }
+                    
+                    sitePhotoObjects.push(safeUpload);
+                    console.log(`📸 Baustellenfoto ${i + 1} zu Objektliste hinzugefügt - Total: ${sitePhotoObjects.length}`);
+                    
+                } catch (uploadError) {
+                    console.error(`❌ Fehler beim Hochladen des Baustellenfotos ${i + 1}:`, uploadError);
+                    console.error(`❌ Fehler-Details:`, uploadError.message, uploadError.stack);
+                    
+                    // Upload-Fehler protokollieren aber weitermachen
+                    console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild...`);
+                }
+            }
+        }
+        
+        // Dokumente hochladen
+        if (liveDocumentPhotosInput && liveDocumentPhotosInput.files.length > 0) {
+            const liveDocumentPhotoComments = document.querySelectorAll('#live-document-photos-comments .image-comment-item');
+            
+            console.log(`🔄 Starte Upload von ${liveDocumentPhotosInput.files.length} Dokumenten...`);
+            
+            for (let i = 0; i < liveDocumentPhotosInput.files.length; i++) {
+                try {
+                    const file = liveDocumentPhotosInput.files[i];
+                    console.log(`📄 Uploade Dokument ${i + 1}/${liveDocumentPhotosInput.files.length}: ${file.name}`);
+                    
+                    // Kommentar für dieses Dokument finden
+                    let imageComment = '';
+                    const commentItem = liveDocumentPhotoComments[i];
+                    if (commentItem) {
+                        const commentTextarea = commentItem.querySelector('textarea');
+                        if (commentTextarea) {
+                            imageComment = commentTextarea.value;
+                        }
+                    }
+                    
+                    // Dokumenttyp bestimmen
+                    const documentType = file.name.toLowerCase().includes('rechnung') ? 'invoice' : 'delivery_note';
+                    
+                    // Überprüfung der Firebase-Verbindung
+                    if (!firebase.storage) {
+                        throw new Error('Firebase Storage ist nicht verfügbar');
+                    }
+                    
+                    const upload = await DataService.uploadFile(
+                        file,
+                        timeEntry.projectId,
+                        timeEntry.employeeId,
+                        documentType,
+                        notes,
+                        imageComment
+                    );
+                    
+                    console.log(`✅ Dokument ${i + 1} erfolgreich hochgeladen:`, upload.id);
+                    
+                    // Firebase-kompatibles Objekt erstellen - sichere Behandlung
+                    const safeUpload = {
+                        ...upload,
+                        uploadTime: upload.uploadTime || new Date()
+                    };
+                    
+                    // Firestore Timestamp korrekt konvertieren falls vorhanden
+                    if (upload.uploadTime && typeof upload.uploadTime.toDate === 'function') {
+                        safeUpload.uploadTime = upload.uploadTime.toDate();
+                    } else if (upload.uploadTime && upload.uploadTime.seconds) {
+                        // Falls es ein Firestore Timestamp-Objekt ist
+                        safeUpload.uploadTime = new Date(upload.uploadTime.seconds * 1000);
+                    }
+                    
+                    documentPhotoObjects.push(safeUpload);
+                    console.log(`📄 Dokument ${i + 1} zu Objektliste hinzugefügt`);
+                    
+                } catch (uploadError) {
+                    console.error(`❌ Fehler beim Hochladen des Dokuments ${i + 1}:`, uploadError);
+                    // Weitermachen mit dem nächsten Dokument - aber Upload als fehlgeschlagen markieren
+                }
+            }
+        }
+        
+        console.log(`📊 Upload-Zusammenfassung:`);
+        console.log(`📷 ${sitePhotoObjects.length} Baustellenfotos erfolgreich hochgeladen`);
+        console.log(`📄 ${documentPhotoObjects.length} Dokumente erfolgreich hochgeladen`);
+        
+        // Live-Dokumentation zum Zeiteintrag hinzufügen
+        const documentationData = {
+            notes: notes,
+            images: sitePhotoObjects, // Umbenennung für bessere Klarheit
+            documents: documentPhotoObjects,
+            photoCount: sitePhotoObjects.length,
+            documentCount: documentPhotoObjects.length,
+            addedBy: user.id,
+            addedByName: user.firstName + ' ' + user.lastName
+        };
+        
+        console.log('💾 Speichere Live-Dokumentation in Firestore...');
+        
+        try {
+            await DataService.addLiveDocumentationToTimeEntry(timeEntry.id, documentationData);
+            console.log('✅ Live-Dokumentation erfolgreich in Firestore gespeichert');
+        } catch (firestoreError) {
+            console.error('❌ Fehler beim Speichern in Firestore:', firestoreError);
+            throw new Error(`Fehler beim Speichern der Dokumentation: ${firestoreError.message}`);
+        }
+        
+        // Erfolgsmeldung anzeigen
+        let message = '✅ Live-Dokumentation erfolgreich gespeichert!\n\n';
+        message += `📝 Notizen: "${notes}"\n`;
+        message += `📷 Baustellenfotos: ${sitePhotoObjects.length} hochgeladen\n`;
+        message += `📄 Dokumente: ${documentPhotoObjects.length} hochgeladen\n`;
+        message += `🕒 Gespeichert um: ${new Date().toLocaleTimeString('de-DE')}`;
+        
+        alert(message);
+        
+        // Modal schließen
+        const modal = document.getElementById('live-documentation-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        console.log('Live-Dokumentation erfolgreich gespeichert:', documentationData);
+        
+    } catch (error) {
+        console.error('Fehler beim Speichern der Live-Dokumentation:', error);
+        alert('Fehler beim Speichern: ' + error.message);
+    } finally {
+        // Flag zurücksetzen
+        isSubmittingLiveDocumentation = false;
     }
 }
 

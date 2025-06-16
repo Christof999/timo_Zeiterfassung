@@ -20,15 +20,60 @@ if (!firebase.apps || !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
-// Referenzen zu Firebase-Diensten
+// Firestore für lokale Entwicklung optimieren
 const db = firebase.firestore();
-const storage = firebase.storage();
+
+// Verbindungseinstellungen für bessere Stabilität
+db.settings({
+  merge: true,
+  // Experimentelle Einstellungen für lokale Entwicklung
+  experimentalForceLongPolling: true, // Bessere Verbindung bei lokaler Entwicklung
+  ignoreUndefinedProperties: true
+});
+
+// Storage mit Fehlerbehandlung
+let storage = null;
+try {
+  storage = firebase.storage();
+  console.log('✅ Firebase Storage initialisiert');
+} catch (error) {
+  console.error('❌ Firebase Storage Fehler:', error);
+}
 // Auth-Referenz nur erstellen, wenn das Auth-SDK geladen wurde
 const auth = typeof firebase.auth === 'function' ? firebase.auth() : null;
 
 // Merge-Option für Dokument-Aktualisierungen verwenden
 db.settings({
   merge: true
+});
+
+// Offline-Persistenz für bessere lokale Entwicklung
+try {
+  db.enablePersistence({ 
+    synchronizeTabs: true,
+    experimentalTabSynchronization: true
+  })
+    .then(() => {
+      console.log('🔄 Firebase Offline-Persistenz aktiviert');
+    })
+    .catch((err) => {
+      if (err.code === 'failed-precondition') {
+        console.warn('⚠️ Offline-Persistenz: Multiple Tabs offen, verwende Memory-Modus');
+      } else if (err.code === 'unimplemented') {
+        console.warn('⚠️ Browser unterstützt keine Offline-Persistenz');
+      } else {
+        console.warn('⚠️ Offline-Persistenz Fehler:', err.message);
+      }
+    });
+} catch (error) {
+  console.warn('⚠️ Persistenz-Setup Fehler:', error.message);
+}
+
+// Verbindungsstatus überwachen
+db.enableNetwork().then(() => {
+  console.log('🌐 Firestore-Netzwerk aktiviert');
+}).catch((error) => {
+  console.error('❌ Firestore-Netzwerk Fehler:', error);
 });
 
 // Zur Fehlersuche, kann in der Produktion entfernt werden

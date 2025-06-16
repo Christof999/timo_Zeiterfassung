@@ -551,23 +551,68 @@ const DataService = {
             
             console.log(`Insgesamt ${uploadIds.length} Bild-IDs für ${type} gefunden`);
             
+            // Live-Dokumentation prüfen und hinzufügen
+            let liveFiles = [];
+            if (timeEntry.liveDocumentation && Array.isArray(timeEntry.liveDocumentation)) {
+                console.log(`${timeEntry.liveDocumentation.length} Live-Dokumentationen gefunden`);
+                
+                timeEntry.liveDocumentation.forEach(liveDoc => {
+                    // Bilder aus Live-Dokumentation für construction_site
+                    if (type === 'construction_site' && liveDoc.images && Array.isArray(liveDoc.images)) {
+                        liveDoc.images.forEach(img => {
+                            if (img.url) {
+                                liveFiles.push({
+                                    url: img.url,
+                                    comment: `Live-Dokumentation: ${liveDoc.notes || 'Keine Notiz'}`,
+                                    timestamp: liveDoc.timestamp,
+                                    isLiveDoc: true
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Dokumente aus Live-Dokumentation für delivery_note
+                    if (type === 'delivery_note' && liveDoc.documents && Array.isArray(liveDoc.documents)) {
+                        liveDoc.documents.forEach(doc => {
+                            if (doc.url) {
+                                liveFiles.push({
+                                    url: doc.url,
+                                    comment: `Live-Dokumentation: ${liveDoc.notes || 'Keine Notiz'}`,
+                                    timestamp: liveDoc.timestamp,
+                                    isLiveDoc: true
+                                });
+                            }
+                        });
+                    }
+                });
+                
+                console.log(`${liveFiles.length} Live-Dateien für ${type} gefunden`);
+            }
+            
             // Entferne Duplikate und ungültige Werte
             uploadIds = [...new Set(uploadIds)].filter(id => id && typeof id === 'string');
             
-            if (!uploadIds.length) {
-                console.log(`Keine gültigen Bild-IDs für ${type} gefunden`);
-                return [];
+            if (!uploadIds.length && !liveFiles.length) {
+                console.log(`Keine gültigen Bild-IDs oder Live-Dateien für ${type} gefunden`);
+                return liveFiles; // Auch leere Live-Dateien zurückgeben, falls vorhanden
             }
             
-            // Dateien mit den IDs abrufen
-            const filePromises = uploadIds.map(id => this.getFileUploadById(id));
-            const files = await Promise.all(filePromises);
+            // Normale Dateien mit den IDs abrufen
+            let normalFiles = [];
+            if (uploadIds.length > 0) {
+                const filePromises = uploadIds.map(id => this.getFileUploadById(id));
+                const files = await Promise.all(filePromises);
+                
+                // Ungültige Einträge herausfiltern
+                normalFiles = files.filter(file => file !== null);
+                console.log(`${normalFiles.length} normale gültige Dateien für ${type} gefunden`);
+            }
             
-            // Ungültige Einträge herausfiltern
-            const validFiles = files.filter(file => file !== null);
-            console.log(`${validFiles.length} gültige Dateien für ${type} gefunden`);
+            // Normale Dateien und Live-Dateien kombinieren
+            const allFiles = [...normalFiles, ...liveFiles];
+            console.log(`Gesamt ${allFiles.length} Dateien für ${type} gefunden (normal: ${normalFiles.length}, live: ${liveFiles.length})`);
             
-            return validFiles;
+            return allFiles;
         } catch (error) {
             console.error(`Fehler beim Abrufen der ${type}-Dateien:`, error);
             return [];
@@ -1124,6 +1169,17 @@ const DataService = {
                     throw new Error('Datei, Projekt-ID und Mitarbeiter-ID müssen angegeben werden');
                 }
                 
+                // Storage-Verfügbarkeit prüfen
+                if (!this.storage) {
+                    throw new Error('Firebase Storage ist nicht verfügbar');
+                }
+                
+                console.log(`🔄 Starte Upload: ${file.name} (${file.size} Bytes, Typ: ${type})`);
+                
+                // TEMP: Storage für lokale Entwicklung deaktivieren
+                console.log('🔧 Storage für lokale Entwicklung deaktiviert, verwende direkt Base64-Upload');
+                return await this.uploadFileAsBase64(file, projectId, employeeId, type, notes, comment);
+                
                 // Eindeutigen Dateinamen erstellen
                 const timestamp = new Date().getTime();
                 const fileName = `${employeeId}_${timestamp}_${file.name}`;
@@ -1131,6 +1187,23 @@ const DataService = {
                 // Speicherpfad auf Firebase Storage
                 const storagePath = `projects/${projectId}/${type}/${fileName}`;
                 const storageRef = this.storage.ref(storagePath);
+                
+                console.log(`📁 Upload-Pfad: ${storagePath}`);
+                
+                // Upload-Timeout-Handler (verkürzt für schnelleren Fallback)
+                const uploadTimeout = setTimeout(() => {
+                    console.error('⏰ Upload-Timeout erreicht (10s) - verwende Fallback');
+                    uploadTask.cancel();
+                    
+                    // Fallback-Upload starten
+                    console.log('🔄 Starte Fallback-Upload...');
+                    this.uploadFileAsBase64(file, projectId, employeeId, type, notes, comment)
+                        .then(result => resolve(result))
+                        .catch(fallbackError => {
+                            console.error('❌ Auch Fallback-Upload fehlgeschlagen:', fallbackError);
+                            reject(new Error('Upload fehlgeschlagen: Sowohl normaler Upload als auch Fallback-Upload sind fehlgeschlagen.'));
+                        });
+                }, 10000); // 10 Sekunden Timeout (verkürzt)
                 
                 // Datei hochladen
                 const uploadTask = storageRef.put(file);
@@ -1140,16 +1213,26 @@ const DataService = {
                     // Fortschritt
                     (snapshot) => {
                         const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        console.log('Upload ist ' + progress + '% fertig');
+                        console.log(`📊 Upload-Fortschritt: ${progress.toFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} Bytes)`);
+                        
+                        // Bei Fortschritt > 0% ist die Verbindung ok
+                        if (progress > 0) {
+                            clearTimeout(uploadTimeout);
+                        }
                     },
                     // Fehler
                     (error) => {
-                        console.error('Fehler beim Hochladen:', error);
-                        reject(error);
+                        clearTimeout(uploadTimeout);
+                        console.error('❌ Upload-Fehler:', error);
+                        console.error('Error Code:', error.code);
+                        console.error('Error Message:', error.message);
+                        reject(new Error(`Upload fehlgeschlagen: ${error.message}`));
                     },
                     // Erfolg
                     async () => {
+                        clearTimeout(uploadTimeout);
                         try {
+                            console.log('✅ Upload erfolgreich abgeschlossen');
                             // Download-URL abrufen
                             const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
                             
@@ -1190,6 +1273,177 @@ const DataService = {
                 console.error('Fehler beim Datei-Upload:', error);
                 reject(error);
             }
+        });
+    },
+
+    // Fallback-Upload-Methode für lokale Entwicklung (Base64)
+    uploadFileAsBase64: async function(file, projectId, employeeId, type, notes, comment) {
+        const self = this; // DataService-Referenz sichern
+        
+        console.log('📄 Starte Base64-Upload (Fallback für lokale Entwicklung)');
+        console.log(`📊 Original-Dateigröße: ${(file.size / 1024).toFixed(1)} KB`);
+        console.log('🔧 Self-Referenz verfügbar:', !!self);
+        console.log('🔧 FileUploadsCollection verfügbar:', !!self.fileUploadsCollection);
+        
+        try {
+            // Direkter Zugriff auf DataService
+            if (!DataService.fileUploadsCollection) {
+                throw new Error('FileUploadsCollection ist nicht verfügbar');
+            }
+            
+            // Bild komprimieren
+            const compressedFile = await self.compressImage(file, 0.7, 800);
+            console.log(`📉 Komprimierte Größe: ${(compressedFile.size / 1024).toFixed(1)} KB`);
+            
+            // Base64-Konvertierung
+            const base64DataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(compressedFile);
+            });
+            
+            const base64String = base64DataUrl.split(',')[1];
+            const mimeType = base64DataUrl.split(',')[0];
+            const base64Size = base64String.length;
+            
+            console.log(`📏 Base64-Größe: ${(base64Size / 1024).toFixed(1)} KB`);
+            console.log(`🔍 MIME-Type: ${mimeType}`);
+            
+            // Firestore 1MB Limit prüfen
+            if (base64Size > 800000) {
+                console.warn('⚠️ Base64 zu groß, verwende stärkere Kompression');
+                
+                // Super-Kompression
+                const superCompressed = await self.compressImage(file, 0.3, 600);
+                const superBase64DataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(superCompressed);
+                });
+                
+                const superBase64String = superBase64DataUrl.split(',')[1];
+                console.log(`🔧 Super-Kompression: ${(superBase64String.length / 1024).toFixed(1)} KB`);
+                
+                if (superBase64String.length > 800000) {
+                    throw new Error('Bild ist selbst nach maximaler Kompression zu groß für Upload');
+                }
+                
+                const superFileData = {
+                    id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    fileName: compressedFile.name || file.name,
+                    fileSize: superCompressed.size,
+                    originalSize: file.size,
+                    fileType: file.type,
+                    base64String: superBase64String,
+                    mimeType: mimeType,
+                    projectId: projectId,
+                    employeeId: employeeId,
+                    type: type,
+                    notes: notes || '',
+                    comment: comment || '',
+                    uploadTime: firebase.firestore.Timestamp.now(),
+                    isLocalUpload: true,
+                    compressionLevel: 'super',
+                    storagePath: `local://projects/${projectId}/${type}/${file.name}`,
+                    url: superBase64DataUrl
+                };
+                
+                console.log('💾 Speichere super-komprimierte Datei...');
+                const docRef = await DataService.fileUploadsCollection.add(superFileData);
+                superFileData.id = docRef.id;
+                console.log('✅ Super-komprimierter Upload erfolgreich:', superFileData.id);
+                return superFileData;
+            }
+            
+            // Normale Kompression
+            const fileData = {
+                id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                fileName: compressedFile.name || file.name,
+                fileSize: compressedFile.size,
+                originalSize: file.size,
+                fileType: file.type,
+                base64String: base64String,
+                mimeType: mimeType,
+                projectId: projectId,
+                employeeId: employeeId,
+                type: type,
+                notes: notes || '',
+                comment: comment || '',
+                uploadTime: firebase.firestore.Timestamp.now(),
+                isLocalUpload: true,
+                compressionLevel: 'normal',
+                storagePath: `local://projects/${projectId}/${type}/${file.name}`,
+                url: base64DataUrl
+            };
+            
+            console.log('💾 Speichere komprimierte Base64-Datei in Firestore...');
+            console.log(`📋 Datenstruktur: fileName=${fileData.fileName}, fileSize=${fileData.fileSize}, type=${fileData.type}`);
+            
+            const docRef = await DataService.fileUploadsCollection.add(fileData);
+            fileData.id = docRef.id;
+            
+            console.log('✅ Base64-Upload erfolgreich:', fileData.id);
+            return fileData;
+            
+        } catch (error) {
+            console.error('❌ Base64-Upload Fehler:', error);
+            console.error('❌ Fehler-Details:', error.message, error.code);
+            throw error;
+        }
+    },
+
+    // Bildkomprimierungs-Funktion
+    compressImage(file, quality = 0.7, maxWidth = 800) {
+        return new Promise((resolve, reject) => {
+            // Nur Bilder komprimieren
+            if (!file.type.startsWith('image/')) {
+                resolve(file);
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = function() {
+                // Größe berechnen unter Beibehaltung des Seitenverhältnisses
+                let { width, height } = img;
+                
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+                
+                // Canvas-Größe setzen
+                canvas.width = width;
+                canvas.height = height;
+                
+                // Bild auf Canvas zeichnen
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Als komprimierte Datei exportieren
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        // Blob in File-Objekt umwandeln
+                        const compressedFile = new File([blob], file.name, {
+                            type: file.type,
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    } else {
+                        reject(new Error('Bildkomprimierung fehlgeschlagen'));
+                    }
+                }, file.type, quality);
+            };
+            
+            img.onerror = function() {
+                reject(new Error('Bild konnte nicht geladen werden'));
+            };
+            
+            // Bild laden
+            img.src = URL.createObjectURL(file);
         });
     },
     
@@ -1782,6 +2036,47 @@ const DataService = {
             return [];
         }
     },
+
+    // Live-Dokumentation zu einem aktiven Zeiteintrag hinzufügen
+    async addLiveDocumentationToTimeEntry(timeEntryId, documentationData) {
+        if (!timeEntryId) {
+            throw new Error('Keine Zeiteintrag-ID angegeben');
+        }
+        
+        try {
+            console.log('Füge Live-Dokumentation zu Zeiteintrag hinzu:', timeEntryId, documentationData);
+            
+            // Aktuellen Zeiteintrag abrufen
+            const currentEntry = await this.getTimeEntryById(timeEntryId);
+            if (!currentEntry) {
+                throw new Error('Zeiteintrag nicht gefunden');
+            }
+            
+            // Vorhandene Live-Dokumentation laden oder neues Array erstellen
+            const existingLiveDocumentation = currentEntry.liveDocumentation || [];
+            
+            // Neue Dokumentation mit Zeitstempel hinzufügen
+            const newDocumentation = {
+                timestamp: firebase.firestore.Timestamp.now(),
+                ...documentationData
+            };
+            
+            // Dokumentation zu bestehender Liste hinzufügen
+            const updatedLiveDocumentation = [...existingLiveDocumentation, newDocumentation];
+            
+            // Zeiteintrag aktualisieren
+            await this.updateTimeEntry(timeEntryId, {
+                liveDocumentation: updatedLiveDocumentation,
+                hasLiveDocumentation: true
+            });
+            
+            console.log('Live-Dokumentation erfolgreich hinzugefügt');
+            return newDocumentation;
+        } catch (error) {
+            console.error('Fehler beim Hinzufügen der Live-Dokumentation:', error);
+            throw error;
+        }
+    }
 };
 
 // Firebase initialisieren, wenn das Dokument geladen ist

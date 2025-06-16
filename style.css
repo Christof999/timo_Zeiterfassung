@@ -140,6 +140,26 @@ input:focus, select:focus, textarea:focus {
     overflow: auto;
 }
 
+/* Mobile Optimierung für Live-Dokumentations-Modal */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 2% auto;
+        width: 95%;
+        max-height: 95vh;
+    }
+    
+    .modal-body {
+        padding: 15px;
+    }
+    
+    .file-label {
+        width: 100%;
+        text-align: center;
+        font-size: 16px;
+        padding: 12px;
+    }
+}
+
 .modal-header {
     padding: 15px 20px;
     background-color: var(--primary-color);
@@ -303,6 +323,21 @@ input:focus, select:focus, textarea:focus {
     transform: translateY(1px);
 }
 
+.info-btn {
+    background-color: #2196F3; /* Blau für Info-Button */
+    color: white;
+    border-bottom: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.info-btn:hover {
+    background-color: #1976D2; /* Dunkleres Blau */
+    transform: translateY(-2px);
+}
+
+.info-btn:active {
+    transform: translateY(1px);
+}
+
 .hidden {
     display: none;
 }
@@ -352,6 +387,35 @@ input:focus, select:focus, textarea:focus {
     text-align: center;
     margin-top: 20px;
     font-size: 0.9rem;
+}
+
+/* Button-Layout für Clock-Out-Buttons */
+.clock-out-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 15px;
+}
+
+.clock-out-buttons .btn {
+    flex: 1;
+    min-width: 180px;
+    font-size: 14px;
+    padding: 10px 16px;
+    text-align: center;
+}
+
+/* Responsive Layout für kleinere Bildschirme */
+@media (max-width: 768px) {
+    .clock-out-buttons {
+        flex-direction: column;
+    }
+    
+    .clock-out-buttons .btn {
+        width: 100%;
+        min-width: unset;
+    }
 }
 
 .admin-link a, .user-link a {

@@ -12,10 +12,6 @@
     <!-- PDF Export Bibliothek -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
-    <!-- Eruda für mobiles Debugging (optional) -->
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-    <script>eruda.init();</script>
-    
     <!-- Datenservice und Hilfsfunktionen -->
     <script src="firebase-config.js"></script>
     <script src="data.js"></script>
@@ -425,12 +421,17 @@
             const urlParams = new URLSearchParams(window.location.search);
             projectId = urlParams.get('id');
             
-            console.log('URL-Parameter:', window.location.search);
-            console.log('Alle URL-Parameter:', Object.fromEntries(urlParams));
-            console.log('Extrahierte Projekt-ID:', projectId);
+            console.log('🔍 URL-Parsing:');
+            console.log('   - Komplette URL:', window.location.href);
+            console.log('   - Search-String:', window.location.search);
+            console.log('   - Alle URL-Parameter:', Object.fromEntries(urlParams));
+            console.log('   - Extrahierte Projekt-ID:', projectId);
+            console.log('   - Projekt-ID Typ:', typeof projectId);
+            console.log('   - Projekt-ID Länge:', projectId ? projectId.length : 'null');
             
             if (!projectId) {
-                console.error('FEHLER: Keine Projekt-ID in der URL gefunden.');
+                console.error('❌ FEHLER: Keine Projekt-ID in der URL gefunden.');
+                console.log('💡 Erwartete URL-Format: project-simple.html?id=PROJEKT_ID');
                 showError('Keine Projekt-ID in der URL gefunden. Bitte wählen Sie ein Projekt von der Hauptseite aus.');
                 return;
             }
@@ -482,32 +483,48 @@
         // Projekt laden
         async function loadProject() {
             try {
-                console.log('=== PROJEKT LADEN GESTARTET ===');
-                console.log('Versuche Projekt zu laden mit ID:', projectId);
+                console.log('🚀 === PROJEKT LADEN GESTARTET ===');
+                console.log('🎯 Versuche Projekt zu laden mit ID:', projectId);
                 
                 // DataService-Verfügbarkeit prüfen
                 if (typeof DataService === 'undefined') {
                     throw new Error('DataService ist nicht verfügbar. Prüfen Sie, ob data.js geladen wurde.');
                 }
-                console.log('DataService ist verfügbar');
+                console.log('✅ DataService ist verfügbar');
+                
+                // DataService-Initialisierung prüfen
+                console.log('🔧 DataService.db verfügbar:', !!DataService.db);
+                console.log('🔧 DataService.projectsCollection verfügbar:', !!DataService.projectsCollection);
                 
                 // DataService initialisieren, falls noch nicht geschehen
                 if (!DataService.db) {
-                    console.log('Initialisiere DataService...');
+                    console.log('🔄 Initialisiere DataService...');
                     await DataService.init();
-                    console.log('DataService initialisiert');
+                    console.log('✅ DataService initialisiert');
                 } else {
-                    console.log('DataService bereits initialisiert');
+                    console.log('✅ DataService bereits initialisiert');
                 }
                 
+                // Verfügbare Methoden loggen
+                console.log('🛠️ Verfügbare DataService-Methoden:', 
+                    Object.getOwnPropertyNames(DataService)
+                        .filter(name => typeof DataService[name] === 'function')
+                        .sort()
+                );
+                
                 // Projekt aus der Datenbank laden über DataService
-                console.log('Lade Projektdokument über DataService...');
-                console.log('Verfügbare DataService-Methoden:', Object.getOwnPropertyNames(DataService).filter(name => typeof DataService[name] === 'function'));
+                console.log('📥 Lade Projektdokument über DataService...');
+                console.log('📋 Rufe DataService.getProjectById auf mit ID:', projectId);
                 
                 const project = await DataService.getProjectById(projectId);
+                console.log('📤 DataService.getProjectById Ergebnis:', project);
                 
                 if (!project) {
-                    console.error('Projekt nicht gefunden für ID:', projectId);
+                    console.error('❌ Projekt nicht gefunden für ID:', projectId);
+                    console.log('💡 Mögliche Ursachen:');
+                    console.log('   - Projekt-ID existiert nicht in der Datenbank');
+                    console.log('   - Firestore-Verbindungsprobleme');
+                    console.log('   - Unzureichende Berechtigung');
                     showError('Projekt nicht gefunden.');
                     return;
                 }

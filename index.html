@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Anti-Cache Headers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Lauffer Zeiterfassung</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -63,6 +67,7 @@
                         <button id="simple-clock-out-btn" class="btn secondary-btn">Einfach Ausstempeln</button>
                         <button id="pause-btn" class="btn secondary-btn">Pause stempeln</button>
                         <button id="resume-btn" class="btn secondary-btn hidden">Pause beenden</button>
+                        <button id="live-documentation-btn" class="btn info-btn">📝 Dokumentation hinzufügen</button>
                         <button id="extended-clock-out-btn" class="btn primary-btn">Mit Dokumentation Ausstempeln</button>
                     </div>
                 </div>
@@ -108,6 +113,53 @@
                                 <div class="form-group text-center">
                                     <button type="submit" id="submit-clock-out" class="btn primary-btn">Ausstempeln und Speichern</button>
                                     <button type="button" id="cancel-clock-out" class="btn secondary-btn">Abbrechen</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live-Dokumentations-Modal (während der Arbeitszeit) -->
+                <div id="live-documentation-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>📝 Dokumentation hinzufügen</h3>
+                            <button type="button" class="close-modal-btn">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="live-documentation-form">
+                                <div class="form-group">
+                                    <label for="live-notes">Beschreibung/Notizen:</label>
+                                    <textarea id="live-notes" rows="3" placeholder="Beschreiben Sie was gerade gemacht wird..."></textarea>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Baustellenfotos:</label>
+                                    <div class="file-upload-container">
+                                        <input type="file" id="live-site-photos" multiple accept="image/*" class="file-input">
+                                        <label for="live-site-photos" class="file-label">📷 Fotos aufnehmen</label>
+                                        <div id="live-site-photos-preview" class="image-preview"></div>
+                                        <div id="live-site-photos-comments" class="image-comments-container">
+                                            <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Dokumente/Lieferscheine:</label>
+                                    <div class="file-upload-container">
+                                        <input type="file" id="live-document-photos" multiple accept="image/*" class="file-input">
+                                        <label for="live-document-photos" class="file-label">📄 Dokumente fotografieren</label>
+                                        <div id="live-document-photos-preview" class="image-preview"></div>
+                                        <div id="live-document-photos-comments" class="image-comments-container">
+                                            <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group text-center">
+                                    <button type="submit" id="submit-live-documentation" class="btn primary-btn">💾 Dokumentation speichern</button>
+                                    <button type="button" id="cancel-live-documentation" class="btn secondary-btn">Abbrechen</button>
                                 </div>
                             </form>
                         </div>
