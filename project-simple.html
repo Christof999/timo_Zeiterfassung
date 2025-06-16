@@ -329,37 +329,17 @@
     </div>
     
     <script>
-        // Initialisierung der Firebase-Konfiguration
-        console.log('=== FIREBASE INITIALISIERUNG ===');
-        const firebaseConfig = {
-            apiKey: "REDACTED_FIREBASE_WEB_API_KEY_ROTATE",
-            authDomain: "lauffer-zeiterfassung.firebaseapp.com",
-            projectId: "lauffer-zeiterfassung",
-            storageBucket: "lauffer-zeiterfassung.appspot.com",
-            messagingSenderId: "705180999548",
-            appId: "1:705180999548:web:e2f9c090efe67fa3af9ab6"
-        };
-        
-        // Firebase initialisieren
-        if (!firebase.apps.length) {
-            console.log('Initialisiere Firebase App...');
-            firebase.initializeApp(firebaseConfig);
-            console.log('Firebase App initialisiert');
-        } else {
-            console.log('Firebase App bereits initialisiert');
-        }
-        
-        console.log('Firebase Apps:', firebase.apps.map(app => app.name));
-        console.log('Firestore verfügbar:', typeof firebase.firestore !== 'undefined');
-        console.log('Storage verfügbar:', typeof firebase.storage !== 'undefined');
-        
         // DEBUG: Sofortige Ausgabe zur Verfolgung
         console.log('=== PROJECT-SIMPLE.HTML SCRIPT WIRD AUSGEFÜHRT ===');
         console.log('Zeitpunkt:', new Date().toISOString());
         
-        // Globale Variablen
-        const db = firebase.firestore();
-        const storage = firebase.storage();
+        // Firebase sollte bereits durch firebase-config.js initialisiert sein
+        console.log('🔧 Firebase bereits initialisiert:', !!firebase);
+        console.log('🔧 Firebase Apps:', firebase.apps ? firebase.apps.map(app => app.name) : 'nicht verfügbar');
+        console.log('🔧 Firestore verfügbar:', typeof firebase.firestore !== 'undefined');
+        console.log('🔧 Storage verfügbar:', typeof firebase.storage !== 'undefined');
+        
+        // Globale Variablen  
         let projectId = null;
         let allProjectFiles = null; // Cache für alle Projektdateien
         
@@ -434,6 +414,47 @@
                 console.log('💡 Erwartete URL-Format: project-simple.html?id=PROJEKT_ID');
                 showError('Keine Projekt-ID in der URL gefunden. Bitte wählen Sie ein Projekt von der Hauptseite aus.');
                 return;
+            }
+            
+            // TEMP: Firestore-Verbindung testen bevor wir das Projekt laden
+            console.log('🧪 Teste Firestore-Verbindung...');
+            testFirestoreConnection().then(() => {
+                console.log('✅ Firestore-Test abgeschlossen, starte Projekt-Laden...');
+            }).catch(error => {
+                console.error('❌ Firestore-Test fehlgeschlagen:', error);
+                showError('Firestore-Verbindung fehlgeschlagen: ' + error.message);
+            });
+        }
+        
+        async function testFirestoreConnection() {
+            try {
+                console.log('🧪 Teste einfache Firestore-Abfrage...');
+                
+                // Timeout für den Test hinzufügen
+                const testPromise = DataService.projectsCollection.limit(1).get();
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Firestore-Test Timeout nach 5s')), 5000)
+                );
+                
+                const testQuery = await Promise.race([testPromise, timeoutPromise]);
+                console.log('✅ Firestore-Test erfolgreich, Anzahl Docs:', testQuery.size);
+                
+                // Nach erfolgreichem Test das Projekt laden
+                console.log('🚀 Starte Projekt-Laden nach erfolgreichem Firestore-Test...');
+                loadProject();
+                
+            } catch (testError) {
+                console.error('❌ Firestore-Test fehlgeschlagen:', testError);
+                console.error('❌ Fehler-Details:', testError.message);
+                
+                if (testError.message.includes('Timeout')) {
+                    console.error('⏰ Firestore hängt - verwende alternative Methode');
+                    // Versuche trotzdem das Projekt zu laden
+                    console.log('🔄 Versuche Projekt-Laden trotz Firestore-Test-Timeout...');
+                    loadProject();
+                } else {
+                    throw testError;
+                }
             }
             
             // Back-Link aktualisieren
@@ -516,8 +537,17 @@
                 console.log('📥 Lade Projektdokument über DataService...');
                 console.log('📋 Rufe DataService.getProjectById auf mit ID:', projectId);
                 
-                const project = await DataService.getProjectById(projectId);
+                // Timeout für den getProjectById Aufruf
+                const projectPromise = DataService.getProjectById(projectId);
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Timeout: getProjectById dauert zu lange (10s)')), 10000)
+                );
+                
+                console.log('⏱️ Starte getProjectById mit 10s Timeout...');
+                const project = await Promise.race([projectPromise, timeoutPromise]);
                 console.log('📤 DataService.getProjectById Ergebnis:', project);
+                console.log('📤 Projekt-Typ:', typeof project);
+                console.log('📤 Projekt-Keys:', project ? Object.keys(project) : 'null');
                 
                 if (!project) {
                     console.error('❌ Projekt nicht gefunden für ID:', projectId);
@@ -578,9 +608,22 @@
                 
             } catch (error) {
                 console.error('=== FEHLER BEIM LADEN DES PROJEKTS ===');
-                console.error('Fehler-Details:', error);
-                console.error('Error Stack:', error.stack);
-                showError('Fehler beim Laden des Projekts: ' + (error.message || 'Unbekannter Fehler'));
+                console.error('Fehler-Typ:', error.constructor.name);
+                console.error('Fehler-Message:', error.message);
+                console.error('Fehler-Stack:', error.stack);
+                console.error('Fehler-Objekt:', error);
+                
+                // Spezielle Behandlung für verschiedene Fehlertypen
+                if (error.message && error.message.includes('Timeout')) {
+                    console.error('🕐 TIMEOUT-FEHLER: DataService.getProjectById dauert zu lange');
+                    showError('Timeout: Das Laden des Projekts dauert zu lange. Bitte prüfen Sie Ihre Internetverbindung.');
+                } else if (error.message && error.message.includes('permission')) {
+                    console.error('🔒 BERECHTIGUNGS-FEHLER: Keine Berechtigung für Firestore');
+                    showError('Berechtigungsfehler: Keine Berechtigung zum Laden des Projekts.');
+                } else {
+                    console.error('❓ UNBEKANNTER FEHLER beim Laden des Projekts');
+                    showError('Fehler beim Laden des Projekts: ' + (error.message || 'Unbekannter Fehler'));
+                }
             }
         }
         

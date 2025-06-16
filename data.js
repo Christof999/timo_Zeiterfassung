@@ -247,15 +247,33 @@ const DataService = {
         }
         
         try {
+            console.log('🔍 getProjectById: Starte Firestore-Abfrage für ID:', projectId);
+            console.log('🔍 getProjectById: projectsCollection verfügbar:', !!this.projectsCollection);
+            
+            // Firestore-Verbindung testen
+            console.log('🔍 getProjectById: Teste Firestore-Verbindung...');
+            const startTime = Date.now();
+            
             const doc = await this.projectsCollection.doc(projectId).get();
+            const endTime = Date.now();
+            
+            console.log(`🔍 getProjectById: Firestore-Abfrage abgeschlossen in ${endTime - startTime}ms`);
+            console.log('🔍 getProjectById: doc.exists:', doc.exists);
+            
             if (!doc.exists) {
-                console.log(`Projekt mit ID ${projectId} nicht gefunden`);
+                console.log(`❌ Projekt mit ID ${projectId} nicht gefunden`);
                 return null;
             }
             
-            return { id: doc.id, ...doc.data() };
+            const projectData = doc.data();
+            console.log('✅ getProjectById: Projekt-Daten erhalten:', projectData);
+            
+            return { id: doc.id, ...projectData };
         } catch (error) {
-            console.error(`Fehler beim Abrufen des Projekts mit ID ${projectId}:`, error);
+            console.error(`❌ Fehler beim Abrufen des Projekts mit ID ${projectId}:`, error);
+            console.error('❌ Fehler-Code:', error.code);
+            console.error('❌ Fehler-Message:', error.message);
+            console.error('❌ Fehler-Stack:', error.stack);
             return null;
         }
     },

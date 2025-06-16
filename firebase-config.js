@@ -24,11 +24,11 @@ if (!firebase.apps || !firebase.apps.length) {
 const db = firebase.firestore();
 
 // Verbindungseinstellungen für bessere Stabilität
+// TEMP: Vereinfachte Einstellungen für lokale Entwicklung
 db.settings({
   merge: true,
-  // Experimentelle Einstellungen für lokale Entwicklung
-  experimentalForceLongPolling: true, // Bessere Verbindung bei lokaler Entwicklung
-  ignoreUndefinedProperties: true
+  ignoreUndefinedProperties: true,
+  // experimentalForceLongPolling deaktiviert für bessere Performance
 });
 
 // Storage mit Fehlerbehandlung
@@ -43,10 +43,12 @@ try {
 const auth = typeof firebase.auth === 'function' ? firebase.auth() : null;
 
 // Merge-Option für Dokument-Aktualisierungen verwenden
-db.settings({
-  merge: true
-});
+// (bereits oben gesetzt)
 
+// TEMP: Offline-Persistenz für lokale Entwicklung deaktivieren
+console.log('⚠️ Offline-Persistenz für lokale Entwicklung deaktiviert');
+
+/*
 // Offline-Persistenz für bessere lokale Entwicklung
 try {
   db.enablePersistence({ 
@@ -68,6 +70,7 @@ try {
 } catch (error) {
   console.warn('⚠️ Persistenz-Setup Fehler:', error.message);
 }
+*/
 
 // Verbindungsstatus überwachen
 db.enableNetwork().then(() => {
