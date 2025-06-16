@@ -620,7 +620,14 @@ async function handleLiveDocumentationSave(event) {
             const liveSitePhotoComments = document.querySelectorAll('#live-site-photos-comments .image-comment-item');
             
             console.log(`🔄 Starte Upload von ${liveSitePhotosInput.files.length} Baustellenfotos...`);
-            console.log(`🔍 Verfügbare Dateien:`, Array.from(liveSitePhotosInput.files).map(f => f.name));
+            console.log(`🔍 Verfügbare Dateien:`, Array.from(liveSitePhotosInput.files).map((f, idx) => `${idx}: ${f.name}`));
+            console.log(`🔍 Dateien-Details:`, Array.from(liveSitePhotosInput.files).map((f, idx) => ({ 
+                index: idx, 
+                name: f.name, 
+                size: f.size, 
+                type: f.type, 
+                lastModified: f.lastModified 
+            })));
             
             for (let i = 0; i < liveSitePhotosInput.files.length; i++) {
                 try {

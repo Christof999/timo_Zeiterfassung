@@ -1199,6 +1199,7 @@ const DataService = {
         
         console.log('📄 Starte Base64-Upload (Fallback für lokale Entwicklung)');
         console.log(`📊 Original-Dateigröße: ${(file.size / 1024).toFixed(1)} KB`);
+        console.log(`🆔 Upload-ID wird generiert für: ${file.name}`);
         console.log('🔧 Self-Referenz verfügbar:', !!self);
         console.log('🔧 FileUploadsCollection verfügbar:', !!self.fileUploadsCollection);
         
@@ -1249,9 +1250,10 @@ const DataService = {
                 }
             }
             
-            // Datei-Objekt erstellen
+            // Datei-Objekt erstellen mit eindeutiger ID
+            const uniqueId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
             const fileData = {
-                id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: uniqueId,
                 fileName: compressedFile.name || file.name,
                 fileSize: compressedFile.size,
                 originalSize: file.size,
