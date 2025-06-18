@@ -1,0 +1,24 @@
+# PWA Support - MIME Types
+AddType application/manifest+json .webmanifest .json
+
+# Service Worker Cache Headers
+<Files "sw.js">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</Files>
+
+# Manifest Cache Headers
+<Files "manifest.json">
+    Header set Cache-Control "public, max-age=86400"
+</Files>
+
+# Security Headers für PWA
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options DENY
+Header always set X-XSS-Protection "1; mode=block"
+
+# HTTPS Redirect (wichtig für PWA)
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

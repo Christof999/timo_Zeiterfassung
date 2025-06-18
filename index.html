@@ -2,19 +2,52 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <!-- Anti-Cache Headers -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="Lauffer Zeiterfassung">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Zeiterfassung">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-TileColor" content="#4A7C59">
+    <meta name="theme-color" content="#4A7C59">
+    
+    <!-- Icons -->
+    <link rel="apple-touch-icon" href="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png">
+    <link rel="shortcut icon" href="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
     <title>Lauffer Zeiterfassung</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
+    <!-- Splash Screen -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <img src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" alt="Lauffer Logo" class="splash-logo">
+            <h1 class="splash-title">Lauffer Zeiterfassung</h1>
+            <p class="splash-subtitle">Gartenbau • Erdbau • Natursteinhandel</p>
+            <div class="splash-loader">
+                <div class="loader-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Content -->
     <div class="container">
         <header>
             <div class="logo">
+                <img src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" alt="Lauffer Logo" class="logo-image">
                 <h1>Lauffer Zeiterfassung</h1>
                 <p>Gartenbau • Erdbau • Natursteinhandel</p>
             </div>
@@ -191,5 +224,20 @@
     <script src="config.js"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
+    <script src="pwa-installer.js"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker erfolgreich registriert: ', registration.scope);
+                    }, function(err) {
+                        console.log('ServiceWorker Registrierung fehlgeschlagen: ', err);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>

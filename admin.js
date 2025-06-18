@@ -2,6 +2,23 @@
  * JavaScript für den Admin-Bereich der Lauffer Zeiterfassung App
  */
 
+// Splash Screen Control
+function initSplashScreen() {
+    const splashScreen = document.getElementById('splash-screen');
+    
+    if (splashScreen) {
+        // Mindestzeit für Splash Screen anzeigen (2.5 Sekunden)
+        setTimeout(() => {
+            splashScreen.classList.add('fade-out');
+            
+            // Splash Screen nach Fade-Out-Animation entfernen
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+            }, 500);
+        }, 2500);
+    }
+}
+
 // DOM-Elemente
 const adminLoginSection = document.getElementById('admin-login-section');
 const adminDashboard = document.getElementById('admin-dashboard');
@@ -175,7 +192,6 @@ function initAdminApp() {
     } catch (error) {
         console.error('Fehler beim Laden des gespeicherten Admins:', error);
     }
-}
     
     // Tab-Wechsel
     if (tabButtons) {
@@ -2303,4 +2319,7 @@ async function loadProjects() {
 }
 
 // App initialisieren
-document.addEventListener('DOMContentLoaded', initAdminApp);
+document.addEventListener('DOMContentLoaded', () => {
+    initAdminApp();
+    initSplashScreen();
+});

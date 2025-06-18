@@ -2,6 +2,23 @@
  * Hauptanwendungsdatei für die Mitarbeiter-Ansicht der Lauffer Zeiterfassung App
  */
 
+// Splash Screen Control
+function initSplashScreen() {
+    const splashScreen = document.getElementById('splash-screen');
+    
+    if (splashScreen) {
+        // Mindestzeit für Splash Screen anzeigen (2.5 Sekunden)
+        setTimeout(() => {
+            splashScreen.classList.add('fade-out');
+            
+            // Splash Screen nach Fade-Out-Animation entfernen
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+            }, 500);
+        }, 2500);
+    }
+}
+
 // DOM-Elemente
 const loginSection = document.getElementById('login-section');
 const timeTrackingSection = document.getElementById('time-tracking-section');
@@ -1531,4 +1548,7 @@ function handleResumeFromPause() {
 }
 
 // App starten
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+    initSplashScreen(); // Splash Screen initialisieren
+});

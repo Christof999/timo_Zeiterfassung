@@ -1,0 +1,27 @@
+{
+  "name": "Lauffer Zeiterfassung",
+  "short_name": "Zeiterfassung",
+  "description": "Zeiterfassungs-App für Lauffer Gartenbau • Erdbau • Natursteinhandel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#4A7C59",
+  "theme_color": "#4A7C59",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "de",
+  "dir": "ltr"
+}

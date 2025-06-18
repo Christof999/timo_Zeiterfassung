@@ -25,6 +25,18 @@ function getDashboardRefreshInterval() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Admin Minimal JS geladen');
     
+    // Splash Screen ausblenden nach dem Laden
+    setTimeout(() => {
+        const splashScreen = document.getElementById('splash-screen');
+        if (splashScreen) {
+            splashScreen.style.opacity = '0';
+            splashScreen.style.transition = 'opacity 0.5s ease-out';
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+            }, 500);
+        }
+    }, 2000); // 2 Sekunden warten (Zeit für Lade-Animation)
+    
     // DOM-Elemente
     const adminLoginForm = document.getElementById('admin-login-form');
     const adminLoginSection = document.getElementById('admin-login-section');
