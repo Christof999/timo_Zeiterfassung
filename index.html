@@ -122,8 +122,14 @@
                                 <div class="form-group">
                                     <label>Fotos von der Baustelle:</label>
                                     <div class="file-upload-container">
-                                        <input type="file" id="site-photos" multiple accept="image/*" class="file-input">
-                                        <label for="site-photos" class="file-label">Baustellen-Fotos auswählen</label>
+                                        <!-- Kamera-Button -->
+                                        <input type="file" id="site-photos-camera" multiple accept="image/*" capture="environment" class="file-input">
+                                        <label for="site-photos-camera" class="file-label">📷 Kamera öffnen</label>
+                                        
+                                        <!-- Galerie-Button -->
+                                        <input type="file" id="site-photos-gallery" multiple accept="image/*" class="file-input">
+                                        <label for="site-photos-gallery" class="file-label">🖼️ Galerie öffnen</label>
+                                        
                                         <div id="site-photos-preview" class="image-preview"></div>
                                         <div id="site-photos-comments" class="image-comments-container">
                                             <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
@@ -134,8 +140,14 @@
                                 <div class="form-group">
                                     <label>Lieferscheine oder Rechnungen:</label>
                                     <div class="file-upload-container">
-                                        <input type="file" id="document-photos" multiple accept="image/*" class="file-input">
-                                        <label for="document-photos" class="file-label">Dokumente fotografieren</label>
+                                        <!-- Kamera-Button -->
+                                        <input type="file" id="document-photos-camera" multiple accept="image/*" capture="environment" class="file-input">
+                                        <label for="document-photos-camera" class="file-label">📷 Dokumente fotografieren</label>
+                                        
+                                        <!-- Galerie-Button -->
+                                        <input type="file" id="document-photos-gallery" multiple accept="image/*" class="file-input">
+                                        <label for="document-photos-gallery" class="file-label">🖼️ Aus Galerie wählen</label>
+                                        
                                         <div id="document-photos-preview" class="image-preview"></div>
                                         <div id="document-photos-comments" class="image-comments-container">
                                             <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
@@ -169,8 +181,14 @@
                                 <div class="form-group">
                                     <label>Baustellenfotos:</label>
                                     <div class="file-upload-container">
-                                        <input type="file" id="live-site-photos" multiple accept="image/*" class="file-input">
-                                        <label for="live-site-photos" class="file-label">📷 Fotos aufnehmen</label>
+                                        <!-- Kamera-Button -->
+                                        <input type="file" id="live-site-photos-camera" multiple accept="image/*" capture="environment" class="file-input">
+                                        <label for="live-site-photos-camera" class="file-label">📷 Kamera öffnen</label>
+                                        
+                                        <!-- Galerie-Button -->
+                                        <input type="file" id="live-site-photos-gallery" multiple accept="image/*" class="file-input">
+                                        <label for="live-site-photos-gallery" class="file-label">🖼️ Galerie öffnen</label>
+                                        
                                         <div id="live-site-photos-preview" class="image-preview"></div>
                                         <div id="live-site-photos-comments" class="image-comments-container">
                                             <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->
@@ -181,8 +199,14 @@
                                 <div class="form-group">
                                     <label>Dokumente/Lieferscheine:</label>
                                     <div class="file-upload-container">
-                                        <input type="file" id="live-document-photos" multiple accept="image/*" class="file-input">
-                                        <label for="live-document-photos" class="file-label">📄 Dokumente fotografieren</label>
+                                        <!-- Kamera-Button -->
+                                        <input type="file" id="live-document-photos-camera" multiple accept="image/*" capture="environment" class="file-input">
+                                        <label for="live-document-photos-camera" class="file-label">� Dokumente fotografieren</label>
+                                        
+                                        <!-- Galerie-Button -->
+                                        <input type="file" id="live-document-photos-gallery" multiple accept="image/*" class="file-input">
+                                        <label for="live-document-photos-gallery" class="file-label">🖼️ Aus Galerie wählen</label>
+                                        
                                         <div id="live-document-photos-preview" class="image-preview"></div>
                                         <div id="live-document-photos-comments" class="image-comments-container">
                                             <!-- Bildkommentare werden hier per JavaScript hinzugefügt -->

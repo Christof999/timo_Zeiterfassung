@@ -188,9 +188,9 @@ async function initApp() {
         });
     });
     
-    // Datei-Input-Vorschau-Handler
-    setupFilePreview('site-photos', 'site-photos-preview');
-    setupFilePreview('document-photos', 'document-photos-preview');
+    // Datei-Input-Vorschau-Handler - für doppelte Kamera/Galerie-Inputs
+    setupDualFilePreview('site-photos', 'site-photos-preview');
+    setupDualFilePreview('document-photos', 'document-photos-preview');
     
     // Aktuelle Uhrzeit anzeigen
     updateCurrentTime();
@@ -497,16 +497,24 @@ function showExtendedClockOutModal() {
             notesTextarea.value = '';
         }
         
-        // Datei-Vorschau zurücksetzen
-        const sitePhotosInput = document.getElementById('site-photos');
-        const documentPhotosInput = document.getElementById('document-photos');
+        // Datei-Vorschau zurücksetzen - für doppelte Kamera/Galerie-Inputs
+        const sitePhotosCameraInput = document.getElementById('site-photos-camera');
+        const sitePhotosGalleryInput = document.getElementById('site-photos-gallery');
+        const documentPhotosCameraInput = document.getElementById('document-photos-camera');
+        const documentPhotosGalleryInput = document.getElementById('document-photos-gallery');
         
-        if (sitePhotosInput && sitePhotosInput.clearPreviews) {
-            sitePhotosInput.clearPreviews();
+        if (sitePhotosCameraInput && sitePhotosCameraInput.clearPreviews) {
+            sitePhotosCameraInput.clearPreviews();
+        }
+        if (sitePhotosGalleryInput && sitePhotosGalleryInput.clearPreviews) {
+            sitePhotosGalleryInput.clearPreviews();
         }
         
-        if (documentPhotosInput && documentPhotosInput.clearPreviews) {
-            documentPhotosInput.clearPreviews();
+        if (documentPhotosCameraInput && documentPhotosCameraInput.clearPreviews) {
+            documentPhotosCameraInput.clearPreviews();
+        }
+        if (documentPhotosGalleryInput && documentPhotosGalleryInput.clearPreviews) {
+            documentPhotosGalleryInput.clearPreviews();
         }
         
         // Bildkommentar-Container zurücksetzen
@@ -518,9 +526,9 @@ function showExtendedClockOutModal() {
             documentPhotosComments.innerHTML = '';
         }
         
-        // Datei-Vorschau-Funktion für die Formular-Inputs einrichten
-        setupFilePreview('site-photos', 'site-photos-preview');
-        setupFilePreview('document-photos', 'document-photos-preview');
+        // Datei-Vorschau-Funktion für die Formular-Inputs einrichten - für doppelte Kamera/Galerie-Inputs
+        setupDualFilePreview('site-photos', 'site-photos-preview');
+        setupDualFilePreview('document-photos', 'document-photos-preview');
     }
 }
 
@@ -546,16 +554,24 @@ function showLiveDocumentationModal() {
             notesTextarea.value = '';
         }
         
-        // Datei-Vorschau zurücksetzen
-        const liveSitePhotosInput = document.getElementById('live-site-photos');
-        const liveDocumentPhotosInput = document.getElementById('live-document-photos');
+        // Datei-Vorschau zurücksetzen - für doppelte Kamera/Galerie-Inputs
+        const liveSitePhotosCameraInput = document.getElementById('live-site-photos-camera');
+        const liveSitePhotosGalleryInput = document.getElementById('live-site-photos-gallery');
+        const liveDocumentPhotosCameraInput = document.getElementById('live-document-photos-camera');
+        const liveDocumentPhotosGalleryInput = document.getElementById('live-document-photos-gallery');
         
-        if (liveSitePhotosInput && liveSitePhotosInput.clearPreviews) {
-            liveSitePhotosInput.clearPreviews();
+        if (liveSitePhotosCameraInput && liveSitePhotosCameraInput.clearPreviews) {
+            liveSitePhotosCameraInput.clearPreviews();
+        }
+        if (liveSitePhotosGalleryInput && liveSitePhotosGalleryInput.clearPreviews) {
+            liveSitePhotosGalleryInput.clearPreviews();
         }
         
-        if (liveDocumentPhotosInput && liveDocumentPhotosInput.clearPreviews) {
-            liveDocumentPhotosInput.clearPreviews();
+        if (liveDocumentPhotosCameraInput && liveDocumentPhotosCameraInput.clearPreviews) {
+            liveDocumentPhotosCameraInput.clearPreviews();
+        }
+        if (liveDocumentPhotosGalleryInput && liveDocumentPhotosGalleryInput.clearPreviews) {
+            liveDocumentPhotosGalleryInput.clearPreviews();
         }
         
         // Bildkommentar-Container zurücksetzen
@@ -570,9 +586,9 @@ function showLiveDocumentationModal() {
             liveDocumentPhotosComments.innerHTML = '';
         }
         
-        // Datei-Vorschau-Funktion für die neuen Inputs einrichten
-        setupFilePreview('live-site-photos', 'live-site-photos-preview');
-        setupFilePreview('live-document-photos', 'live-document-photos-preview');
+        // Datei-Vorschau-Funktion für die neuen Inputs einrichten - für doppelte Kamera/Galerie-Inputs
+        setupDualFilePreview('live-site-photos', 'live-site-photos-preview');
+        setupDualFilePreview('live-document-photos', 'live-document-photos-preview');
     } else {
         console.error('Live-Dokumentations-Modal nicht gefunden');
         alert('Fehler: Modal konnte nicht geöffnet werden.');
@@ -616,29 +632,129 @@ async function handleLiveDocumentationSave(event) {
         
         console.log('🔄 Firebase-Verbindung erfolgreich überprüft');
         
-        // Daten aus dem Formular abrufen
+        // Hilfsfunktion zum Sammeln aller Dateien aus beiden Inputs (mit Duplikaterkennung und getAllFiles-Support)
+        function getAllFilesFromDualInputs(cameraInput, galleryInput) {
+            const allFiles = [];
+            const seenFiles = new Map(); // Um Duplikate zu erkennen
+            
+            console.log(`🔍 getAllFilesFromDualInputs aufgerufen:`);
+            console.log(`  cameraInput: ${!!cameraInput} (getAllFiles verfügbar: ${!!cameraInput?.getAllFiles})`);
+            console.log(`  galleryInput: ${!!galleryInput} (getAllFiles verfügbar: ${!!galleryInput?.getAllFiles})`);
+            
+            // Dateien aus Kamera-Input sammeln (über setupDualFilePreview)
+            if (cameraInput && cameraInput.getAllFiles) {
+                const cameraFiles = cameraInput.getAllFiles();
+                console.log(`📷 Kamera-Input hat ${cameraFiles.length} Dateien`);
+                for (const file of cameraFiles) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`📷 Kamera-Datei hinzugefügt: ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Kamera): ${file.name}`);
+                    }
+                }
+            } else if (cameraInput && cameraInput.files && cameraInput.files.length > 0) {
+                // Fallback für direkte files-Eigenschaft
+                console.log(`📷 Fallback: Kamera-Input hat ${cameraInput.files.length} Dateien (direkt)`);
+                for (const file of cameraInput.files) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`📷 Kamera-Datei hinzugefügt (Fallback): ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Kamera): ${file.name}`);
+                    }
+                }
+            }
+            
+            // Dateien aus Galerie-Input sammeln (über setupDualFilePreview)
+            if (galleryInput && galleryInput.getAllFiles) {
+                const galleryFiles = galleryInput.getAllFiles();
+                console.log(`🖼️ Galerie-Input hat ${galleryFiles.length} Dateien`);
+                for (const file of galleryFiles) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`🖼️ Galerie-Datei hinzugefügt: ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Galerie): ${file.name}`);
+                    }
+                }
+            } else if (galleryInput && galleryInput.files && galleryInput.files.length > 0) {
+                // Fallback für direkte files-Eigenschaft
+                console.log(`🖼️ Fallback: Galerie-Input hat ${galleryInput.files.length} Dateien (direkt)`);
+                for (const file of galleryInput.files) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`🖼️ Galerie-Datei hinzugefügt (Fallback): ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Galerie): ${file.name}`);
+                    }
+                }
+            }
+            
+            console.log(`📊 Insgesamt ${allFiles.length} eindeutige Dateien gesammelt`);
+            return allFiles;
+        }
+        
+        // Daten aus dem Formular abrufen - für doppelte Kamera/Galerie-Inputs
         const notes = document.getElementById('live-notes').value;
-        const liveSitePhotosInput = document.getElementById('live-site-photos');
-        const liveDocumentPhotosInput = document.getElementById('live-document-photos');
+        const liveSitePhotosCameraInput = document.getElementById('live-site-photos-camera');
+        const liveSitePhotosGalleryInput = document.getElementById('live-site-photos-gallery');
+        const liveDocumentPhotosCameraInput = document.getElementById('live-document-photos-camera');
+        const liveDocumentPhotosGalleryInput = document.getElementById('live-document-photos-gallery');
+        
+        // Debug: Überprüfe, ob alle Inputs gefunden wurden
+        console.log('🔍 Input-Elemente-Check:');
+        console.log('  liveSitePhotosCameraInput:', !!liveSitePhotosCameraInput);
+        console.log('  liveSitePhotosGalleryInput:', !!liveSitePhotosGalleryInput);
+        console.log('  liveDocumentPhotosCameraInput:', !!liveDocumentPhotosCameraInput);
+        console.log('  liveDocumentPhotosGalleryInput:', !!liveDocumentPhotosGalleryInput);
+        
+        // Prüfe auch, ob die getAllFiles-Methoden verfügbar sind
+        if (liveSitePhotosCameraInput) {
+            console.log('  liveSitePhotosCameraInput.getAllFiles verfügbar:', !!liveSitePhotosCameraInput.getAllFiles);
+        }
+        if (liveSitePhotosGalleryInput) {
+            console.log('  liveSitePhotosGalleryInput.getAllFiles verfügbar:', !!liveSitePhotosGalleryInput.getAllFiles);
+        }
+        if (liveDocumentPhotosCameraInput) {
+            console.log('  liveDocumentPhotosCameraInput.getAllFiles verfügbar:', !!liveDocumentPhotosCameraInput.getAllFiles);
+        }
+        if (liveDocumentPhotosGalleryInput) {
+            console.log('  liveDocumentPhotosGalleryInput.getAllFiles verfügbar:', !!liveDocumentPhotosGalleryInput.getAllFiles);
+        }
+        
+        // Alle Dateien aus beiden Inputs sammeln
+        const allLiveSitePhotos = getAllFilesFromDualInputs(liveSitePhotosCameraInput, liveSitePhotosGalleryInput);
+        const allLiveDocumentPhotos = getAllFilesFromDualInputs(liveDocumentPhotosCameraInput, liveDocumentPhotosGalleryInput);
         
         console.log('Starte Live-Dokumentation Speicherung:', {
             timeEntryId: timeEntry.id,
             notes,
-            sitePhotos: liveSitePhotosInput.files.length,
-            documents: liveDocumentPhotosInput.files.length
+            sitePhotos: allLiveSitePhotos.length,
+            documents: allLiveDocumentPhotos.length
         });
+        
+
         
         // Arrays für die Upload-Objekte
         const sitePhotoObjects = [];
         const documentPhotoObjects = [];
         
         // Baustellenfotos hochladen
-        if (liveSitePhotosInput && liveSitePhotosInput.files.length > 0) {
+        if (allLiveSitePhotos.length > 0) {
             const liveSitePhotoComments = document.querySelectorAll('#live-site-photos-comments .image-comment-item');
             
-            console.log(`🔄 Starte Upload von ${liveSitePhotosInput.files.length} Baustellenfotos...`);
-            console.log(`🔍 Verfügbare Dateien:`, Array.from(liveSitePhotosInput.files).map((f, idx) => `${idx}: ${f.name}`));
-            console.log(`🔍 Dateien-Details:`, Array.from(liveSitePhotosInput.files).map((f, idx) => ({ 
+            console.log(`🔄 Starte Upload von ${allLiveSitePhotos.length} Baustellenfotos...`);
+            console.log(`🔍 Verfügbare Dateien:`, allLiveSitePhotos.map((f, idx) => `${idx}: ${f.name}`));
+            console.log(`🔍 Dateien-Details:`, allLiveSitePhotos.map((f, idx) => ({ 
                 index: idx, 
                 name: f.name, 
                 size: f.size, 
@@ -646,16 +762,16 @@ async function handleLiveDocumentationSave(event) {
                 lastModified: f.lastModified 
             })));
             
-            for (let i = 0; i < liveSitePhotosInput.files.length; i++) {
+            for (let i = 0; i < allLiveSitePhotos.length; i++) {
                 try {
-                    const file = liveSitePhotosInput.files[i];
-                    console.log(`📷 Uploade Baustellenfoto ${i + 1}/${liveSitePhotosInput.files.length}: ${file.name}`);
+                    const file = allLiveSitePhotos[i];
+                    console.log(`📷 Uploade Baustellenfoto ${i + 1}/${allLiveSitePhotos.length}: ${file.name}`);
                     
                     // Kommentar für dieses Bild finden
                     let imageComment = '';
-                    const commentItem = liveSitePhotoComments[i];
-                    if (commentItem) {
-                        const commentTextarea = commentItem.querySelector('textarea');
+                    const liveCommentItem = liveSitePhotoComments[i];
+                    if (liveCommentItem) {
+                        const commentTextarea = liveCommentItem.querySelector('textarea');
                         if (commentTextarea) {
                             imageComment = commentTextarea.value;
                         }
@@ -708,25 +824,25 @@ async function handleLiveDocumentationSave(event) {
                     console.error(`❌ Fehler-Stack:`, uploadError.stack);
                     
                     // Upload-Fehler protokollieren aber weitermachen
-                    console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild (${i + 2}/${liveSitePhotosInput.files.length})...`);
+                    console.log(`⚠️ Setze Upload-Loop fort mit nächstem Bild (${i + 2}/${allLiveSitePhotos.length})...`);
                     console.log(`📊 Aktuelle Anzahl erfolgreich hochgeladener Bilder: ${sitePhotoObjects.length}`);
                 }
             }
             
             console.log(`📊 Upload-Schleife für Baustellenfotos beendet`);
-            console.log(`🎯 Endergebnis: ${sitePhotoObjects.length}/${liveSitePhotosInput.files.length} Bilder erfolgreich hochgeladen`);
+            console.log(`🎯 Endergebnis: ${sitePhotoObjects.length}/${allLiveSitePhotos.length} Bilder erfolgreich hochgeladen`);
         }
         
         // Dokumente hochladen
-        if (liveDocumentPhotosInput && liveDocumentPhotosInput.files.length > 0) {
+        if (allLiveDocumentPhotos.length > 0) {
             const liveDocumentPhotoComments = document.querySelectorAll('#live-document-photos-comments .image-comment-item');
             
-            console.log(`🔄 Starte Upload von ${liveDocumentPhotosInput.files.length} Dokumenten...`);
+            console.log(`🔄 Starte Upload von ${allLiveDocumentPhotos.length} Dokumenten...`);
             
-            for (let i = 0; i < liveDocumentPhotosInput.files.length; i++) {
+            for (let i = 0; i < allLiveDocumentPhotos.length; i++) {
                 try {
-                    const file = liveDocumentPhotosInput.files[i];
-                    console.log(`📄 Uploade Dokument ${i + 1}/${liveDocumentPhotosInput.files.length}: ${file.name}`);
+                    const file = allLiveDocumentPhotos[i];
+                    console.log(`📄 Uploade Dokument ${i + 1}/${allLiveDocumentPhotos.length}: ${file.name}`);
                     
                     // Kommentar für dieses Dokument finden
                     let imageComment = '';
@@ -862,22 +978,96 @@ async function handleExtendedClockOut(event) {
         // Aktuelle Zeit als Ausstempelzeit verwenden
         const clockOutTime = new Date();
         
-        // Dateien aus den Datei-Inputs abrufen
-        const sitePhotosInput = document.getElementById('site-photos');
-        const documentPhotosInput = document.getElementById('document-photos');
-        
-        // Array für direkte Speicherung der vollständigen Upload-Objekte
+        // Dateien aus beiden Input-Feldern abrufen (Kamera und Galerie)
+        const sitePhotosCameraInput = document.getElementById('site-photos-camera');
+        const sitePhotosGalleryInput = document.getElementById('site-photos-gallery');
+        const documentPhotosCameraInput = document.getElementById('document-photos-camera');
+        const documentPhotosGalleryInput = document.getElementById('document-photos-gallery');
+         // Array für direkte Speicherung der vollständigen Upload-Objekte
         const sitePhotoObjects = [];
         const documentPhotoObjects = [];
+
+        // Hilfsfunktion zum Sammeln aller Dateien aus beiden Inputs (mit Duplikaterkennung und getAllFiles-Support)
+        function getAllFilesFromDualInputs(cameraInput, galleryInput) {
+            const allFiles = [];
+            const seenFiles = new Map(); // Um Duplikate zu erkennen
+            
+            console.log(`🔍 getAllFilesFromDualInputs aufgerufen:`);
+            console.log(`  cameraInput: ${!!cameraInput} (getAllFiles verfügbar: ${!!cameraInput?.getAllFiles})`);
+            console.log(`  galleryInput: ${!!galleryInput} (getAllFiles verfügbar: ${!!galleryInput?.getAllFiles})`);
+            
+            // Dateien aus Kamera-Input sammeln (über setupDualFilePreview)
+            if (cameraInput && cameraInput.getAllFiles) {
+                const cameraFiles = cameraInput.getAllFiles();
+                console.log(`📷 Kamera-Input hat ${cameraFiles.length} Dateien`);
+                for (const file of cameraFiles) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`📷 Kamera-Datei hinzugefügt: ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Kamera): ${file.name}`);
+                    }
+                }
+            } else if (cameraInput && cameraInput.files && cameraInput.files.length > 0) {
+                // Fallback für direkte files-Eigenschaft
+                console.log(`📷 Fallback: Kamera-Input hat ${cameraInput.files.length} Dateien (direkt)`);
+                for (const file of cameraInput.files) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`📷 Kamera-Datei hinzugefügt (Fallback): ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Kamera): ${file.name}`);
+                    }
+                }
+            }
+            
+            // Dateien aus Galerie-Input sammeln (über setupDualFilePreview)
+            if (galleryInput && galleryInput.getAllFiles) {
+                const galleryFiles = galleryInput.getAllFiles();
+                console.log(`🖼️ Galerie-Input hat ${galleryFiles.length} Dateien`);
+                for (const file of galleryFiles) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`🖼️ Galerie-Datei hinzugefügt: ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Galerie): ${file.name}`);
+                    }
+                }
+            } else if (galleryInput && galleryInput.files && galleryInput.files.length > 0) {
+                // Fallback für direkte files-Eigenschaft
+                console.log(`🖼️ Fallback: Galerie-Input hat ${galleryInput.files.length} Dateien (direkt)`);
+                for (const file of galleryInput.files) {
+                    const fileKey = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (!seenFiles.has(fileKey)) {
+                        seenFiles.set(fileKey, true);
+                        allFiles.push(file);
+                        console.log(`🖼️ Galerie-Datei hinzugefügt (Fallback): ${file.name}`);
+                    } else {
+                        console.log(`⚠️ Duplikat erkannt (Galerie): ${file.name}`);
+                    }
+                }
+            }
+            
+            console.log(`📊 Insgesamt ${allFiles.length} eindeutige Dateien gesammelt`);
+            return allFiles;
+        }
         
         // Uploads für Baustellen-Fotos mit Kommentaren
         const sitePhotoUploads = [];
-        if (sitePhotosInput && sitePhotosInput.files.length > 0) {
+        const allSitePhotos = getAllFilesFromDualInputs(sitePhotosCameraInput, sitePhotosGalleryInput);
+        
+        if (allSitePhotos.length > 0) {
             const sitePhotoComments = document.querySelectorAll('#site-photos-comments .image-comment-item');
             
-            for (let i = 0; i < sitePhotosInput.files.length; i++) {
+            for (let i = 0; i < allSitePhotos.length; i++) {
                 try {
-                    const file = sitePhotosInput.files[i];
+                    const file = allSitePhotos[i];
                     // Kommentar für dieses Bild finden
                     let imageComment = '';
                     const commentItem = sitePhotoComments[i];
@@ -914,17 +1104,19 @@ async function handleExtendedClockOut(event) {
         
         // Uploads für Dokument-Fotos mit Kommentaren
         const documentPhotoUploads = [];
-        if (documentPhotosInput && documentPhotosInput.files.length > 0) {
+        const allDocumentPhotos = getAllFilesFromDualInputs(documentPhotosCameraInput, documentPhotosGalleryInput);
+        
+        if (allDocumentPhotos.length > 0) {
             const documentPhotoComments = document.querySelectorAll('#document-photos-comments .image-comment-item');
             
-            for (let i = 0; i < documentPhotosInput.files.length; i++) {
+            for (let i = 0; i < allDocumentPhotos.length; i++) {
                 try {
-                    const file = documentPhotosInput.files[i];
+                    const file = allDocumentPhotos[i];
                     // Kommentar für dieses Bild finden
                     let imageComment = '';
-                    const commentItem = documentPhotoComments[i];
-                    if (commentItem) {
-                        const commentTextarea = commentItem.querySelector('textarea');
+                    const docCommentItem = documentPhotoComments[i];
+                    if (docCommentItem) {
+                        const commentTextarea = docCommentItem.querySelector('textarea');
                         if (commentTextarea) {
                             imageComment = commentTextarea.value;
                         }
@@ -1427,6 +1619,166 @@ function setupFilePreview(inputId, previewId) {
             commentsContainer.innerHTML = '';
         }
     };
+}
+
+// Duale Datei-Vorschau-Funktion für Kamera- und Galerie-Inputs
+function setupDualFilePreview(baseInputId, previewId) {
+    const cameraInput = document.getElementById(baseInputId + '-camera');
+    const galleryInput = document.getElementById(baseInputId + '-gallery');
+    const previewContainer = document.getElementById(previewId);
+    const commentsContainer = document.getElementById(baseInputId + '-comments');
+    
+    if (!previewContainer) return;
+    
+    // Event-Handler für beide Input-Felder
+    function handleFileChange(event, sourceType) {
+        const files = event.target.files;
+        
+        // Anzahl der vorhandenen Vorschaubilder zählen
+        const existingPreviews = previewContainer.querySelectorAll('.preview-item').length;
+        
+        // Prüfen, ob die maximale Anzahl erreicht wurde
+        const maxAllowedImages = 10;
+        const totalImages = existingPreviews + files.length;
+        
+        if (totalImages > maxAllowedImages) {
+            alert(`Sie können maximal ${maxAllowedImages} Bilder hochladen. Bitte wählen Sie weniger Bilder aus.`);
+            return;
+        }
+        
+        if (files && files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Nur Bilder zulassen
+                if (!file.type.startsWith('image/')) {
+                    continue;
+                }
+                
+                // Aktuellen Bild-Index berechnen (für die korrekte Nummerierung)
+                const currentImageIndex = existingPreviews + i + 1;
+                
+                // Vorschau-Container erstellen
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
+                previewItem.dataset.fileId = `${baseInputId}-${Date.now()}-${i}`; // Eindeutige ID für das Bild
+                previewItem.dataset.imageIndex = currentImageIndex; // Bild-Index speichern
+                previewItem.dataset.sourceType = sourceType; // Quelle speichern (camera/gallery)
+                
+                // Bild-Element erstellen
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.onload = function() {
+                    URL.revokeObjectURL(this.src); // Speicher freigeben
+                };
+                
+                // Löschen-Button erstellen
+                const removeBtn = document.createElement('span');
+                removeBtn.className = 'remove-preview';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.title = 'Entfernen';
+                removeBtn.dataset.index = i;
+                
+                // Event-Listener für Löschen-Button
+                removeBtn.addEventListener('click', function() {
+                    const fileId = previewItem.dataset.fileId;
+                    // Auch den zugehörigen Kommentar entfernen
+                    const commentItem = commentsContainer ? commentsContainer.querySelector(`[data-file-id="${fileId}"]`) : null;
+                    if (commentItem) {
+                        commentItem.remove();
+                    }
+                    // Vorschau-Element entfernen
+                    previewItem.remove();
+                    
+                    // Bildindizes neu nummerieren
+                    const remainingPreviews = previewContainer.querySelectorAll('.preview-item');
+                    remainingPreviews.forEach((item, index) => {
+                        item.dataset.imageIndex = index + 1;
+                    });
+                    
+                    // Kommentar-Indizes neu nummerieren
+                    if (commentsContainer) {
+                        const remainingComments = commentsContainer.querySelectorAll('.image-comment-item');
+                        remainingComments.forEach((item, index) => {
+                            const label = item.querySelector('label');
+                            if (label) {
+                                label.textContent = `Kommentar für Bild ${index + 1}:`;
+                            }
+                        });
+                    }
+                });
+                
+                // Elemente zusammenfügen
+                previewItem.appendChild(img);
+                previewItem.appendChild(removeBtn);
+                previewContainer.appendChild(previewItem);
+                
+                // Datei für späteren Upload speichern
+                previewItem.fileData = file;
+                
+                // Kommentar-Input erstellen (falls Kommentar-Container existiert)
+                if (commentsContainer) {
+                    const commentDiv = document.createElement('div');
+                    commentDiv.className = 'image-comment-item';
+                    commentDiv.dataset.fileId = previewItem.dataset.fileId;
+                    
+                    const label = document.createElement('label');
+                    label.textContent = `Kommentar für Bild ${currentImageIndex}:`;
+                    
+                    const textarea = document.createElement('textarea');
+                    textarea.placeholder = 'Optional: Beschreibung für dieses Bild...';
+                    textarea.rows = 2;
+                    
+                    commentDiv.appendChild(label);
+                    commentDiv.appendChild(textarea);
+                    commentsContainer.appendChild(commentDiv);
+                }
+            }
+        }
+        
+        // Input-Feld zurücksetzen, damit die gleiche Datei nochmal ausgewählt werden kann
+        event.target.value = '';
+    }
+    
+    // Event-Listener für Kamera-Input
+    if (cameraInput) {
+        cameraInput.addEventListener('change', (e) => handleFileChange(e, 'camera'));
+    }
+    
+    // Event-Listener für Galerie-Input
+    if (galleryInput) {
+        galleryInput.addEventListener('change', (e) => handleFileChange(e, 'gallery'));
+    }
+    
+    // Funktion zum Abrufen aller Dateien (für Upload-Funktionen)
+    function getAllFiles() {
+        const allFiles = [];
+        const previewItems = previewContainer.querySelectorAll('.preview-item');
+        previewItems.forEach(item => {
+            if (item.fileData) {
+                allFiles.push(item.fileData);
+            }
+        });
+        return allFiles;
+    }
+    
+    // Funktion zum Löschen aller Vorschauen
+    function clearPreviews() {
+        previewContainer.innerHTML = '';
+        if (commentsContainer) {
+            commentsContainer.innerHTML = '';
+        }
+    }
+    
+    // Funktionen öffentlich verfügbar machen
+    if (cameraInput) {
+        cameraInput.getAllFiles = getAllFiles;
+        cameraInput.clearPreviews = clearPreviews;
+    }
+    if (galleryInput) {
+        galleryInput.getAllFiles = getAllFiles;
+        galleryInput.clearPreviews = clearPreviews;
+    }
 }
 
 // Pause-Funktion
