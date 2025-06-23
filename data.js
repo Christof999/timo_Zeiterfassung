@@ -978,6 +978,57 @@ const DataService = {
     }
   },
 
+  async clockOutEmployee(timeEntryId, notes, location) {
+    await this._authReadyPromise;
+    try {
+      if (!timeEntryId) {
+        throw new Error("Keine gültige Zeiteintrag-ID angegeben");
+      }
+      
+      // Zeiteintrag abrufen
+      const timeEntry = await this.getTimeEntryById(timeEntryId);
+      if (!timeEntry) {
+        throw new Error(`Zeiteintrag mit ID ${timeEntryId} nicht gefunden`);
+      }
+      
+      // Prüfen, ob der Mitarbeiter noch eingestempelt ist
+      if (timeEntry.clockOutTime !== null) {
+        throw new Error("Dieser Mitarbeiter ist bereits ausgestempelt");
+      }
+      
+      // Ausstempel-Zeit setzen
+      const clockOutTime = firebase.firestore.Timestamp.now();
+      const updateData = {
+        clockOutTime: clockOutTime,
+        notes: notes || timeEntry.notes || ""
+      };
+      
+      // Standort hinzufügen, wenn vorhanden
+      if (location && (location.latitude || location.longitude)) {
+        updateData.clockOutLocation = location;
+      }
+      
+      // Arbeitszeit berechnen (in ms)
+      const clockInDate = timeEntry.clockInTime instanceof firebase.firestore.Timestamp
+        ? timeEntry.clockInTime.toDate()
+        : new Date(timeEntry.clockInTime);
+      const clockOutDate = clockOutTime.toDate();
+      const diffMs = clockOutDate - clockInDate;
+      const pauseTime = timeEntry.pauseTotalTime || 0;
+      const actualWorkTime = diffMs - pauseTime;
+      updateData.totalWorkTime = actualWorkTime;
+      
+      // Zeiteintrag aktualisieren
+      await this.updateTimeEntry(timeEntryId, updateData);
+      
+      console.log(`✅ Mitarbeiter erfolgreich ausgestempelt (ID: ${timeEntryId})`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Fehler beim Ausstempeln des Mitarbeiters mit Zeiteintrag ${timeEntryId}:`, error);
+      throw error;
+    }
+  },
+
   async getTodaysHours() {
     await this._authReadyPromise;
     try {
