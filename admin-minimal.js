@@ -200,7 +200,167 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+    
+    // Schließen-Buttons für Modals
+    document.querySelectorAll('.close-modal, .cancel-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+    
+    // Clock-Out-Formular Event-Listener
+    const clockOutForm = document.getElementById('clock-out-employee-form');
+    if (clockOutForm) {
+        clockOutForm.addEventListener('submit', handleClockOutEmployee);
+    }
 });
+
+// Funktion zum Öffnen des Ausstempel-Modals
+async function showClockOutModal(timeEntryId) {
+    try {
+        console.log('Öffne Ausstempel-Modal für Eintrag:', timeEntryId);
+        
+        // Modal referenzieren
+        const modal = document.getElementById('clock-out-employee-modal');
+        if (!modal) {
+            console.error('Ausstempel-Modal nicht gefunden');
+            return;
+        }
+        
+        // Zeiteintrag laden
+        const entry = await DataService.getTimeEntryById(timeEntryId);
+        if (!entry) {
+            console.error('Zeiteintrag nicht gefunden:', timeEntryId);
+            alert('Der Zeiteintrag konnte nicht geladen werden.');
+            return;
+        }
+        
+        // Mitarbeiter laden
+        const employee = await DataService.getEmployeeById(entry.employeeId);
+        if (!employee) {
+            console.error('Mitarbeiter nicht gefunden:', entry.employeeId);
+            alert('Der zugehörige Mitarbeiter konnte nicht geladen werden.');
+            return;
+        }
+        
+        // Projekt laden
+        const project = await DataService.getProjectById(entry.projectId);
+        
+        // Modal-Felder befüllen
+        document.getElementById('clock-out-employee-id').value = timeEntryId;
+        document.getElementById('clock-out-employee-name').value = employee.name;
+        document.getElementById('clock-out-project').value = project ? project.name : 'Unbekanntes Projekt';
+        
+        // Notizen zurücksetzen
+        document.getElementById('clock-out-notes').value = '';
+        
+        // Karte initialisieren, wenn Google Maps vorhanden ist
+        if (window.google && window.google.maps) {
+            setTimeout(() => {
+                const mapElement = document.getElementById('clock-out-map');
+                if (mapElement) {
+                    const map = new google.maps.Map(mapElement, {
+                        center: { lat: 48.7758, lng: 9.1829 }, // Stuttgart als Standard
+                        zoom: 13
+                    });
+                    
+                    // Marker für die Karte
+                    const marker = new google.maps.Marker({
+                        position: { lat: 48.7758, lng: 9.1829 },
+                        map: map,
+                        draggable: true
+                    });
+                    
+                    // Event-Listener für den Marker
+                    google.maps.event.addListener(marker, 'dragend', function() {
+                        const pos = marker.getPosition();
+                        document.getElementById('clock-out-latitude').value = pos.lat();
+                        document.getElementById('clock-out-longitude').value = pos.lng();
+                    });
+                    
+                    // Button für aktuellen Standort
+                    document.getElementById('locate-clock-out-btn').addEventListener('click', function() {
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                                function(position) {
+                                    const pos = {
+                                        lat: position.coords.latitude,
+                                        lng: position.coords.longitude
+                                    };
+                                    
+                                    map.setCenter(pos);
+                                    marker.setPosition(pos);
+                                    
+                                    document.getElementById('clock-out-latitude').value = pos.lat;
+                                    document.getElementById('clock-out-longitude').value = pos.lng;
+                                },
+                                function(error) {
+                                    console.error('Fehler bei der Standortbestimmung:', error);
+                                    alert('Standort konnte nicht ermittelt werden: ' + error.message);
+                                }
+                            );
+                        } else {
+                            alert('Ihr Browser unterstützt keine Standortbestimmung.');
+                        }
+                    });
+                }
+            }, 500);
+        }
+        
+        // Modal anzeigen
+        modal.style.display = 'block';
+        
+    } catch (error) {
+        console.error('Fehler beim Öffnen des Ausstempel-Modals:', error);
+        alert('Beim Öffnen des Ausstempel-Modals ist ein Fehler aufgetreten.');
+    }
+}
+
+// Handler für das Ausstempel-Formular
+async function handleClockOutEmployee(event) {
+    event.preventDefault();
+    
+    try {
+        const timeEntryId = document.getElementById('clock-out-employee-id').value;
+        const notes = document.getElementById('clock-out-notes').value;
+        
+        // Standort aus den Feldern holen
+        const latitude = parseFloat(document.getElementById('clock-out-latitude').value);
+        const longitude = parseFloat(document.getElementById('clock-out-longitude').value);
+        
+        // Standortdaten vorbereiten
+        const location = {
+            latitude: latitude || null,
+            longitude: longitude || null,
+            timestamp: new Date().toISOString()
+        };
+        
+        console.log('Stempele Mitarbeiter aus:', timeEntryId);
+        console.log('Notizen:', notes);
+        console.log('Standort:', location);
+        
+        // Zeiteintrag aktualisieren
+        await DataService.clockOutEmployee(timeEntryId, notes, location);
+        
+        // Modal schließen
+        const modal = document.getElementById('clock-out-employee-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        // Dashboard aktualisieren
+        loadDashboardData();
+        
+        alert('Mitarbeiter wurde erfolgreich ausgestempelt.');
+        
+    } catch (error) {
+        console.error('Fehler beim Ausstempeln:', error);
+        alert('Beim Ausstempeln ist ein Fehler aufgetreten: ' + error.message);
+    }
+}
 
 // Dashboard-Daten laden
 async function loadDashboardData() {
@@ -377,6 +537,14 @@ async function loadLiveActivities() {
                 
                 liveActivityTable.appendChild(row);
             }
+        });
+        
+        // Event-Listener für die Ausstempel-Buttons hinzufügen
+        document.querySelectorAll('.clock-out-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const entryId = this.dataset.id;
+                showClockOutModal(entryId);
+            });
         });
         
     } catch (error) {
@@ -2588,3 +2756,4 @@ async function loadProjectTimeEntries(projectId) {
         table.innerHTML = '<tr><td colspan="8" class="text-center">Fehler beim Laden der Daten</td></tr>';
     }
 }
+
