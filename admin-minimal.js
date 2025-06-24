@@ -2756,3 +2756,4 @@ async function loadProjectTimeEntries(projectId) {
         table.innerHTML = '<tr><td colspan="8" class="text-center">Fehler beim Laden der Daten</td></tr>';
     }
 }
+
