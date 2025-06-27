@@ -1795,6 +1795,79 @@ const DataService = {
     }
     return true;
   },
+
+  /**
+   * Erstellt einen neuen Zeiteintrag für einen Mitarbeiter (Admin-Funktion)
+   * @param {Object} timeEntry - Das Zeiteintragsobjekt mit allen erforderlichen Eigenschaften
+   * @returns {Promise<Object>} - Das gespeicherte Zeiteintragsobjekt mit ID
+   */
+  async createTimeEntry(timeEntry) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!timeEntry.employeeId || !timeEntry.projectId || !timeEntry.clockInTime || !timeEntry.clockOutTime) {
+        throw new Error('Fehlende Pflichtfelder für den Zeiteintrag');
+      }
+      
+      // Prüfen, ob der aktuelle Benutzer Admin-Rechte hat
+      const user = await this.getFirebaseUser();
+      const isAdmin = await this.isUserAdmin(user?.uid);
+      
+      if (!isAdmin) {
+        throw new Error('Nur Administratoren können Zeiteinträge für Mitarbeiter erstellen');
+      }
+      
+      // Zeiteintrag mit Zeitstempel versehen
+      const entryWithTimestamp = {
+        ...timeEntry,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // In Firestore speichern
+      const docRef = await this.timeEntriesCollection.add(entryWithTimestamp);
+      
+      // Gespeichertes Dokument zurückgeben
+      return {
+        id: docRef.id,
+        ...timeEntry
+      };
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Zeiteintrags:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Prüft, ob ein Benutzer Admin-Rechte hat
+   * @param {string} userId - Die Benutzer-ID
+   * @returns {Promise<boolean>} - true, wenn der Benutzer Admin-Rechte hat
+   */
+  async isUserAdmin(userId) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!userId) return false;
+      
+      // Für Entwicklungszwecke: Standardmäßig true, um die Funktion zu testen
+      // In der Produktion sollte hier eine echte Admin-Prüfung stattfinden
+      // z.B. durch Abfrage einer Liste von Admin-Benutzern in Firestore
+      // HINWEIS: Diese Implementierung ist nur vorübergehend und sollte für die
+      // Produktion mit einer echten Berechtigungsprüfung ersetzt werden
+      return true;
+    } catch (error) {
+      console.error('Fehler bei der Prüfung der Admin-Rechte:', error);
+      return false;
+    }
+  },
+  
+  /**
+   * Gibt den aktuell bei Firebase angemeldeten Benutzer zurück
+   * @returns {Promise<Object|null>} - Der aktuelle Firebase-Benutzer oder null
+   */
+  async getFirebaseUser() {
+    await this._authReadyPromise;
+    return firebase.auth().currentUser;
+  },
 };
 
 document.addEventListener("DOMContentLoaded", () => {
