@@ -1796,9 +1796,13 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
         const reportWorkHours = document.getElementById('report-work-hours');
         const reportNotes = document.getElementById('report-notes');
         const reportPauseDetails = document.getElementById('report-pause-details');
+        // Neue Elemente für Standorte
+        const reportLocationIn = document.getElementById('report-location-in');
+        const reportLocationOut = document.getElementById('report-location-out');
         
         if (reportDate && reportProject && reportEmployee && reportTimeIn && 
-            reportTimeOut && reportWorkHours && reportNotes && reportPauseDetails) {
+            reportTimeOut && reportWorkHours && reportNotes && reportPauseDetails &&
+            reportLocationIn && reportLocationOut) {
             
             // Datum formatieren
             const clockInDate = new Date(timeEntry.clockInTime);
@@ -1836,6 +1840,135 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             reportTimeOut.textContent = clockOutTime;
             reportWorkHours.textContent = workHours;
             reportNotes.textContent = timeEntry.notes || '-';
+            
+            // Debug-Info für Standorte ausgeben
+            console.log('Zeiteintrags-Bericht - Standortdaten:', {
+                entryId: timeEntryId,
+                clockInLocation: timeEntry.clockInLocation,
+                clockOutLocation: timeEntry.clockOutLocation
+            });
+
+            // Standortinformationen vorbereiten
+            let clockInLocationText = '-';
+            let clockOutLocationText = '-';
+            let clockInLocationHtml = null;
+            let clockOutLocationHtml = null;
+            
+            // Einstempel-Standort formatieren, verschiedene Formate berücksichtigen
+            if (timeEntry.clockInLocation) {
+                const inLoc = timeEntry.clockInLocation;
+                let inLat, inLng;
+                
+                // Erst versuchen, die Adresse zu verwenden, wenn vorhanden
+                if (inLoc.address) {
+                    clockInLocationText = inLoc.address;
+                } 
+                // Sonst nach Koordinaten in verschiedenen Formaten suchen
+                else {
+                    // Mögliche Formate prüfen
+                    if (inLoc.coords && inLoc.coords.latitude && inLoc.coords.longitude) {
+                        inLat = inLoc.coords.latitude;
+                        inLng = inLoc.coords.longitude;
+                    } else if (inLoc.latitude && inLoc.longitude) {
+                        inLat = inLoc.latitude;
+                        inLng = inLoc.longitude;
+                    } else if (typeof inLoc === 'object') {
+                        // Verfügbare Schlüssel protokollieren
+                        const keys = Object.keys(inLoc);
+                        console.log('Verfügbare clockInLocation Schlüssel:', keys);
+                        
+                        // Alternative Schlüsselbezeichnungen prüfen
+                        for (const latKey of ['lat', 'latitude', 'Latitude']) {
+                            for (const lngKey of ['lng', 'lon', 'long', 'longitude', 'Longitude']) {
+                                if (inLoc[latKey] !== undefined && inLoc[lngKey] !== undefined) {
+                                    inLat = inLoc[latKey];
+                                    inLng = inLoc[lngKey];
+                                    console.log(`Alternativer Standort gefunden mit Schlüsseln: ${latKey}, ${lngKey}`);
+                                    break;
+                                }
+                            }
+                            if (inLat) break;
+                        }
+                    }
+                    
+                    // Wenn Koordinaten gefunden wurden, formatieren
+                    if (inLat && inLng) {
+                        clockInLocationText = `Lat: ${inLat.toFixed(5)}, Long: ${inLng.toFixed(5)}`;
+                        
+                        // Google Maps Link
+                        clockInLocationHtml = `
+                            <span>${clockInLocationText}</span>
+                            <a href="https://maps.google.com/?q=${inLat},${inLng}" target="_blank" class="location-link">
+                                <i class="fas fa-map-marker-alt"></i> Karte öffnen
+                            </a>
+                        `;
+                    } else {
+                        console.warn('Einstempelort-Format nicht erkannt:', inLoc);
+                        clockInLocationText = 'Format nicht erkannt';
+                    }
+                }
+            }
+            
+            // Ausstempel-Standort formatieren, falls vorhanden
+            if (timeEntry.clockOutLocation) {
+                const outLoc = timeEntry.clockOutLocation;
+                let outLat, outLng;
+                
+                // Erst versuchen, die Adresse zu verwenden, wenn vorhanden
+                if (outLoc.address) {
+                    clockOutLocationText = outLoc.address;
+                } 
+                // Sonst nach Koordinaten in verschiedenen Formaten suchen
+                else {
+                    // Mögliche Formate prüfen
+                    if (outLoc.coords && outLoc.coords.latitude && outLoc.coords.longitude) {
+                        outLat = outLoc.coords.latitude;
+                        outLng = outLoc.coords.longitude;
+                    } else if (outLoc.latitude && outLoc.longitude) {
+                        outLat = outLoc.latitude;
+                        outLng = outLoc.longitude;
+                    } else if (typeof outLoc === 'object') {
+                        // Verfügbare Schlüssel protokollieren
+                        const keys = Object.keys(outLoc);
+                        console.log('Verfügbare clockOutLocation Schlüssel:', keys);
+                        
+                        // Alternative Schlüsselbezeichnungen prüfen
+                        for (const latKey of ['lat', 'latitude', 'Latitude']) {
+                            for (const lngKey of ['lng', 'lon', 'long', 'longitude', 'Longitude']) {
+                                if (outLoc[latKey] !== undefined && outLoc[lngKey] !== undefined) {
+                                    outLat = outLoc[latKey];
+                                    outLng = outLoc[lngKey];
+                                    console.log(`Alternativer Standort gefunden mit Schlüsseln: ${latKey}, ${lngKey}`);
+                                    break;
+                                }
+                            }
+                            if (outLat) break;
+                        }
+                    }
+                    
+                    // Wenn Koordinaten gefunden wurden, formatieren
+                    if (outLat && outLng) {
+                        clockOutLocationText = `Lat: ${outLat.toFixed(5)}, Long: ${outLng.toFixed(5)}`;
+                        
+                        // Google Maps Link
+                        clockOutLocationHtml = `
+                            <span>${clockOutLocationText}</span>
+                            <a href="https://maps.google.com/?q=${outLat},${outLng}" target="_blank" class="location-link">
+                                <i class="fas fa-map-marker-alt"></i> Karte öffnen
+                            </a>
+                        `;
+                    } else {
+                        console.warn('Ausstempelort-Format nicht erkannt:', outLoc);
+                        clockOutLocationText = 'Format nicht erkannt';
+                    }
+                }
+            } else if (!timeEntry.clockOutTime) {
+                clockOutLocationText = 'Noch nicht ausgestempelt';
+            }
+            
+            // Standortinformationen in das Modal schreiben
+            reportLocationIn.innerHTML = clockInLocationHtml || clockInLocationText;
+            reportLocationOut.innerHTML = clockOutLocationHtml || clockOutLocationText;
             
             // Pausendetails anzeigen, falls vorhanden
             if (timeEntry.pauseDetails && timeEntry.pauseDetails.length > 0) {
@@ -1988,6 +2121,14 @@ function createReportModal() {
                         <div class="report-info-item">
                             <strong>Arbeitsstunden:</strong>
                             <span id="report-work-hours"></span>
+                        </div>
+                        <div class="report-info-item">
+                            <strong>Einstempel-Standort:</strong>
+                            <span id="report-location-in"></span>
+                        </div>
+                        <div class="report-info-item">
+                            <strong>Ausstempel-Standort:</strong>
+                            <span id="report-location-out"></span>
                         </div>
                     </div>
                     <div class="report-info-item">

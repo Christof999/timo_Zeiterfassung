@@ -141,6 +141,100 @@ async function generatePDF() {
         tempContainer.style.backgroundColor = 'white';
         tempContainer.style.padding = '15mm';
         tempContainer.style.zIndex = '999';
+        
+        // ANPASSUNG: Kommentarspalten aus den Zeiteinträgen entfernen - DIREKTER ANSATZ
+        console.log('Suche Zeiteinträge-Tabelle für PDF-Export');
+        
+        // Alle Tabellen durchgehen und Kommentare entfernen, um sicherzustellen, dass es in allen Bereichen funktioniert
+        const allTables = contentClone.querySelectorAll('table');
+        console.log(`${allTables.length} Tabellen im PDF-Export gefunden`);
+        
+        allTables.forEach((table, index) => {
+            console.log(`Verarbeite Tabelle #${index + 1}`, table.id || 'ohne ID');
+            
+            // Jede Tabelle überprüfen
+            try {
+                // 1. Kommentarspalten-Position finden
+                const headers = table.querySelectorAll('th');
+                let commentColIndex = -1;
+                
+                // Nach Kopfzeilen mit 'Kommentar' oder 'Notizen' suchen
+                for (let i = 0; i < headers.length; i++) {
+                    const headerText = headers[i].textContent.trim().toLowerCase();
+                    if (headerText.includes('kommentar') || headerText.includes('notiz')) {
+                        commentColIndex = i;
+                        console.log(`Kommentarspalte gefunden an Position ${commentColIndex}`);
+                        break;
+                    }
+                }
+                
+                // Wenn keine Kommentarspalte gefunden wurde, nehmen wir die vorletzte Spalte (oft Notizen)
+                if (commentColIndex === -1 && headers.length > 1) {
+                    commentColIndex = headers.length - 2; // Vorletzte Spalte (letzte ist oft Aktionen)
+                    console.log(`Keine eindeutige Kommentarspalte gefunden, verwende vorletzte Spalte: ${commentColIndex}`);
+                }
+                
+                // Wenn ein Kommentarspaltenindex gefunden wurde
+                if (commentColIndex !== -1) {
+                    // 2. Für alle Zeilen die Zelle an dieser Position entfernen
+                    
+                    // 2.1 Kopfzeilen verarbeiten
+                    const headerRows = table.querySelectorAll('thead tr');
+                    headerRows.forEach(row => {
+                        const headerCells = Array.from(row.querySelectorAll('th'));
+                        if (headerCells.length > commentColIndex) {
+                            console.log(`Entferne Header-Zelle ${commentColIndex}`);
+                            headerCells[commentColIndex].parentNode.removeChild(headerCells[commentColIndex]);
+                        }
+                    });
+                    
+                    // 2.2 Tabellenkörper verarbeiten
+                    const bodyRows = table.querySelectorAll('tbody tr');
+                    bodyRows.forEach(row => {
+                        const cells = Array.from(row.querySelectorAll('td'));
+                        if (cells.length > commentColIndex) {
+                            console.log(`Entferne Datenzelle ${commentColIndex}`);
+                            cells[commentColIndex].parentNode.removeChild(cells[commentColIndex]);
+                        }
+                    });
+                }
+                
+                // Alternativ: Notiz/Kommentar-Zellen basierend auf CSS-Klassen entfernen
+                const noteCells = table.querySelectorAll('.notes-cell, .comment-cell, .note-text, .comment-text');
+                console.log(`${noteCells.length} Notiz-/Kommentarzellen durch CSS-Klasse gefunden`);
+                
+                noteCells.forEach(cell => {
+                    // Nur den Text-Teil innerhalb der Zelle entfernen, Standortinfos behalten
+                    const noteTexts = cell.querySelectorAll('.note-text');
+                    noteTexts.forEach(noteText => {
+                        noteText.style.display = 'none';
+                    });
+                    
+                    // Wenn keine .note-text Elemente gefunden wurden, aber die Zelle selbst eine .note-cell ist
+                    if (noteTexts.length === 0 && 
+                        (cell.classList.contains('notes-cell') || cell.classList.contains('comment-cell'))) {
+                        // Text-Knoten finden und entfernen, aber HTML-Elemente (wie Standort-Links) behalten
+                        Array.from(cell.childNodes)
+                            .filter(node => node.nodeType === Node.TEXT_NODE || 
+                                   (node.nodeType === Node.ELEMENT_NODE && 
+                                    !node.classList.contains('location-info') && 
+                                    !node.classList.contains('location-item')))
+                            .forEach(node => cell.removeChild(node));
+                    }
+                });
+            } catch (err) {
+                console.error(`Fehler beim Verarbeiten von Tabelle #${index + 1}:`, err);
+            }
+        });
+        
+        // Als Backup: Auch nach spezifischer Zeiteintrags-Tabelle suchen
+        const timeEntriesTable = contentClone.querySelector('#time-entries-table');
+        if (timeEntriesTable) {
+            console.log('Zeiteintrags-Tabelle mit ID gefunden');
+        } else {
+            console.log('Keine spezifische Zeiteintrags-Tabelle mit ID gefunden');
+        }
+        
         tempContainer.appendChild(contentClone);
         document.body.appendChild(tempContainer);
         

@@ -105,7 +105,7 @@ const DataService = {
     localStorage.removeItem("lauffer_current_user");
   },
 
-  // --- AB HIER MUSS JEDE FUNKTION AUF DIE AUTH WARTEN ---
+  // --- AB HIER MUSS JED E FUNKTION AUF DIE AUTH WARTEN ---
 
   async getAllEmployees() {
     await this._authReadyPromise;
@@ -1251,25 +1251,60 @@ const DataService = {
         query = query.where("isDraft", "==", false);
       }
       const snapshot = await query.get();
-      return snapshot.docs.map((doc) => {
-        const data = doc.data();
-        const timestamp =
-          data.uploadTime instanceof firebase.firestore.Timestamp
-            ? data.uploadTime.toDate()
-            : new Date(data.uploadTime);
-        return {
-          id: doc.id,
-          ...data,
-          timestamp: timestamp,
-        };
-      });
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-      console.error("Fehler beim Abrufen der Projektdateien:", error);
+      console.error(
+        `Fehler beim Abrufen der Dateien für Projekt ${projectId}:`,
+        error
+      );
       return [];
     }
   },
 
-  async generateEmployeeReport(employeeId, startDate, endDate) {
+  async getProjectTimeEntries(projectId) {
+    try {
+      const timeEntriesRef = this.db.collection("timeEntries");
+      const snapshot = await timeEntriesRef
+        .where("projectId", "==", projectId)
+        .get();
+
+      // Datensätze transformieren
+      return snapshot.docs.map((doc) => {
+        return {
+          id: doc.id,
+          ...doc.data(),
+        };
+      });
+    } catch (error) {
+      console.error("Fehler beim Laden der Zeiteinträge:", error);
+      throw error;
+    }
+  },
+
+  async getTimeEntryById(timeEntryId) {
+    try {
+      console.log("Suche Zeiteintrag mit ID:", timeEntryId);
+      const timeEntryDoc = await this.db
+        .collection("timeEntries")
+        .doc(timeEntryId)
+        .get();
+
+      if (!timeEntryDoc.exists) {
+        console.error("Zeiteintrag nicht gefunden:", timeEntryId);
+        return null;
+      }
+
+      return {
+        id: timeEntryDoc.id,
+        ...timeEntryDoc.data(),
+      };
+    } catch (error) {
+      console.error("Fehler beim Laden des Zeiteintrags:", error);
+      throw error;
+    }
+  },
+
+  async getEmployeeTimeEntries(employeeId, startDate, endDate) {
     await this._authReadyPromise;
     try {
       if (!employeeId) {

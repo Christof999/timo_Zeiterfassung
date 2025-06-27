@@ -696,18 +696,115 @@ async function loadProjectTimeEntries(projectId) {
                               (entry.photos && entry.photos.length > 0) ||
                               (entry.documents && entry.documents.length > 0);
             
-            // Standortinformationen formatieren
-            let locationInfo = '';
+            // Standortinformationen formatieren und Debug-Ausgabe
+            console.log('Standortdaten für Eintrag:', entry.id, {
+                clockInLocation: entry.clockInLocation,
+                clockOutLocation: entry.clockOutLocation
+            });
+            
+            let locationInfo = '<div class="location-info">';
+            let hasLocationInfo = false;
+            
+            // Einstempel-Standort
             if (entry.clockInLocation) {
-                const coords = entry.clockInLocation.coords || entry.clockInLocation;
-                if (coords && coords.latitude && coords.longitude) {
-                    locationInfo = `<div class="location-info">
-                        <i class="fas fa-map-marker-alt"></i> 
-                        <a href="https://maps.google.com/?q=${coords.latitude},${coords.longitude}" target="_blank">
-                            Standort anzeigen
-                        </a>
-                    </div>`;
+                // Koordinaten extrahieren mit verschiedenen möglichen Datenstrukturen
+                let inLat, inLng;
+                const inLoc = entry.clockInLocation;
+                
+                if (inLoc.coords && inLoc.coords.latitude && inLoc.coords.longitude) {
+                    inLat = inLoc.coords.latitude;
+                    inLng = inLoc.coords.longitude;
+                } else if (inLoc.latitude && inLoc.longitude) {
+                    inLat = inLoc.latitude;
+                    inLng = inLoc.longitude;
+                } else if (typeof inLoc === 'object') {
+                    // Versuche, Lat/Lng aus anderen möglichen Formaten zu extrahieren
+                    const keys = Object.keys(inLoc);
+                    console.log('Verfügbare Schlüssel für clockInLocation:', keys);
+                    
+                    // Mögliche alternative Schlüssel versuchen
+                    for (const latKey of ['lat', 'latitude', 'Latitude']) {
+                        for (const lngKey of ['lng', 'lon', 'long', 'longitude', 'Longitude']) {
+                            if (inLoc[latKey] !== undefined && inLoc[lngKey] !== undefined) {
+                                inLat = inLoc[latKey];
+                                inLng = inLoc[lngKey];
+                                break;
+                            }
+                        }
+                    }
                 }
+                
+                // Wenn Koordinaten gefunden wurden
+                if (inLat && inLng) {
+                    hasLocationInfo = true;
+                    locationInfo += `
+                        <div class="location-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <a href="https://maps.google.com/?q=${inLat},${inLng}" target="_blank" class="location-link" title="Einstempel-Standort anzeigen">
+                                <span class="location-type">Einstempel-Standort</span>
+                                <span class="location-coords">(${inLat.toFixed(5)}, ${inLng.toFixed(5)})</span>
+                            </a>
+                        </div>`;
+                    console.log('Einstempelort gefunden:', inLat, inLng);
+                } else {
+                    console.warn('Ungültiger Einstempel-Standort Format:', inLoc);
+                    locationInfo += '<div class="location-item location-error">Einstempelort: Format nicht erkannt</div>';
+                }
+            }
+            
+            // Ausstempel-Standort
+            if (entry.clockOutLocation) {
+                // Koordinaten extrahieren mit verschiedenen möglichen Datenstrukturen
+                let outLat, outLng;
+                const outLoc = entry.clockOutLocation;
+                
+                if (outLoc.coords && outLoc.coords.latitude && outLoc.coords.longitude) {
+                    outLat = outLoc.coords.latitude;
+                    outLng = outLoc.coords.longitude;
+                } else if (outLoc.latitude && outLoc.longitude) {
+                    outLat = outLoc.latitude;
+                    outLng = outLoc.longitude;
+                } else if (typeof outLoc === 'object') {
+                    // Versuche, Lat/Lng aus anderen möglichen Formaten zu extrahieren
+                    const keys = Object.keys(outLoc);
+                    console.log('Verfügbare Schlüssel für clockOutLocation:', keys);
+                    
+                    // Mögliche alternative Schlüssel versuchen
+                    for (const latKey of ['lat', 'latitude', 'Latitude']) {
+                        for (const lngKey of ['lng', 'lon', 'long', 'longitude', 'Longitude']) {
+                            if (outLoc[latKey] !== undefined && outLoc[lngKey] !== undefined) {
+                                outLat = outLoc[latKey];
+                                outLng = outLoc[lngKey];
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Wenn Koordinaten gefunden wurden
+                if (outLat && outLng) {
+                    hasLocationInfo = true;
+                    locationInfo += `
+                        <div class="location-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <a href="https://maps.google.com/?q=${outLat},${outLng}" target="_blank" class="location-link" title="Ausstempel-Standort anzeigen">
+                                <span class="location-type">Ausstempel-Standort</span>
+                                <span class="location-coords">(${outLat.toFixed(5)}, ${outLng.toFixed(5)})</span>
+                            </a>
+                        </div>`;
+                    console.log('Ausstempelort gefunden:', outLat, outLng);
+                } else if (entry.clockOutTime) {
+                    console.warn('Ausgecheckt aber kein gültiger Ausstempel-Standort:', outLoc);
+                    locationInfo += '<div class="location-item location-error">Ausstempelort: Format nicht erkannt</div>';
+                }
+            }
+            
+            locationInfo += '</div>';
+            
+            // Wenn keine Standortinformationen vorhanden sind
+            if (!hasLocationInfo) {
+                console.log('Keine Standortdaten für Eintrag:', entry.id);
+                locationInfo = '';
             }
             
             const row = document.createElement('tr');

@@ -7,12 +7,12 @@
 let reportModal = null;
 let fullscreenModal = null;
 
+// Besucht bereits bearbeitete Zeilen, um Doppelarbeit zu vermeiden
+const processedRows = new Set();
+
 // Nach dem Laden der Seite initialisieren
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Report-Funktionen werden initialisiert...');
-    
-    // Besucht bereits bearbeitete Zeilen, um Doppelarbeit zu vermeiden
-    const processedRows = new Set();
     
     // WICHTIG: Tabellenzellen prüfen und Report-Buttons hinzufügen
     function injectReportButtons() {
@@ -183,6 +183,86 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
+ * Formatiert Standortdaten für die Anzeige im Bericht
+ * @param {Object|string} locationData - Standortdaten (Object oder String)
+ * @param {string} locationLabel - Bezeichner für den Standort (z.B. "Einstempel" oder "Ausstempel")
+ * @returns {string} HTML-String mit formatierter Standortanzeige
+ */
+function formatLocationInfo(locationData, locationLabel) {
+    console.log(`formatLocationInfo für ${locationLabel} aufgerufen mit:`, locationData);
+    
+    try {
+        // Wenn keine Daten vorhanden sind
+        if (!locationData) {
+            return '<span class="text-muted">Keine Standortdaten verfügbar</span>';
+        }
+
+        // Wenn locationData ein String ist, versuche es als JSON zu parsen
+        let locationObject = locationData;
+        if (typeof locationData === 'string') {
+            try {
+                locationObject = JSON.parse(locationData);
+                console.log(`${locationLabel}-Standort erfolgreich von String zu Objekt geparst:`, locationObject);
+            } catch (error) {
+                console.warn(`${locationLabel}-Standort konnte nicht als JSON geparst werden:`, error);
+                // Wenn es kein JSON ist, gib den String zurück
+                return `<span>${locationData}</span>`;
+            }
+        }
+
+        // Verschiedene mögliche Attributnamen für Koordinaten prüfen
+        let latitude = null;
+        let longitude = null;
+
+        // Debug-Ausgabe zum besseren Verständnis der Struktur
+        console.log(`${locationLabel}-Standort Objekt-Schlüssel:`, Object.keys(locationObject));
+        
+        // Versuchen, lat/lng oder latitude/longitude aus dem Objekt zu extrahieren
+        if (locationObject.lat !== undefined && locationObject.lng !== undefined) {
+            latitude = locationObject.lat;
+            longitude = locationObject.lng;
+            console.log(`${locationLabel}-Standort verwendet lat/lng Format`);
+        } else if (locationObject.latitude !== undefined && locationObject.longitude !== undefined) {
+            latitude = locationObject.latitude;
+            longitude = locationObject.longitude;
+            console.log(`${locationLabel}-Standort verwendet latitude/longitude Format`);
+        } else if (locationObject.coords && locationObject.coords.latitude !== undefined && locationObject.coords.longitude !== undefined) {
+            // Geolocation API Format
+            latitude = locationObject.coords.latitude;
+            longitude = locationObject.coords.longitude;
+            console.log(`${locationLabel}-Standort verwendet Geolocation API Format`);
+        }
+
+        // Wenn Koordinaten extrahiert wurden, zeige sie an
+        if (latitude !== null && longitude !== null) {
+            // Formatiere die Koordinaten mit fester Anzahl von Nachkommastellen
+            const formattedLat = Number(latitude).toFixed(6);
+            const formattedLng = Number(longitude).toFixed(6);
+            
+            // Erstelle Google Maps URL
+            const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+            
+            // HTML für die Anzeige der Standortinformationen
+            return `
+                <div class="location-info">
+                    <i class="fas fa-map-marker-alt text-danger"></i>
+                    <span>${formattedLat}, ${formattedLng}</span>
+                    <a href="${mapsUrl}" target="_blank" class="btn btn-sm btn-outline-primary ml-2">
+                        <i class="fas fa-map"></i> Auf Karte anzeigen
+                    </a>
+                </div>
+            `;
+        } else {
+            console.warn(`${locationLabel}-Standort: Keine Koordinaten gefunden in`, locationObject);
+            return `<span class="text-warning">Standortdaten ohne Koordinaten</span>`;
+        }
+    } catch (error) {
+        console.error(`Fehler beim Formatieren der ${locationLabel}-Standortdaten:`, error);
+        return `<span class="text-danger">Fehler bei Standortdaten: ${error.message}</span>`;
+    }
+}
+
+/**
  * Zeigt einen Bericht für einen Zeiteintrag an
  * @param {string} timeEntryId - ID des Zeiteintrags
  * @param {string} projectId - ID des Projekts
@@ -229,6 +309,8 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             // Format: entry-26-5-2025-Michael-Dorner - wir extrahieren Datum und Namen
             const parts = timeEntryId.split('-');
             
+            console.log('Parsed ID parts:', parts);
+            
             if (parts.length >= 5) {
                 // Datum im Format 26-5-2025 extrahieren
                 const dateStr = `${parts[1]}.${parts[2]}.${parts[3]}`;
@@ -236,7 +318,7 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
                 // Mitarbeitername extrahieren und Bindestriche durch Leerzeichen ersetzen
                 let employeeName = parts.slice(4).join(' ').replace(/-/g, ' ');
                 
-                console.log(`Versuche Zeiteintrag anhand von Datum ${dateStr} und Mitarbeiter ${employeeName} zu finden`);
+                console.log(`DEBUG: Versuche Zeiteintrag anhand von Datum ${dateStr} und Mitarbeiter ${employeeName} zu finden`);
                 
                 // WICHTIG: Füge die ursprüngliche ID als Parameter hinzu, um exakten Eintrag zu finden
                 timeEntry = await DataService.getTimeEntryByDateAndName(dateStr, employeeName, projectId, timeEntryId);
@@ -325,22 +407,41 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
         
         // Report-Modal erstellen/aktualisieren
         const modal = createReportModal();
+        console.log('Modal erstellt/erhalten:', !!modal, modal.id);
         
-        // Modal-Titel setzen
-        const modalTitle = document.getElementById('report-modal-title');
+        // Modal-Titel setzen - hier modal.querySelector statt document.getElementById verwenden
+        const modalTitle = modal.querySelector('#report-modal-title');
+        console.log('Modal-Titel Element gefunden:', !!modalTitle);
         if (modalTitle) {
             modalTitle.textContent = `Zeiterfassungsbericht: ${project.name}`;
+            console.log('Modal-Titel gesetzt mit:', project.name);
         }
         
-        // Basisdaten anzeigen
-        const reportDate = document.getElementById('report-date');
-        const reportProject = document.getElementById('report-project');
-        const reportEmployee = document.getElementById('report-employee');
-        const reportTimeIn = document.getElementById('report-time-in');
-        const reportTimeOut = document.getElementById('report-time-out');
-        const reportWorkHours = document.getElementById('report-work-hours');
-        const reportNotes = document.getElementById('report-notes');
-        const reportPauseDetails = document.getElementById('report-pause-details');
+        // Basisdaten anzeigen - hier modal.querySelector statt document.getElementById verwenden
+        const reportDate = modal.querySelector('#report-date');
+        const reportProject = modal.querySelector('#report-project');
+        const reportEmployee = modal.querySelector('#report-employee');
+        const reportTimeIn = modal.querySelector('#report-time-in');
+        const reportTimeOut = modal.querySelector('#report-time-out');
+        const reportWorkHours = modal.querySelector('#report-work-hours');
+        const reportNotes = modal.querySelector('#report-notes');
+        const reportPauseDetails = modal.querySelector('#report-pause-details');
+        const reportLocationIn = modal.querySelector('#report-location-in');
+        const reportLocationOut = modal.querySelector('#report-location-out');
+        
+        // Debug: Prüfen, ob alle DOM-Elemente gefunden wurden
+        console.log('Report DOM-Elemente gefunden:', {
+            reportDate: !!reportDate,
+            reportProject: !!reportProject,
+            reportEmployee: !!reportEmployee,
+            reportTimeIn: !!reportTimeIn,
+            reportTimeOut: !!reportTimeOut,
+            reportWorkHours: !!reportWorkHours,
+            reportNotes: !!reportNotes,
+            reportPauseDetails: !!reportPauseDetails,
+            reportLocationIn: !!reportLocationIn,
+            reportLocationOut: !!reportLocationOut
+        });
         
         if (reportDate && reportProject && reportEmployee && reportTimeIn && 
             reportTimeOut && reportWorkHours && reportNotes && reportPauseDetails) {
@@ -421,6 +522,17 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             reportWorkHours.textContent = workHours;
             reportNotes.textContent = timeEntry.notes || '-';
             
+            // Debug: Prüfen, ob die Daten korrekt gesetzt wurden
+            console.log('Report Daten gesetzt:', {
+                date,
+                projectName: project.name,
+                employeeName: employee.name,
+                clockInTime,
+                clockOutTime,
+                workHours,
+                notes: timeEntry.notes || '-'
+            });
+            
             // Pausendetails anzeigen, falls vorhanden
             if (timeEntry.pauseDetails && timeEntry.pauseDetails.length > 0) {
                 let pauseDetailsHtml = '<ul class="pause-list">';
@@ -475,8 +587,8 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             }
         }
         
-        // Baustellenfotos laden und anzeigen
-        const sitePhotosGallery = document.getElementById('report-site-photos');
+        // Baustellenfotos laden und anzeigen - hier modal.querySelector statt document.getElementById verwenden
+        const sitePhotosGallery = modal.querySelector('#report-site-photos');
         if (sitePhotosGallery) {
             sitePhotosGallery.innerHTML = '<p>Baustellenfotos werden geladen...</p>';
             
@@ -697,8 +809,8 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             }
         }
         
-        // Lieferscheine laden und anzeigen
-        const deliveryNotesGallery = document.getElementById('report-delivery-notes');
+        // Lieferscheine laden und anzeigen - hier modal.querySelector statt document.getElementById verwenden
+        const deliveryNotesGallery = modal.querySelector('#report-delivery-notes');
         if (deliveryNotesGallery) {
             deliveryNotesGallery.innerHTML = '<p>Lieferscheine werden geladen...</p>';
             
@@ -828,279 +940,74 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             }
         }
         
-        // Modal anzeigen
-        modal.style.display = 'block';
+        // NEU: Standortdaten aus dem timeEntry-Objekt extrahieren und anzeigen
+        if (reportLocationIn && reportLocationOut) {
+            console.log('Zeige Standortinformationen im Modal:', {
+                clockInLocation: timeEntry.clockInLocation,
+                clockOutLocation: timeEntry.clockOutLocation
+            });
+            
+            // Einstempel-Standort formatieren und anzeigen
+            let clockInLocationHtml = '-';
+            if (timeEntry.clockInLocation) {
+                clockInLocationHtml = formatLocationInfo(timeEntry.clockInLocation, 'Einstempel');
+            }
+            
+            // Ausstempel-Standort formatieren und anzeigen
+            let clockOutLocationHtml = timeEntry.clockOutTime ? '-' : 'Noch nicht ausgestempelt';
+            if (timeEntry.clockOutLocation) {
+                clockOutLocationHtml = formatLocationInfo(timeEntry.clockOutLocation, 'Ausstempel');
+            }
+            
+            // Standortinformationen in das Modal schreiben
+            reportLocationIn.innerHTML = clockInLocationHtml;
+            reportLocationOut.innerHTML = clockOutLocationHtml;
+        }
         
-        // Bericht-Daten global speichern für erweiterte Funktionen
-        currentReportData = {
-            timeEntry,
-            project,
-            employee
-        };
+        // Modal anzeigen - WICHTIG: Diese Logik wurde aus dem if-Block herausgezogen, damit das Modal immer gezeigt wird
+        console.log('Zeige Report-Modal an');
+        modal.style.display = 'block';
+        modal.classList.add('visible');
+
+        // Sicherstellen, dass das Modal korrekt positioniert ist
+        document.body.classList.add('modal-open');
     } catch (error) {
-        console.error('Fehler beim Anzeigen des Berichts:', error);
-        alert('Fehler beim Anzeigen des Berichts: ' + error.message);
+        console.error('Fehler bei der Anzeige des Zeiteintragsberichts:', error);
+        alert('Es ist ein Fehler beim Laden des Berichts aufgetreten.');
     }
 }
 
-/**
- * Exportiert den Zeiteintragsbericht als PDF oder HTML
- */
-async function exportTimeEntryReport(timeEntry, project, employee) {
-    try {
-        console.log('Exportiere Bericht für:', timeEntry.id);
-        
-        // Erstelle ein neues Fenster für den Ausdruck
-        const printWindow = window.open('', '_blank');
-        
-        if (!printWindow) {
-            alert('Bitte erlauben Sie Popups für diese Webseite, um den Bericht zu exportieren.');
-            return;
-        }
-        
-        // Basisinformationen
-        const dateStr = formatDate(timeEntry.clockInTime);
-        const clockInStr = formatTime(timeEntry.clockInTime);
-        const clockOutStr = timeEntry.clockOutTime ? formatTime(timeEntry.clockOutTime) : '-';
-        
-        // Arbeitsstunden mit Pausenzeiten
-        let workHours = '-';
-        let pauseTimeStr = '';
-        
-        if (timeEntry.clockOutTime) {
-            const clockInDate = parseDate(timeEntry.clockInTime);
-            const clockOutDate = parseDate(timeEntry.clockOutTime);
-            const pauseTotalTime = timeEntry.pauseTotalTime || 0;
-            
-            if (clockInDate && clockOutDate) {
-                const totalTimeMs = clockOutDate - clockInDate;
-                const workTimeMs = totalTimeMs - pauseTotalTime;
-                
-                if (workTimeMs > 0) {
-                    const hours = workTimeMs / (1000 * 60 * 60);
-                    workHours = hours.toFixed(2) + 'h';
-                    
-                    if (pauseTotalTime > 0) {
-                        const pauseMinutes = Math.floor(pauseTotalTime / 60000);
-                        pauseTimeStr = ` (inkl. ${pauseMinutes} Min. Pause)`;
-                    }
-                }
-            }
-        }
-        
-        // Baustellenfotos sammeln
-        let sitePhotos = [];
-        
-        // 1. Suche nach direkten sitePhotos-Feldern
-        if (timeEntry.sitePhotos && Array.isArray(timeEntry.sitePhotos)) {
-            timeEntry.sitePhotos.forEach(photo => {
-                if (photo && (photo.url || photo.src)) {
-                    sitePhotos.push({
-                        url: photo.url || photo.src,
-                        comment: photo.comment || photo.description || ''
-                    });
-                }
-            });
-        }
-        
-        // 2. Suche nach einem generischen photos-Feld
-        if (timeEntry.photos && Array.isArray(timeEntry.photos)) {
-            timeEntry.photos.forEach(photo => {
-                if (photo && (photo.url || photo.src)) {
-                    const photoUrl = photo.url || photo.src;
-                    if (!sitePhotos.some(p => p.url === photoUrl)) {
-                        sitePhotos.push({
-                            url: photoUrl,
-                            comment: photo.comment || photo.description || ''
-                        });
-                    }
-                }
-            });
-        }
-        
-        // Lieferscheine sammeln
-        let deliveryNotes = [];
-        
-        // 1. Suche nach direkten deliveryNotes-Feldern
-        if (timeEntry.deliveryNotes && Array.isArray(timeEntry.deliveryNotes)) {
-            timeEntry.deliveryNotes.forEach(doc => {
-                if (doc && (doc.url || doc.src)) {
-                    deliveryNotes.push({
-                        url: doc.url || doc.src,
-                        comment: doc.comment || doc.description || ''
-                    });
-                }
-            });
-        }
-        
-        // 2. Suche nach einem generischen documents-Feld
-        if (timeEntry.documents && Array.isArray(timeEntry.documents)) {
-            timeEntry.documents.forEach(doc => {
-                if (doc && (doc.url || doc.src)) {
-                    const docUrl = doc.url || doc.src;
-                    if (!deliveryNotes.some(d => d.url === docUrl)) {
-                        deliveryNotes.push({
-                            url: docUrl,
-                            comment: doc.comment || doc.description || ''
-                        });
-                    }
-                }
-            });
-        }
-        
-        // Pausendetails
-        let pauseDetailsHtml = '';
-        if (timeEntry.pauseDetails && timeEntry.pauseDetails.length > 0) {
-            pauseDetailsHtml = '<h3>Pausendetails</h3><ul>';
-            
-            for (const pause of timeEntry.pauseDetails) {
-                try {
-                    // Konvertierung der Zeitstempel
-                    let startDate = parseDate(pause.start);
-                    let endDate = parseDate(pause.end);
-                    
-                    if (startDate && endDate) {
-                        const startTime = formatTime(startDate);
-                        const endTime = formatTime(endDate);
-                        const pauseDuration = Math.floor((endDate - startDate) / 60000);
-                        
-                        pauseDetailsHtml += `<li>Pause von ${startTime} bis ${endTime} (${pauseDuration} Min.)</li>`;
-                    }
-                } catch (e) {
-                    console.error('Fehler bei Pausendetails:', e);
-                }
-            }
-            
-            pauseDetailsHtml += '</ul>';
-        }
-        
-        // HTML für den Ausdruck erstellen
-        let photosHtml = '';
-        if (sitePhotos.length > 0) {
-            photosHtml = '<h3>Baustellenfotos</h3><div class="report-photos">';
-            
-            sitePhotos.forEach(photo => {
-                photosHtml += `
-                    <div class="photo-item">
-                        <img src="${photo.url}" style="max-width: 100%; max-height: 300px;">
-                        ${photo.comment ? `<p>${photo.comment}</p>` : ''}
-                    </div>
-                `;
-            });
-            
-            photosHtml += '</div>';
-        }
-        
-        let documentsHtml = '';
-        if (deliveryNotes.length > 0) {
-            documentsHtml = '<h3>Lieferscheine/Dokumente</h3><div class="report-documents">';
-            
-            deliveryNotes.forEach(doc => {
-                documentsHtml += `
-                    <div class="document-item">
-                        <img src="${doc.url}" style="max-width: 100%; max-height: 300px;">
-                        ${doc.comment ? `<p>${doc.comment}</p>` : ''}
-                    </div>
-                `;
-            });
-            
-            documentsHtml += '</div>';
-        }
-        
-        // Das vollständige HTML für das Druckfenster
-        const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Zeiterfassungsbericht - ${project.name || 'Projekt'} - ${dateStr}</title>
-            <meta charset="UTF-8">
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                h1, h2, h3 { color: #333; }
-                .report-header { margin-bottom: 20px; }
-                .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-                .notes { background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-                .photo-item, .document-item { margin-bottom: 15px; }
-                .report-photos, .report-documents { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
-                @media print {
-                    .no-print { display: none; }
-                    body { margin: 0; }
-                    .page-break { page-break-before: always; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="report-header">
-                <h1>Zeiterfassungsbericht</h1>
-                <button class="no-print" onclick="window.print()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Drucken</button>
-            </div>
-            
-            <h2>Grundinformationen</h2>
-            <div class="info-grid">
-                <div><strong>Projekt:</strong> ${project.name || 'Unbekanntes Projekt'}</div>
-                <div><strong>Mitarbeiter:</strong> ${employee.name || 'Unbekannter Mitarbeiter'}</div>
-                <div><strong>Datum:</strong> ${dateStr}</div>
-                <div><strong>Einstempelzeit:</strong> ${clockInStr}</div>
-                <div><strong>Ausstempelzeit:</strong> ${clockOutStr}</div>
-                <div><strong>Arbeitsstunden:</strong> ${workHours}${pauseTimeStr}</div>
-            </div>
-            
-            <h2>Notizen</h2>
-            <div class="notes">${timeEntry.notes || 'Keine Notizen vorhanden'}</div>
-            
-            ${pauseDetailsHtml}
-            
-            ${photosHtml}
-            
-            ${documentsHtml}
-            
-            <div class="report-footer">
-                <p>Erstellt am ${new Date().toLocaleDateString('de-DE')} um ${new Date().toLocaleTimeString('de-DE')}</p>
-            </div>
-        </body>
-        </html>
-        `;
-        
-        // HTML in das neue Fenster schreiben
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-        
-        // Nach dem Laden des Fensters fokussieren
-        printWindow.onload = function() {
-            printWindow.focus();
-        };
-        
-    } catch (error) {
-        console.error('Fehler beim Exportieren des Berichts:', error);
-        alert('Fehler beim Exportieren: ' + error.message);
-    }
-}
+// ...
 
 // Report-Modal erstellen
 function createReportModal() {
     // Prüfen, ob Modal bereits existiert
     let modal = document.getElementById('time-entry-report-modal');
-    if (modal) {
-        return modal;
+    let modalExists = !!modal;
+    
+    if (!modal) {
+        console.log('Erstelle neues Report-Modal');
+        // Modal erstellen
+        modal = document.createElement('div');
+        modal.id = 'time-entry-report-modal';
+        modal.className = 'modal report-modal';
+    } else {
+        console.log('Vorhandenes Report-Modal wird aktualisiert');
     }
-    
-    console.log('Erstelle Report-Modal');
-    
-    // Modal erstellen
-    modal = document.createElement('div');
-    modal.id = 'time-entry-report-modal';
-    modal.className = 'modal';
-    
+
+    // HTML-Inhalt immer setzen/aktualisieren, unabhängig davon ob Modal neu erstellt oder wiederverwendet wird
+
     // Event-Listener zum Schließen des Modals beim ESC-Taste
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape' && modal.style.display === 'block') {
             modal.style.display = 'none';
+            modal.classList.remove('visible');
+            document.body.classList.remove('modal-open');
         }
     });
-    
+
     modal.innerHTML = `
-        <div class="modal-content large-modal">
+        <div class="modal-content report-modal-content large-modal">
             <div class="modal-header">
                 <h3 id="report-modal-title">Zeiterfassungsbericht</h3>
                 <button type="button" class="close-modal-btn" id="report-close-btn">&times;</button>
@@ -1133,6 +1040,22 @@ function createReportModal() {
                             <span id="report-work-hours"></span>
                         </div>
                     </div>
+                    
+                    <!-- NEU: Standortinformationen für Ein- und Ausstempeln -->
+                    <div class="location-info-section">
+                        <h4 class="location-header">Standortinformationen</h4>
+                        <div class="location-info-grid">
+                            <div class="report-info-item location-item">
+                                <strong><i class="fas fa-map-marker-alt"></i> Einstempel-Standort:</strong>
+                                <div id="report-location-in" class="location-content"></div>
+                            </div>
+                            <div class="report-info-item location-item">
+                                <strong><i class="fas fa-map-marker-alt"></i> Ausstempel-Standort:</strong>
+                                <div id="report-location-out" class="location-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="report-info-item">
                         <strong>Notizen:</strong>
                         <span id="report-notes"></span>
@@ -1160,17 +1083,29 @@ function createReportModal() {
         </div>
     `;
     
-    document.body.appendChild(modal);
+    // Nur hinzufügen, wenn es ein neues Modal ist
+    if (!modalExists) {
+        document.body.appendChild(modal);
+    }
     
-    // Event-Listener für Schließen-Button
+    // Event-Listener für Schließen-Button immer neu hinzufügen
     const closeButton = modal.querySelector('.close-modal-btn');
-    closeButton.addEventListener('click', function() {
-        modal.style.display = 'none';
-    });
+    if (closeButton) {
+        // Alte Event-Listener entfernen, um doppelte zu vermeiden
+        closeButton.replaceWith(closeButton.cloneNode(true));
+        
+        // Neuen Event-Listener hinzufügen
+        modal.querySelector('.close-modal-btn').addEventListener('click', function() {
+            modal.style.display = 'none';
+            modal.classList.remove('visible');
+            document.body.classList.remove('modal-open');
+        });
+    }
     
     return modal;
 }
 
+// ...
 // Fullscreen-Bildanzeige
 function createFullscreenModal() {
     let modal = document.getElementById('fullscreen-image-modal');
@@ -1238,23 +1173,28 @@ function createFullscreenModal() {
 
 // Vollbildansicht eines Bildes öffnen
 function openFullscreenImage(imageUrl) {
-    const modal = document.getElementById('fullscreen-image-modal');
-    const fullscreenImage = document.querySelector('.fullscreen-image');
-    
-    if (modal && fullscreenImage) {
-        fullscreenImage.src = imageUrl;
+    try {
+        // Modal und Bild-Element finden
+        const modal = document.getElementById('fullscreen-image-modal');
+        const fullscreenImage = document.querySelector('.fullscreen-image');
         
-        // Speichern, ob das Report-Modal geöffnet war
-        const reportModal = document.getElementById('time-entry-report-modal');
-        if (reportModal && reportModal.style.display === 'block') {
-            reportModal.dataset.wasOpen = 'true';
-            reportModal.style.display = 'none';
+        if (modal && fullscreenImage) {
+            // Speichern, ob das Report-Modal geöffnet war
+            const reportModal = document.getElementById('time-entry-report-modal');
+            if (reportModal && reportModal.style.display === 'block') {
+                reportModal.dataset.wasOpen = 'true';
+                reportModal.style.display = 'none';
+            }
+            
+            // Bild setzen und Modal anzeigen
+            fullscreenImage.src = imageUrl;
+            modal.style.display = 'block';
+        } else {
+            console.error('Fullscreen-Modal oder Bild nicht gefunden');
+            alert('Vollbildansicht konnte nicht geöffnet werden');
         }
-        
-        modal.style.display = 'block';
-    } else {
-        console.error('Fullscreen-Modal oder Bild nicht gefunden');
-        alert('Vollbildansicht konnte nicht geöffnet werden');
+    } catch (error) {
+        console.error('Fehler beim Öffnen der Vollbildansicht:', error);
     }
 }
 // Hilfsfunktion zum Parsen von Datumswerten aus verschiedenen Formaten
@@ -1494,44 +1434,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Erstellt ein Fullscreen-Modal, falls es noch nicht existiert
 function createSingletonFullscreenModal() {
-    if (document.getElementById('fullscreen-image-modal')) {
-        return; // Modal existiert bereits
-    }
-    
-    console.log('Erstelle globales Fullscreen-Modal');
-    
-    const modal = document.createElement('div');
-    modal.id = 'fullscreen-image-modal';
-    modal.className = 'fullscreen-modal';
-    
-    modal.innerHTML = `
-        <button class="close-fullscreen-btn">&times;</button>
-        <div class="fullscreen-image-container">
-            <img class="fullscreen-image" src="" alt="Vollbildansicht">
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Event-Listener für Schließen-Button
-    const closeButton = modal.querySelector('.close-fullscreen-btn');
-    closeButton.addEventListener('click', function() {
-        modal.style.display = 'none';
-    });
-    
-    // Klick auf Modal schließt es
-    modal.addEventListener('click', function(event) {
-        if (event.target === modal) {
-            modal.style.display = 'none';
+    return new Promise((resolve, reject) => {
+        if (document.getElementById('fullscreen-image-modal')) {
+            resolve(); // Modal existiert bereits
+            return;
         }
-    });
-    
-    // ESC-Taste schließt Modal
-    document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') {
-            modal.style.display = 'none';
-        }
+        
+        console.log('Erstelle globales Fullscreen-Modal');
+        
+        const modal = document.createElement('div');
+        modal.id = 'fullscreen-image-modal';
+        modal.className = 'fullscreen-modal';
+        
+        modal.innerHTML = `
+            <button class="close-fullscreen-btn">&times;</button>
+            <div class="fullscreen-image-container">
+                <img class="fullscreen-image" src="" alt="Vollbildansicht">
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // ESC-Taste schließt Modal
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                modal.style.display = 'none';
+                modal.classList.remove('visible');
+                document.body.classList.remove('modal-open');
+            }
+        });
+        resolve();
     });
 }
 
-console.log('report-functions.js vollständig geladen');
+// Ende der Datei report-functions.js

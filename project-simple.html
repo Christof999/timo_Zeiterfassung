@@ -6,16 +6,68 @@
     <title>Vereinfachte Projektdetails - Lauffer Zeiterfassung</title>
     <!-- Firebase-SDKs einbinden -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     
-    <!-- PDF Export Bibliothek -->
+    <!-- Helper-Funktion für PDF Export -->
+    <script>
+        // Konvertiert Firebase Storage URLs in Base64 Data URLs für die PDF-Erstellung
+        async function getImageAsDataUrl(url) {
+            return new Promise((resolve, reject) => {
+                const storageRef = firebase.storage().refFromURL(url);
+                
+                // Wenn URL nicht formatiert werden kann, fallback auf Original URL
+                if (!storageRef) {
+                    console.warn('Konnte URL nicht als Storage Referenz formatieren:', url);
+                    resolve(url);
+                    return;
+                }
+                
+                // Token für direkten Zugriff generieren
+                storageRef.getDownloadURL()
+                    .then(directUrl => {
+                        // Bild über direkte URL laden
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        
+                        img.onload = () => {
+                            // In Canvas zeichnen und als Data URL umwandeln
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            resolve(canvas.toDataURL('image/jpeg', 0.9));
+                        };
+                        
+                        img.onerror = () => {
+                            console.error('Fehler beim Laden des Bildes:', directUrl);
+                            reject(new Error('Bild konnte nicht geladen werden'));
+                        };
+                        
+                        // Timestamp hinzufügen um Caching zu vermeiden
+                        img.src = `${directUrl}&t=${new Date().getTime()}`;
+                    })
+                    .catch(error => {
+                        console.error('Fehler beim Abrufen der Download-URL:', error);
+                        reject(error);
+                    });
+            });
+        }
+    </script>
+    
+    <!-- Firebase-Konfiguration -->
+    <script src="firebase-config.js"></script>
+    <script src="config.js"></script>
+    
+    <!-- PDF Export Bibliotheken -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <!-- Datenservice und Hilfsfunktionen -->
-    <script src="firebase-config.js"></script>
     <script src="data.js"></script>
-    <!-- Wir laden report-functions.js und pdf-export.js am Ende des Body-Tags -->
+    <!-- Alle Funktionen direkt in dieser Datei, keine externen Abhängigkeiten -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
     <style>
@@ -141,15 +193,51 @@
             gap: 15px;
             margin-top: 20px;
         }
-        /* Stile für den PDF-Export */
+        
+        /* PDF-optimierte Galeriedarstellung mit 4 Bildern pro Seite */
         @media print {
             .gallery {
                 grid-template-columns: 1fr 1fr;
                 page-break-inside: avoid;
+                grid-template-rows: auto;
+                gap: 20px;
             }
             .gallery-item {
                 page-break-inside: avoid;
-                margin-bottom: 15px;
+                margin-bottom: 20px;
+                break-inside: avoid;
+            }
+            .gallery-item:nth-child(4n+1) {
+                break-before: page;
+            }
+            /* Spezielle Styles für die ersten 4 Items (keine Seitenumbruch davor) */
+            .gallery-item:nth-child(1),
+            .gallery-item:nth-child(2),
+            .gallery-item:nth-child(3),
+            .gallery-item:nth-child(4) {
+                break-before: auto;
+            }
+            /* Größere Bilder im PDF */
+            .gallery-img {
+                height: 300px !important;
+                object-fit: contain !important;
+            }
+            /* Kommentare besser sichtbar machen */
+            .gallery-caption {
+                font-size: 14px !important;
+                margin: 10px 0 !important;
+                font-weight: bold !important;
+                color: black !important;
+                padding: 5px !important;
+            }
+            .image-comment {
+                margin-top: 5px !important;
+                font-size: 13px !important;
+                color: black !important;
+                background-color: #f9f9f9 !important;
+                padding: 8px !important;
+                border-left: 3px solid #5e8c2f !important;
+                page-break-inside: avoid !important;
             }
         }
         .gallery-item {
@@ -168,9 +256,30 @@
         }
         .gallery-img {
             width: 100%;
-            height: 150px;
+            height: 200px;
             object-fit: cover;
             border-radius: 4px;
+        }
+        
+        /* Spezielle Klasse für PDF-Export Modus */
+        .pdf-export-mode .gallery-img {
+            height: 300px;
+            object-fit: contain;
+        }
+        
+        .pdf-export-mode .image-comment {
+            background-color: #f9f9f9;
+            padding: 8px;
+            border-left: 3px solid #5e8c2f;
+            margin-top: 8px;
+        }
+        
+        .gallery-caption {
+            margin-top: 8px;
+            font-size: 14px;
+            text-align: center;
+            color: #555;
+            overflow-wrap: break-word;
         }
         .btn {
             display: inline-block;
@@ -263,14 +372,125 @@
         .lightbox-prev:hover, .lightbox-next:hover {
             background: rgba(0,0,0,0.8);
         }
+        
+        /* Zeiteintrag-Bericht Modal Styles */
+        .report-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            overflow-y: auto;
+        }
+        
+        .report-modal.visible {
+            display: block;
+        }
+        
+        .report-modal-content {
+            position: relative;
+            background-color: #fff;
+            width: 90%;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .report-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .report-modal-close:hover {
+            color: #000;
+        }
+        
+        .report-btn {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #5e8c2f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .report-btn:hover {
+            background-color: #4a7024;
+        }
+        
+        .report-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .report-section h3 {
+            color: #5e8c2f;
+            margin-bottom: 10px;
+        }
+        
+        .report-detail {
+            display: flex;
+            margin-bottom: 8px;
+        }
+        
+        .report-label {
+            font-weight: bold;
+            width: 180px;
+            flex-shrink: 0;
+        }
+        
+        .report-value {
+            flex-grow: 1;
+        }
+        
+        .location-link {
+            color: #0078d4;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 600px) {
+            .report-detail {
+                flex-direction: column;
+            }
+            
+            .report-label {
+                width: 100%;
+                margin-bottom: 4px;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Zeiteintrag-Bericht Modal -->
+    <div id="time-entry-report-modal" class="report-modal">
+        <div class="report-modal-content">
+            <span class="report-modal-close">&times;</span>
+            <div id="time-entry-report-content"></div>
+        </div>
+    </div>
+    
     <div class="container">
         <div class="header-container">
-            <h1 id="project-title">Projektbericht</h1>
+            <h1 id="project-title">Projektdetails</h1>
             <div class="actions-container">
-                <button id="export-btn" class="btn btn-export"><i class="fas fa-file-pdf"></i> PDF exportieren</button>
+                <button id="export-pdf-btn" class="btn btn-export"><i class="fas fa-file-pdf"></i> PDF exportieren</button>
                 <a href="index.html" id="back-link" class="btn"><i class="fas fa-arrow-left"></i> Zurück zur Hauptseite</a>
             </div>
         </div>
@@ -385,15 +605,11 @@
             console.log('backLinkEl:', backLinkEl ? 'gefunden' : 'NICHT GEFUNDEN');
             
             // Event-Listener für Export-Button
-            if (exportBtn) {
-                exportBtn.addEventListener('click', function() {
+            const exportPdfBtn = document.getElementById('export-pdf-btn');
+            if (exportPdfBtn) {
+                exportPdfBtn.addEventListener('click', function() {
                     console.log('PDF-Export-Button geklickt');
-                    if (typeof generatePDF === 'function') {
-                        generatePDF();
-                    } else {
-                        console.error('generatePDF-Funktion nicht verfügbar');
-                        alert('PDF-Export-Funktion ist nicht verfügbar.');
-                    }
+                    generateProjectPDF();
                 });
             }
             
@@ -442,6 +658,9 @@
                 // Nach erfolgreichem Test das Projekt laden
                 console.log('🚀 Starte Projekt-Laden nach erfolgreichem Firestore-Test...');
                 loadProject();
+                
+                // Die Modal-Funktionen werden automatisch durch time-entry-report.js initialisiert
+                // beim DOM-Content-Loaded Event
                 
             } catch (testError) {
                 console.error('❌ Firestore-Test fehlgeschlagen:', testError);
@@ -961,19 +1180,22 @@
                     
                     // Beschreibung erstellen
                     const description = document.createElement('p');
+                    description.className = 'gallery-caption';
                     description.textContent = `${employeeName} - ${formattedDate}`;
                     
                     // Kommentar hinzufügen, wenn vorhanden
+                    const commentContainer = document.createElement('div');
+                    commentContainer.className = 'image-comment';
                     if (file.comment) {
-                        const commentContainer = document.createElement('div');
-                        commentContainer.className = 'image-comment';
                         commentContainer.innerHTML = `<strong>Kommentar:</strong> ${file.comment}`;
-                        galleryItem.appendChild(commentContainer);
+                    } else {
+                        commentContainer.innerHTML = '<em>Kein Kommentar vorhanden</em>';
                     }
                     
                     // Elemente zusammenfügen
                     galleryItem.appendChild(img);
                     galleryItem.appendChild(description);
+                    galleryItem.appendChild(commentContainer);
                     
                     // In die Galerie einfügen
                     container.appendChild(galleryItem);
@@ -1100,6 +1322,153 @@
         // Die PDF-Export-Funktion wurde in pdf-export.js ausgelagert
         // Export-Button Event-Listener wird im DOMContentLoaded-Event gesetzt
     </script>
+    
+    <!-- PDF Export Funktion für Projekte -->
+    <script>
+        // Komplett neue PDF Export Funktion mit manueller PDF-Erstellung
+        async function generateProjectPDF() {
+            try {
+                console.log('Starte verbesserten PDF-Export...');
+                const pdfContent = document.getElementById('pdf-content');
+                
+                // Status für Export-Button aktualisieren
+                const exportBtn = document.getElementById('export-pdf-btn');
+                if (exportBtn) {
+                    exportBtn.disabled = true;
+                    exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PDF wird erstellt...';
+                }
+                
+                // Projektdaten für die erste Seite abrufen
+                const projectInfoEl = document.getElementById('project-info');
+                const projectTitle = document.querySelector('h1')?.textContent || 'Projektbericht';
+                const projectInfo = projectInfoEl?.innerHTML || '';
+                
+                // Zeiteinträge abrufen
+                const timeEntriesTable = document.getElementById('time-entries-table')?.outerHTML || '<p>Keine Zeiteinträge vorhanden</p>';
+                
+                // Baustellenbilder und Kommentare abrufen
+                const images = [];
+                document.querySelectorAll('#construction-images .gallery-item, #documents-gallery .gallery-item').forEach(item => {
+                    const img = item.querySelector('img');
+                    const caption = item.querySelector('.gallery-caption')?.textContent || '';
+                    const comment = item.querySelector('.image-comment')?.textContent || '';
+                    
+                    if (img && img.src) {
+                        images.push({
+                            src: img.src,
+                            caption: caption,
+                            comment: comment
+                        });
+                    }
+                });
+                
+                console.log(`PDF wird mit ${images.length} Bildern erstellt`);
+                
+                // Manuelle PDF-Erstellung mit jsPDF
+                const pdf = new jspdf.jsPDF({ format: 'a4', unit: 'mm' });
+                
+                // Erste Seite: Titel und Projektinfos
+                pdf.setFontSize(24);
+                pdf.setTextColor(94, 140, 47); // Lauffer Grün
+                pdf.text(projectTitle, 20, 30);
+                
+                pdf.setFontSize(12);
+                pdf.setTextColor(0, 0, 0);
+                
+                // Text für Projektinfo vorbereiten (nur Text, kein HTML)
+                const projectInfoText = projectInfoEl?.textContent.replace(/\s+/g, ' ').trim() || '';
+                const splitProjectInfo = pdf.splitTextToSize(projectInfoText, 170);
+                pdf.text(splitProjectInfo, 20, 50);
+                
+                // Zeiteinträge - nur Titel erwähnen, da zu komplex für manuelle Konvertierung
+                pdf.text('Zeiteinträge sind im Projekt vorhanden', 20, 100);
+                
+                // Anzahl der Bilder anzeigen
+                pdf.text(`${images.length} Bilder sind im Projekt enthalten und werden auf den folgenden Seiten angezeigt.`, 20, 110);
+                
+                // Bilder auf separate Seiten, 4 pro Seite
+                for (let i = 0; i < images.length; i += 4) {
+                    // Neue Seite für jede Gruppe von 4 Bildern
+                    pdf.addPage();
+                    
+                    // Bilder auf dieser Seite (höchstens 4)
+                    const pageImages = images.slice(i, i + 4);
+                    
+                    // 2x2 Raster für Bilder
+                    for (let j = 0; j < pageImages.length; j++) {
+                        const img = pageImages[j];
+                        const row = Math.floor(j / 2); // 0 oder 1
+                        const col = j % 2;             // 0 oder 1
+                        
+                        // Position berechnen (Seitenbreite=210mm, Höhe=297mm)
+                        const x = 20 + col * 90;     // 20mm vom Rand, 90mm pro Spalte
+                        const y = 20 + row * 130;    // 20mm vom Rand, 130mm pro Zeile
+                        
+                        try {
+                            // Bildgröße anpassen (maximal 80x80mm)
+                            pdf.addImage(img.src, 'JPEG', x, y, 80, 80, undefined, 'MEDIUM');
+                            
+                            // Bildunterschrift hinzufügen
+                            pdf.setFontSize(10);
+                            pdf.setTextColor(0, 0, 0);
+                            const captionLines = pdf.splitTextToSize(img.caption, 80); 
+                            pdf.text(captionLines, x, y + 85);
+                            
+                            // Kommentar hinzufügen
+                            pdf.setFontSize(9);
+                            pdf.setTextColor(100, 100, 100);
+                            const commentLines = pdf.splitTextToSize(img.comment, 80);
+                            pdf.text(commentLines, x, y + 95);
+                            
+                        } catch (err) {
+                            console.error(`Fehler beim Hinzufügen des Bildes ${j}:`, err);
+                            // Fehlernachricht anstelle des Bildes einfügen
+                            pdf.setFontSize(10);
+                            pdf.setTextColor(255, 0, 0);
+                            pdf.text(`[Bild konnte nicht geladen werden]`, x, y + 40);
+                        }
+                    }
+                }
+                
+                // PDF anzeigen oder speichern
+                pdf.save('lauffer-projekt-bericht.pdf');
+                
+                console.log('PDF Export erfolgreich abgeschlossen');
+                
+                // Export-Button zurücksetzen
+                if (exportBtn) {
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = '<i class="fas fa-file-pdf"></i> PDF exportieren';
+                }
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Schwerwiegender Fehler beim PDF-Export:', error);
+                alert(`Fehler beim PDF-Export: ${error.message || 'Unbekannter Fehler'} - Bitte versuchen Sie es erneut.`);
+                
+                // Export-Button zurücksetzen
+                const exportBtn = document.getElementById('export-pdf-btn');
+                if (exportBtn) {
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = '<i class="fas fa-file-pdf"></i> PDF exportieren';
+                }
+                
+                return false;
+            }
+        }
+    </script>
+    
+    <!-- Modal für Zeiteintrag-Bericht -->
+    <div id="time-entry-report-modal" class="report-modal">
+        <div class="report-modal-content">
+            <button class="report-modal-close">&times;</button>
+            <div id="time-entry-report-content"></div>
+        </div>
+    </div>
+    
+    <!-- Zeiteintrag-Bericht Funktionen -->
+    <script src="time-entry-report.js"></script>
     
     <!-- Report-functions und PDF-Export am Ende laden -->
     <script src="report-functions.js"></script>
