@@ -53,7 +53,9 @@ const DataService = {
           // Check if we have an admin in local storage but Firebase shows anonymous
           if (user.isAnonymous && storedAdmin) {
             console.log('Admin in Session gefunden, aber Firebase zeigt anonymen Benutzer. Session wird aktualisiert.');
-            // Don't resolve yet - we'll try to restore admin session
+            // WICHTIG: Auth Promise jetzt sofort auflösen - lokaler Admin-Login ist gültig!
+            resolve();
+            unsubscribe();
           } else {
             // Normal case - auth state is as expected
             resolve();
@@ -312,25 +314,79 @@ const DataService = {
   },
 
   async getProjectById(projectId) {
+    // Cache-Key für dieses Projekt
+    const cacheKey = `project_${projectId}`;
+    
+    // Prüfe auf Cache-Eintrag
+    const cachedProject = sessionStorage.getItem(cacheKey);
+    if (cachedProject) {
+      console.log(`🔄 Projekt ${projectId} aus Cache geladen`);
+      return JSON.parse(cachedProject);
+    }
+    
     await this._authReadyPromise;
     if (!projectId) {
-      console.error("Keine Projekt-ID angegeben");
+      console.error("❌ Keine Projekt-ID angegeben");
       return null;
     }
+    
+    console.log(`🔍 Starte Firestore-Abfrage für Projekt ${projectId}...`);
+    
     try {
-      const doc = await this.projectsCollection.doc(projectId).get();
+      // Verwende get() mit explizitem source-Parameter für schnellere Antwort
+      const doc = await this.projectsCollection.doc(projectId).get({ source: 'server' });
+      console.log(`✅ Firestore-Antwort für Projekt ${projectId} erhalten`);
+      
       if (!doc.exists) {
         console.log(`❌ Projekt mit ID ${projectId} nicht gefunden`);
         return null;
       }
+      
       const projectData = doc.data();
-      return { id: doc.id, ...projectData };
+      const project = { id: doc.id, ...projectData };
+      
+      // Speichere im Cache
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(project));
+      } catch (cacheError) {
+        console.warn(`⚠️ Projekt konnte nicht gecached werden: ${cacheError.message}`);
+      }
+      
+      return project;
     } catch (error) {
       console.error(
         `❌ Fehler beim Abrufen des Projekts mit ID ${projectId}:`,
         error
       );
-      return null;
+      
+      // Versuche eine alternative Abfrage ohne Quelle anzugeben
+      try {
+        console.log(`🔄 Versuche alternative Projekt-Abfrage...`);
+        const altDoc = await this.projectsCollection.doc(projectId).get();
+        
+        if (!altDoc.exists) {
+          console.log(`❌ Projekt mit ID ${projectId} nicht gefunden (Alternative Abfrage)`);  
+          return null;
+        }
+        
+        const projectData = altDoc.data();
+        const project = { id: altDoc.id, ...projectData };
+        
+        // Speichere im Cache
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(project));
+        } catch (cacheError) {
+          console.warn(`⚠️ Projekt konnte nicht gecached werden: ${cacheError.message}`);
+        }
+        
+        return project;
+      } catch (altError) {
+        console.error(
+          `❌ Auch alternative Projekt-Abfrage fehlgeschlagen:`,
+          altError
+        );
+        return null;
+      }
     }
   },
 
