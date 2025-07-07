@@ -796,10 +796,10 @@
                 // Timeout für den getProjectById Aufruf
                 const projectPromise = DataService.getProjectById(projectId);
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Timeout: getProjectById dauert zu lange (10s)')), 10000)
+                    setTimeout(() => reject(new Error('Timeout: getProjectById dauert zu lange (30s)')), 30000)
                 );
                 
-                console.log('⏱️ Starte getProjectById mit 10s Timeout...');
+                console.log('⏱️ Starte getProjectById mit 30s Timeout...');
                 const project = await Promise.race([projectPromise, timeoutPromise]);
                 console.log('📤 DataService.getProjectById Ergebnis:', project);
                 console.log('📤 Projekt-Typ:', typeof project);

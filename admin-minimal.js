@@ -143,48 +143,28 @@ document.addEventListener('DOMContentLoaded', function() {
             
             console.log('Admin-Login-Versuch mit:', username);
             
-            // Einfache direkte Prüfung
+            // Admin-Authentifizierung prüfen (lokale Methode)
             if (username === 'admin' && password === 'admin123') {
                 console.log('Admin-Login erfolgreich!');
                 
                 // Admin-Objekt speichern
-                const admin = { username: username, name: 'Administrator' };
+                const admin = { username: username, name: 'Administrator', isAdmin: true };
                 localStorage.setItem('lauffer_admin_user', JSON.stringify(admin));
                 
-                // UI aktualisieren
-                adminLoginSection.classList.add('hidden');
-                adminDashboard.classList.remove('hidden');
-                adminNameSpan.textContent = 'Administrator';
-                
-                // Dashboard-Daten laden
-                loadDashboardData();
-                loadEmployeesTable();
-                loadProjectsTable();
-                loadReportFilters();
-                
-                // Dashboard-Daten regelmäßig aktualisieren
-                const newInterval = setInterval(loadDashboardData, 30000); // Alle 30 Sekunden
-                setDashboardRefreshInterval(newInterval);
-                
-                // HINWEIS: Firebase Email/Password Auth ist deaktiviert
-                // Wir verwenden vorerst die lokale Authentifizierung
-                console.log('HINWEIS: Firebase Email/Password Auth ist deaktiviert');
-                console.log('Um Firebase Auth zu verwenden, aktivieren Sie den Email/Password Provider in der Firebase Console');
-                
                 try {
-                    // Prüfen, ob ein Firebase-Benutzer existiert
+                    // Hiermit sicherstellen, dass der Admin-Status in Firestore gesetzt ist
+                    // (Falls der Nutzer bereits anonym oder als Admin angemeldet ist)
                     const currentUser = firebase.auth().currentUser;
                     console.log('Aktueller Firebase-Benutzer:', currentUser ? 
-                                currentUser.uid + (currentUser.isAnonymous ? ' (anonym)' : '') : 'keiner');
+                            currentUser.uid + (currentUser.isAnonymous ? ' (anonym)' : '') : 'keiner');
                     
-                    // Für die Firestore-Berechtigungen: Falls ein Admin in der Firebase-DB existiert,
-                    // setzen wir den Admin-Status in der employees-Collection
                     if (currentUser) {
                         const db = firebase.firestore();
                         await db.collection('employees').doc(currentUser.uid).set({
                             name: 'Administrator',
                             username: 'admin',
                             isAdmin: true,
+                            email: 'admin@lauffer-zeiterfassung.de'
                         }, { merge: true });
                         console.log('Admin-Status in employees-Collection gesetzt für UID:', currentUser.uid);
                     }
@@ -192,9 +172,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('Firebase-Operation nicht möglich:', error.message);
                     console.log('Fahren fort mit lokaler Admin-Authentifizierung...');
                 }
+                
+                // UI aktualisieren
+                adminLoginSection.classList.add('hidden');
+                adminDashboard.classList.remove('hidden');
+                adminNameSpan.textContent = 'Administrator';
+                
+                // Warte einen Moment, damit DataService vollständig initialisiert werden kann
+                console.log('Warte kurz auf Initialisierung des DataService...');
+                
+                setTimeout(async () => {
+                    console.log('DataService Status:', DataService._authReadyPromise ? 'Auth-Promise existiert' : 'Kein Auth-Promise');
+                    console.log('Firebase Auth Status:', firebase.auth().currentUser ? 
+                                 `Angemeldet als ${firebase.auth().currentUser.uid} (${firebase.auth().currentUser.isAnonymous ? 'anonym' : 'nicht anonym'})` : 
+                                 'Kein Benutzer');
+                    
+                    // Explizit DataService.init() erneut aufrufen, um sicherzustellen, dass alles richtig initialisiert ist
+                    await DataService.init();
+                    
+                    // Dashboard-Daten laden
+                    console.log('Starte Laden der Dashboard-Daten...');
+                    loadDashboardData();
+                    loadEmployeesTable();
+                    loadProjectsTable();
+                    loadReportFilters();
+                }, 1000);
+                
+                // Dashboard-Daten regelmäßig aktualisieren
+                const newInterval = setInterval(loadDashboardData, 30000);
+                setDashboardRefreshInterval(newInterval);
             } else {
-                console.error('Ungültige Admin-Zugangsdaten:', username, password);
-                alert('Ungültige Zugangsdaten! Bitte verwenden Sie admin/admin123');
+                console.error('Ungültige Admin-Zugangsdaten!');
+                alert('Ungültige Admin-Zugangsdaten! Bitte nutzen Sie admin/admin123');
             }
         });
     } else {

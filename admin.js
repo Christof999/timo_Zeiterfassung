@@ -392,93 +392,104 @@ async function handleAdminLogin(event) {
                 await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
                 console.log('Firebase Auth Persistenz auf LOCAL gesetzt');
                 
-                // Zuerst aus der anonymen Anmeldung ausloggen (falls vorhanden)
-                if (firebase.auth().currentUser && firebase.auth().currentUser.isAnonymous) {
+                // Prüfen, ob ein Benutzer angemeldet ist
+                const currentUser = firebase.auth().currentUser;
+                
+                // Nur abmelden, wenn ein anonymer Benutzer angemeldet ist
+                if (currentUser && currentUser.isAnonymous) {
                     console.log('Abmelden des anonymen Benutzers...');
                     await firebase.auth().signOut();
                 }
                 
                 // Mit E-Mail und Passwort anmelden (für Admin-Authentifizierung)
+                let adminUser = null;
                 try {
                     console.log('Versuche Admin-Login mit Firebase Auth...');
-                    await firebase.auth().signInWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
+                    const userCredential = await firebase.auth().signInWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
+                    adminUser = userCredential.user;
                     console.log('Firebase Auth erfolgreich für Admin');
                 } catch (authError) {
-                    console.log('Firebase Auth fehlgeschlagen, versuche Benutzer zu erstellen:', authError.message);
-                    // Falls der Benutzer nicht existiert, erstellen wir ihn (nur für Entwicklung)
-                    try {
-                        await firebase.auth().createUserWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
-                        console.log('Admin-Benutzer in Firebase erstellt');
-                    } catch (createError) {
-                        console.error('Konnte Admin-Benutzer nicht erstellen:', createError);
-                        alert('Fehler bei der Admin-Benutzeranmeldung: ' + createError.message);
-                        return; // Beende die Funktion, wenn die Authentifizierung fehlschlägt
+                    if (authError.code === 'auth/user-not-found') {
+                        console.log('Admin existiert noch nicht, wird einmalig erstellt');
+                        // Falls der Benutzer nicht existiert, erstellen wir ihn (nur einmalig!)
+                        try {
+                            const userCredential = await firebase.auth().createUserWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
+                            adminUser = userCredential.user;
+                            console.log('Admin-Benutzer in Firebase erstellt:', adminUser.uid);
+                        } catch (createError) {
+                            console.error('Konnte Admin-Benutzer nicht erstellen:', createError);
+                            alert('Fehler bei der Admin-Benutzeranmeldung: ' + createError.message);
+                            return; // Beende die Funktion, wenn die Authentifizierung fehlschlägt
+                        }
+                    } else {
+                        console.error('Authentifizierung fehlgeschlagen:', authError);
+                        alert('Authentifizierung fehlgeschlagen: ' + authError.message);
+                        return;
                     }
                 }
                 
-                // Warten auf Aktualisierung des Auth-Status
-                await new Promise(resolve => {
-                    const unsubscribe = firebase.auth().onAuthStateChanged(user => {
-                        if (user && !user.isAnonymous) {
-                            console.log('Auth-Status aktualisiert:', user.uid, user.email);
-                            unsubscribe();
-                            resolve();
-                        }
-                    });
-                    // Timeout nach 5 Sekunden, um zu vermeiden, dass wir für immer hängen
-                    setTimeout(() => {
-                        unsubscribe();
-                        resolve();
-                    }, 5000);
-                });
-                
-                const admin = { username: username, name: 'Administrator' };
+                // Admin-Metadaten für die App
+                const admin = { 
+                    username: username, 
+                    name: 'Administrator',
+                    uid: adminUser ? adminUser.uid : null,
+                    email: adminUser ? adminUser.email : 'admin@lauffer-zeiterfassung.de',
+                    isAdmin: true
+                };
                 
                 // Admin in globaler Variable und im lokalen Speicher speichern
                 setCurrentAdmin(admin);
                 DataService.setCurrentAdmin(admin);
                 
-                // Stelle sicher, dass der Admin-Status in der employees-Collection existiert
-                const currentUser = firebase.auth().currentUser;
-                if (currentUser) {
-                    console.log('Aktueller Firebase Benutzer nach Login:', currentUser.uid, 
-                              'Anonym:', currentUser.isAnonymous, 'Email:', currentUser.email);
-                    // Überprüfe, ob der Benutzer bereits als Admin in employees existiert
+                // Aktueller Firebase-Nutzer nach dem Login
+                const finalUser = firebase.auth().currentUser;
+                
+                if (finalUser && !finalUser.isAnonymous) {
+                    console.log('Admin erfolgreich angemeldet. UID:', finalUser.uid);
+                    
+                    // Prüfen, ob der Admin bereits in der employees-Collection existiert
                     try {
                         const db = firebase.firestore();
-                        // Füge den Benutzer in die employees-Collection ein oder aktualisiere ihn
-                        await db.collection('employees').doc(currentUser.uid).set({
-                            name: 'Administrator',
-                            username: 'admin',
-                            isAdmin: true,
-                            email: currentUser.email || 'admin@lauffer-zeiterfassung.de'
-                        }, { merge: true });
-                        console.log('Admin-Status in employees-Collection gesetzt, UID:', currentUser.uid);
+                        const employeeRef = db.collection('employees').doc(finalUser.uid);
+                        const employeeDoc = await employeeRef.get();
                         
-                        // Aktualisiere den lokalen Cache der Firestore-Instanz
-                        db.clearPersistence().then(() => {
-                            console.log('Firestore Cache geleert'); 
-                        }).catch(err => {
-                            console.warn('Konnte Firestore Cache nicht leeren:', err);
-                        });
+                        if (!employeeDoc.exists) {
+                            console.log('Admin-Eintrag in employees existiert nicht, wird erstellt.');
+                            // Nur erstellen, wenn der Eintrag noch nicht existiert
+                            await employeeRef.set({
+                                name: 'Administrator',
+                                username: 'admin',
+                                isAdmin: true,
+                                email: finalUser.email || 'admin@lauffer-zeiterfassung.de'
+                            });
+                            console.log('Admin-Eintrag in employees-Collection erstellt.');
+                        } else {
+                            console.log('Admin-Eintrag existiert bereits in employees-Collection.');
+                            // Optional: Sicherstellen, dass das isAdmin-Flag gesetzt ist
+                            if (!employeeDoc.data().isAdmin) {
+                                await employeeRef.update({ isAdmin: true });
+                                console.log('Admin-Flag in vorhandenem Eintrag gesetzt.');
+                            }
+                        }
                     } catch (dbError) {
-                        console.error('Fehler beim Aktualisieren des Admin-Status:', dbError);
+                        console.error('Fehler bei der Überprüfung/Erstellung des Admin-Eintrags:', dbError);
+                        // Trotz DB-Fehler fortfahren, damit die Anmeldung funktioniert
                     }
+                    
+                    // Hauptansicht anzeigen ohne Seite neu zu laden
+                    console.log('Admin-Dashboard wird angezeigt...');
+                    showAdminDashboard();
+                    loadDashboardData();
                 } else {
-                    console.error('Kein Firebase-Benutzer nach dem Login!');  
+                    console.error('Kein gültiger Firebase-Benutzer nach dem Login!');
+                    alert('Fehler: Kein gültiger Firebase-Benutzer nach der Anmeldung!');
                 }
-                
-                console.log('Admin erfolgreich angemeldet:', admin);
-                
-                // Seite neu laden, um sicherzustellen, dass der neue Auth-Status überall verwendet wird
-                alert('Admin-Login erfolgreich! Die Seite wird neu geladen, um die Berechtigungen zu aktualisieren.');
-                window.location.reload();
             } catch (firebaseError) {
                 console.error('Firebase Auth Fehler:', firebaseError);
                 alert('Fehler bei der Firebase-Authentifizierung: ' + firebaseError.message);
             }
         } else {
-            console.error('Ungültige Admin-Zugangsdaten!', username, password);
+            console.error('Ungültige Admin-Zugangsdaten!', username);
             alert('Ungültige Admin-Zugangsdaten! Bitte nutzen Sie admin/admin123');
         }
     } catch (error) {
