@@ -384,21 +384,99 @@ async function handleAdminLogin(event) {
         const password = adminPasswordInput.value;
         
         console.log('Versuche Admin-Login mit:', username);
-        console.log('Admin-Config:', CONFIG.ADMIN_USERNAME, CONFIG.ADMIN_PASSWORD);
         
         // Admin-Authentifizierung prüfen (für Demo-Zwecke)
         if (username === 'admin' && password === 'admin123') {
-            const admin = { username: username, name: 'Administrator' };
-            
-            // Admin in globaler Variable und im lokalen Speicher speichern
-            setCurrentAdmin(admin);
-            DataService.setCurrentAdmin(admin);
-            
-            console.log('Admin erfolgreich angemeldet:', admin);
-            
-            // Dashboard anzeigen und Daten laden
-            await showAdminDashboard();
-            await loadDashboardData();
+            try {
+                // Persistenz auf LOCAL setzen, damit die Session nach Neuladen erhalten bleibt
+                await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+                console.log('Firebase Auth Persistenz auf LOCAL gesetzt');
+                
+                // Zuerst aus der anonymen Anmeldung ausloggen (falls vorhanden)
+                if (firebase.auth().currentUser && firebase.auth().currentUser.isAnonymous) {
+                    console.log('Abmelden des anonymen Benutzers...');
+                    await firebase.auth().signOut();
+                }
+                
+                // Mit E-Mail und Passwort anmelden (für Admin-Authentifizierung)
+                try {
+                    console.log('Versuche Admin-Login mit Firebase Auth...');
+                    await firebase.auth().signInWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
+                    console.log('Firebase Auth erfolgreich für Admin');
+                } catch (authError) {
+                    console.log('Firebase Auth fehlgeschlagen, versuche Benutzer zu erstellen:', authError.message);
+                    // Falls der Benutzer nicht existiert, erstellen wir ihn (nur für Entwicklung)
+                    try {
+                        await firebase.auth().createUserWithEmailAndPassword('admin@lauffer-zeiterfassung.de', password);
+                        console.log('Admin-Benutzer in Firebase erstellt');
+                    } catch (createError) {
+                        console.error('Konnte Admin-Benutzer nicht erstellen:', createError);
+                        alert('Fehler bei der Admin-Benutzeranmeldung: ' + createError.message);
+                        return; // Beende die Funktion, wenn die Authentifizierung fehlschlägt
+                    }
+                }
+                
+                // Warten auf Aktualisierung des Auth-Status
+                await new Promise(resolve => {
+                    const unsubscribe = firebase.auth().onAuthStateChanged(user => {
+                        if (user && !user.isAnonymous) {
+                            console.log('Auth-Status aktualisiert:', user.uid, user.email);
+                            unsubscribe();
+                            resolve();
+                        }
+                    });
+                    // Timeout nach 5 Sekunden, um zu vermeiden, dass wir für immer hängen
+                    setTimeout(() => {
+                        unsubscribe();
+                        resolve();
+                    }, 5000);
+                });
+                
+                const admin = { username: username, name: 'Administrator' };
+                
+                // Admin in globaler Variable und im lokalen Speicher speichern
+                setCurrentAdmin(admin);
+                DataService.setCurrentAdmin(admin);
+                
+                // Stelle sicher, dass der Admin-Status in der employees-Collection existiert
+                const currentUser = firebase.auth().currentUser;
+                if (currentUser) {
+                    console.log('Aktueller Firebase Benutzer nach Login:', currentUser.uid, 
+                              'Anonym:', currentUser.isAnonymous, 'Email:', currentUser.email);
+                    // Überprüfe, ob der Benutzer bereits als Admin in employees existiert
+                    try {
+                        const db = firebase.firestore();
+                        // Füge den Benutzer in die employees-Collection ein oder aktualisiere ihn
+                        await db.collection('employees').doc(currentUser.uid).set({
+                            name: 'Administrator',
+                            username: 'admin',
+                            isAdmin: true,
+                            email: currentUser.email || 'admin@lauffer-zeiterfassung.de'
+                        }, { merge: true });
+                        console.log('Admin-Status in employees-Collection gesetzt, UID:', currentUser.uid);
+                        
+                        // Aktualisiere den lokalen Cache der Firestore-Instanz
+                        db.clearPersistence().then(() => {
+                            console.log('Firestore Cache geleert'); 
+                        }).catch(err => {
+                            console.warn('Konnte Firestore Cache nicht leeren:', err);
+                        });
+                    } catch (dbError) {
+                        console.error('Fehler beim Aktualisieren des Admin-Status:', dbError);
+                    }
+                } else {
+                    console.error('Kein Firebase-Benutzer nach dem Login!');  
+                }
+                
+                console.log('Admin erfolgreich angemeldet:', admin);
+                
+                // Seite neu laden, um sicherzustellen, dass der neue Auth-Status überall verwendet wird
+                alert('Admin-Login erfolgreich! Die Seite wird neu geladen, um die Berechtigungen zu aktualisieren.');
+                window.location.reload();
+            } catch (firebaseError) {
+                console.error('Firebase Auth Fehler:', firebaseError);
+                alert('Fehler bei der Firebase-Authentifizierung: ' + firebaseError.message);
+            }
         } else {
             console.error('Ungültige Admin-Zugangsdaten!', username, password);
             alert('Ungültige Admin-Zugangsdaten! Bitte nutzen Sie admin/admin123');
