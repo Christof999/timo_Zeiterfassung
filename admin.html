@@ -82,6 +82,7 @@
                     <button class="tab-btn active" data-tab="overview">Übersicht</button>
                     <button class="tab-btn" data-tab="employees">Mitarbeiter</button>
                     <button class="tab-btn" data-tab="projects">Projekte</button>
+                    <button class="tab-btn" data-tab="vehicles">Fahrzeuge</button>
                     <button class="tab-btn" data-tab="reports">Berichte</button>
                 </div>
 
@@ -137,8 +138,9 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>Benutzername</th>
                                     <th>Position</th>
+                                    <th>Benutzername</th>
+                                    <th>Stundensatz</th>
                                     <th>Status</th>
                                     <th>Aktionen</th>
                                 </tr>
@@ -170,6 +172,10 @@
                                 <div class="form-group">
                                     <label for="employee-position">Position:</label>
                                     <input type="text" id="employee-position" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="employee-hourly-rate">Stundensatz (€):</label>
+                                    <input type="number" id="employee-hourly-rate" step="0.01" min="0" placeholder="0.00">
                                 </div>
                                 <div class="form-group">
                                     <label for="employee-status">Status:</label>
@@ -449,6 +455,62 @@
                     </div>
                 </div>
 
+                <div id="vehicles-tab" class="tab-content">
+                    <div class="tab-header">
+                        <h3>Fahrzeugverwaltung</h3>
+                        <button id="add-vehicle-btn" class="btn primary-btn">
+                            <i class="fas fa-plus"></i> Neues Fahrzeug
+                        </button>
+                    </div>
+
+                    <div class="vehicle-table-container">
+                        <table id="vehicles-table">
+                            <thead>
+                                <tr>
+                                    <th>Fahrzeugname</th>
+                                    <th>Typ</th>
+                                    <th>Kennzeichen</th>
+                                    <th>Stundensatz (€)</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Wird durch JavaScript gefüllt -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="vehicle-form-modal" class="modal">
+                        <div class="modal-content">
+                            <span class="close-modal">&times;</span>
+                            <h3 id="vehicle-form-title">Fahrzeug hinzufügen</h3>
+                            <form id="vehicle-form">
+                                <input type="hidden" id="vehicle-id">
+                                <div class="form-group">
+                                    <label for="vehicle-name">Fahrzeugname:</label>
+                                    <input type="text" id="vehicle-name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vehicle-type">Typ:</label>
+                                    <input type="text" id="vehicle-type" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vehicle-license">Kennzeichen:</label>
+                                    <input type="text" id="vehicle-license">
+                                </div>
+                                <div class="form-group">
+                                    <label for="vehicle-hourly-rate">Stundensatz (€):</label>
+                                    <input type="number" id="vehicle-hourly-rate" step="0.01" min="0" required>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn secondary-btn cancel-btn">Abbrechen</button>
+                                    <button type="submit" class="btn primary-btn">Speichern</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="reports-tab" class="tab-content">
                     <h3>Berichte</h3>
                     
@@ -554,6 +616,9 @@
             });
         }
     </script>
+    
+    <!-- Fahrzeugverwaltung -->
+    <script src="vehicle-admin.js"></script>
     
     <!-- Nur Admin-Funktionen, Berichtsanzeige entfernt -->
 </body>

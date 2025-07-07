@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Login-Formular Event-Listener
     if (adminLoginForm) {
-        adminLoginForm.addEventListener('submit', function(event) {
+        adminLoginForm.addEventListener('submit', async function(event) {
             event.preventDefault();
             
             const username = document.getElementById('admin-username').value.trim();
@@ -147,11 +147,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (username === 'admin' && password === 'admin123') {
                 console.log('Admin-Login erfolgreich!');
                 
-                // Admin speichern
+                // Admin-Objekt speichern
                 const admin = { username: username, name: 'Administrator' };
                 localStorage.setItem('lauffer_admin_user', JSON.stringify(admin));
                 
-                // Dashboard anzeigen
+                // UI aktualisieren
                 adminLoginSection.classList.add('hidden');
                 adminDashboard.classList.remove('hidden');
                 adminNameSpan.textContent = 'Administrator';
@@ -165,6 +165,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Dashboard-Daten regelmäßig aktualisieren
                 const newInterval = setInterval(loadDashboardData, 30000); // Alle 30 Sekunden
                 setDashboardRefreshInterval(newInterval);
+                
+                // HINWEIS: Firebase Email/Password Auth ist deaktiviert
+                // Wir verwenden vorerst die lokale Authentifizierung
+                console.log('HINWEIS: Firebase Email/Password Auth ist deaktiviert');
+                console.log('Um Firebase Auth zu verwenden, aktivieren Sie den Email/Password Provider in der Firebase Console');
+                
+                try {
+                    // Prüfen, ob ein Firebase-Benutzer existiert
+                    const currentUser = firebase.auth().currentUser;
+                    console.log('Aktueller Firebase-Benutzer:', currentUser ? 
+                                currentUser.uid + (currentUser.isAnonymous ? ' (anonym)' : '') : 'keiner');
+                    
+                    // Für die Firestore-Berechtigungen: Falls ein Admin in der Firebase-DB existiert,
+                    // setzen wir den Admin-Status in der employees-Collection
+                    if (currentUser) {
+                        const db = firebase.firestore();
+                        await db.collection('employees').doc(currentUser.uid).set({
+                            name: 'Administrator',
+                            username: 'admin',
+                            isAdmin: true,
+                        }, { merge: true });
+                        console.log('Admin-Status in employees-Collection gesetzt für UID:', currentUser.uid);
+                    }
+                } catch (error) {
+                    console.warn('Firebase-Operation nicht möglich:', error.message);
+                    console.log('Fahren fort mit lokaler Admin-Authentifizierung...');
+                }
             } else {
                 console.error('Ungültige Admin-Zugangsdaten:', username, password);
                 alert('Ungültige Zugangsdaten! Bitte verwenden Sie admin/admin123');
@@ -176,18 +203,40 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Logout-Button Event-Listener
     if (adminLogoutBtn) {
-        adminLogoutBtn.addEventListener('click', function() {
-            localStorage.removeItem('lauffer_admin_user');
-            const currentInterval = getDashboardRefreshInterval();
-            if (currentInterval) {
-                clearInterval(currentInterval);
-                setDashboardRefreshInterval(null);
+        adminLogoutBtn.addEventListener('click', async function() {
+            try {
+                // Firebase-Abmeldung
+                if (firebase.auth().currentUser) {
+                    console.log('Firebase-Abmeldung für Benutzer:', firebase.auth().currentUser.uid);
+                    await firebase.auth().signOut();
+                    console.log('Firebase-Abmeldung erfolgreich');
+                }
+
+                // Nach kurzer Verzögerung anonym anmelden (falls für Anwendung erforderlich)
+                setTimeout(async () => {
+                    try {
+                        await firebase.auth().signInAnonymously();
+                        console.log('Anonyme Anmeldung nach Admin-Logout erfolgreich');
+                    } catch (error) {
+                        console.warn('Anonyme Anmeldung nach Admin-Logout fehlgeschlagen:', error);
+                    }
+                }, 1000);
+                
+                // Lokale Daten und UI zurücksetzen
+                localStorage.removeItem('lauffer_admin_user');
+                const currentInterval = getDashboardRefreshInterval();
+                if (currentInterval) {
+                    clearInterval(currentInterval);
+                    setDashboardRefreshInterval(null);
+                }
+                adminDashboard.classList.add('hidden');
+                adminLoginSection.classList.remove('hidden');
+                document.getElementById('admin-username').value = '';
+                document.getElementById('admin-password').value = '';
+                console.log('Admin ausgeloggt');
+            } catch (error) {
+                console.error('Fehler beim Logout:', error);
             }
-            adminDashboard.classList.add('hidden');
-            adminLoginSection.classList.remove('hidden');
-            document.getElementById('admin-username').value = '';
-            document.getElementById('admin-password').value = '';
-            console.log('Admin ausgeloggt');
         });
     }
     
@@ -578,10 +627,15 @@ async function loadEmployeesTable() {
             const row = document.createElement('tr');
             row.dataset.id = employee.id;
             
+            // Formatiere den Stundensatz mit 2 Dezimalstellen und Euro-Zeichen
+            const hourlyRateDisplay = employee.hourlyRate != null ? 
+                `${parseFloat(employee.hourlyRate).toFixed(2)} €` : '-';
+                
             row.innerHTML = `
                 <td>${employee.name}</td>
                 <td>${employee.position || '-'}</td>
                 <td>${employee.username}</td>
+                <td>${hourlyRateDisplay}</td>
                 <td><span class="status-badge ${employee.status}">${employee.status === 'active' ? 'Aktiv' : 'Inaktiv'}</span></td>
                 <td>
                     <button class="btn small-btn edit-employee-btn" data-id="${employee.id}">Bearbeiten</button>
@@ -2352,6 +2406,7 @@ function showEmployeeForm(employeeId = null) {
                 document.getElementById('employee-username').value = employee.username || '';
                 document.getElementById('employee-password').value = employee.password || '';
                 document.getElementById('employee-position').value = employee.position || '';
+                document.getElementById('employee-hourly-rate').value = employee.hourlyRate || '';
                 document.getElementById('employee-status').value = employee.status || 'active';
             }
         }).catch(error => {
@@ -2379,11 +2434,15 @@ async function handleEmployeeFormSubmit(event) {
     console.log('Verarbeite Mitarbeiterformular mit ID:', employeeId);
     
     // Daten aus dem Formular sammeln
+    const hourlyRateField = document.getElementById('employee-hourly-rate');
+    const hourlyRateValue = hourlyRateField ? hourlyRateField.value.trim() : '';
+    
     const employeeData = {
         name: document.getElementById('employee-name').value.trim(),
         username: document.getElementById('employee-username').value.trim(),
         password: document.getElementById('employee-password').value,
         position: document.getElementById('employee-position').value.trim(),
+        hourlyRate: hourlyRateValue !== '' ? parseFloat(hourlyRateValue) : null,
         status: document.getElementById('employee-status').value
     };
     

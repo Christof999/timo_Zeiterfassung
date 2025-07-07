@@ -1,6 +1,6 @@
 /**
  * Datenverwaltung für die Lauffer Zeiterfassung App
- * Verantwortlich für die Speicherung und Abfrage von Mitarbeitern, Projekten und Zeiteinträgen
+ * Verantwortlich für die Speicherung und Abfrage von Mitarbeitern, Projekten, Zeiteinträgen und Fahrzeugen
  * Firebase-Version - JETZT MIT ANONYMER AUTHENTIFIZIERUNG
  */
 
@@ -13,6 +13,8 @@ const DataService = {
   timeEntriesCollection: null,
   usersCollection: null,
   fileUploadsCollection: null,
+  vehiclesCollection: null,
+  vehicleUsagesCollection: null,
 
   // Ein Promise, das sicherstellt, dass keine DB-Anfrage gesendet wird,
   // bevor die anonyme Anmeldung abgeschlossen ist.
@@ -35,18 +37,53 @@ const DataService = {
     this.timeEntriesCollection = this.db.collection("timeEntries");
     this.usersCollection = this.db.collection("users");
     this.fileUploadsCollection = this.db.collection("fileUploads");
+    this.vehiclesCollection = this.db.collection("vehicles");
+    this.vehicleUsagesCollection = this.db.collection("vehicleUsages");
 
+    // Check for session stored admin login
+    const storedAdmin = this.getCurrentAdmin();
+    
     this._authReadyPromise = new Promise((resolve) => {
-      auth.onAuthStateChanged((user) => {
+      // Set up auth state change listener first
+      const unsubscribe = auth.onAuthStateChanged((user) => {
         if (user) {
-          console.log("✅ Firebase Auth bereit. Anonymer Benutzer:", user.uid);
-          resolve();
+          console.log(`✅ Firebase Auth bereit. ${user.isAnonymous ? 'Anonymer' : 'Authentifizierter'} Benutzer:`, 
+                      user.uid, user.isAnonymous ? '' : user.email);
+          
+          // Check if we have an admin in local storage but Firebase shows anonymous
+          if (user.isAnonymous && storedAdmin) {
+            console.log('Admin in Session gefunden, aber Firebase zeigt anonymen Benutzer. Session wird aktualisiert.');
+            // Don't resolve yet - we'll try to restore admin session
+          } else {
+            // Normal case - auth state is as expected
+            resolve();
+            unsubscribe();
+          }
+        } else {
+          console.log('Kein Benutzer angemeldet.');
         }
       });
-    });
-
-    auth.signInAnonymously().catch((error) => {
-      console.error("❌ Fehler bei der anonymen Anmeldung:", error);
+    
+      // Check current authentication state
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        // If we have stored admin credentials but no current user, don't sign in anonymously
+        // This gives a chance for admin login to be restored from session
+        if (storedAdmin) {
+          console.log('Admin in lokaler Session gefunden. Überspringe anonyme Anmeldung.');
+          // We'll try to sign in properly during app initialization elsewhere
+        } else {
+          // Only sign in anonymously if no stored admin session and no current user
+          console.log('Keine Admin-Session gefunden. Starte anonyme Anmeldung...');
+          auth.signInAnonymously().catch((error) => {
+            console.error("❌ Fehler bei der anonymen Anmeldung:", error);
+          });
+        }
+      } else {
+        console.log("Benutzer bereits authentifiziert:", currentUser.uid, 
+                  currentUser.isAnonymous ? "(anonym)" : currentUser.email);
+      }
     });
 
     console.log("DataService initialisiert und wartet auf Firebase Auth...");
@@ -170,6 +207,12 @@ const DataService = {
       if (!existingSnapshot.empty) {
         throw new Error("Dieser Benutzername ist bereits vergeben.");
       }
+      
+      // Falls hourlyWage angegeben ist, sicherstellen, dass es als Zahl gespeichert wird
+      if (employeeData.hourlyWage !== undefined) {
+        employeeData.hourlyWage = parseFloat(employeeData.hourlyWage);
+      }
+      
       const result = await this.employeesCollection.add(employeeData);
       return result.id;
     } catch (error) {
@@ -198,6 +241,12 @@ const DataService = {
           throw new Error("Dieser Benutzername ist bereits vergeben.");
         }
       }
+      
+      // Falls hourlyWage angegeben ist, sicherstellen, dass es als Zahl gespeichert wird
+      if (employeeData.hourlyWage !== undefined) {
+        employeeData.hourlyWage = parseFloat(employeeData.hourlyWage);
+      }
+      
       console.log(`Aktualisiere Mitarbeiter mit ID: ${id}`);
       await this.employeesCollection.doc(id).update(employeeData);
       return true;
@@ -1432,6 +1481,404 @@ const DataService = {
     }
   },
 
+  // Fahrzeug-Verwaltung Funktionen
+  async createVehicle(vehicleData) {
+    await this._authReadyPromise;
+    try {
+      // Debug-Ausgabe der eingehenden Daten
+      console.log("Fahrzeug wird erstellt mit Daten:", vehicleData);
+      
+      if (!vehicleData || !vehicleData.name || !vehicleData.hourlyRate) {
+        throw new Error("Fahrzeugname und Stundensatz müssen angegeben werden");
+      }
+      
+      const newVehicle = {
+        name: vehicleData.name,
+        hourlyRate: parseFloat(vehicleData.hourlyRate),
+        description: vehicleData.description || "",
+        type: vehicleData.type || "",
+        licensePlate: vehicleData.licensePlate || "",
+        isActive: vehicleData.isActive !== false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      
+      // Debug-Ausgabe des zu speichernden Objekts
+      console.log("Zu speicherndes Fahrzeug:", newVehicle);
+      
+      // Prüfen, ob der aktuelle Benutzer authentifiziert ist
+      const currentUser = firebase.auth().currentUser;
+      console.log("Aktueller Benutzer beim Fahrzeug erstellen:", 
+                currentUser ? currentUser.uid + (currentUser.isAnonymous ? " (anonym)" : "") : "keiner");
+      
+      const docRef = await this.vehiclesCollection.add(newVehicle);
+      console.log("Fahrzeug erfolgreich erstellt mit ID:", docRef.id);
+      
+      // Gespeichertes Dokument abrufen, um zu prüfen, was tatsächlich gespeichert wurde
+      const savedDoc = await this.vehiclesCollection.doc(docRef.id).get();
+      console.log("Gespeichertes Fahrzeug:", savedDoc.data());
+      
+      return {
+        id: docRef.id,
+        ...newVehicle,
+      };
+    } catch (error) {
+      console.error("Fehler beim Erstellen des Fahrzeugs:", error);
+      throw error;
+    }
+  },
+
+  async getVehicleById(vehicleId) {
+    await this._authReadyPromise;
+    try {
+      if (!vehicleId) {
+        throw new Error("Keine Fahrzeug-ID angegeben");
+      }
+      
+      const vehicleDoc = await this.vehiclesCollection.doc(vehicleId).get();
+      
+      if (!vehicleDoc.exists) {
+        return null;
+      }
+      
+      return {
+        id: vehicleDoc.id,
+        ...vehicleDoc.data(),
+      };
+    } catch (error) {
+      console.error("Fehler beim Laden des Fahrzeugs:", error);
+      return null;
+    }
+  },
+
+  async getAllVehicles(includeInactive = false) {
+    await this._authReadyPromise;
+    try {
+      let query = this.vehiclesCollection;
+      
+      if (!includeInactive) {
+        query = query.where("isActive", "==", true);
+      }
+      
+      const snapshot = await query.orderBy("name").get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeuge:", error);
+      return [];
+    }
+  },
+
+  async updateVehicle(vehicleId, updateData) {
+    await this._authReadyPromise;
+    try {
+      if (!vehicleId) {
+        throw new Error("Keine Fahrzeug-ID angegeben");
+      }
+      
+      // Debug: Eingehende Daten
+      console.log("Fahrzeug-Update mit Daten:", updateData);
+      
+      const updates = {};
+      
+      if (updateData.name) updates.name = updateData.name;
+      if (typeof updateData.hourlyRate !== 'undefined') updates.hourlyRate = parseFloat(updateData.hourlyRate);
+      if (typeof updateData.description !== 'undefined') updates.description = updateData.description;
+      if (typeof updateData.isActive !== 'undefined') updates.isActive = updateData.isActive;
+      
+      // Fahrzeugtyp und Kennzeichen hinzufügen
+      if (typeof updateData.type !== 'undefined') updates.type = updateData.type;
+      if (typeof updateData.licensePlate !== 'undefined') updates.licensePlate = updateData.licensePlate;
+      
+      updates.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      
+      console.log("Zu aktualisierende Felder:", updates);
+      
+      await this.vehiclesCollection.doc(vehicleId).update(updates);
+      
+      return {
+        id: vehicleId,
+        ...updates
+      };
+    } catch (error) {
+      console.error("Fehler beim Aktualisieren des Fahrzeugs:", error);
+      throw error;
+    }
+  },
+
+  async deleteVehicle(vehicleId) {
+    await this._authReadyPromise;
+    try {
+      if (!vehicleId) {
+        throw new Error("Keine Fahrzeug-ID angegeben");
+      }
+      
+      // Aktuellen Benutzer prüfen
+      const currentUser = firebase.auth().currentUser;
+      console.log("Aktueller Benutzer beim Löschen:", 
+                currentUser ? `${currentUser.uid} (${currentUser.isAnonymous ? 'anonym' : 'authentifiziert'})` : "nicht angemeldet");
+      
+      if (!currentUser) {
+        throw new Error("Sie müssen angemeldet sein, um Fahrzeuge zu löschen.");
+      }
+      
+      // Admin-Berechtigung prüfen - zuerst direkt im Firestore
+      let isAdmin = false;
+      
+      try {
+        // Prüfen ob Benutzer in der employees-Collection als Admin markiert ist
+        const userDoc = await this.employeesCollection.doc(currentUser.uid).get();
+        isAdmin = userDoc.exists && userDoc.data().isAdmin === true;
+        console.log("Firestore Admin-Status:", isAdmin);
+      } catch (e) {
+        console.warn("Fehler bei direkter Admin-Prüfung:", e);
+      }
+      
+      // Falls Firestore-Admin-Status negativ ist, prüfe die lokale App-Authentifizierung
+      if (!isAdmin) {
+        // Prüfe lokalen Admin-Status im localStorage
+        const localAdminData = localStorage.getItem('lauffer_admin_user');
+        const isLocalAdmin = localAdminData !== null;
+        console.log("Lokaler Admin-Status:", isLocalAdmin);
+        
+        if (isLocalAdmin) {
+          isAdmin = true;
+          console.log("Benutzer ist lokal als Admin authentifiziert");
+        }
+      }
+      
+      if (!isAdmin) {
+        throw new Error("Sie benötigen Admin-Rechte, um Fahrzeuge zu löschen.");
+      }
+      
+      console.log("Admin-Berechtigung bestätigt, fahre mit Löschvorgang fort");
+      
+      // Prüfen, ob Fahrzeug existiert
+      const vehicleDoc = await this.vehiclesCollection.doc(vehicleId).get();
+      
+      if (!vehicleDoc.exists) {
+        throw new Error(`Fahrzeug mit ID ${vehicleId} nicht gefunden`);
+      }
+      
+      // Prüfen, ob Fahrzeug bereits in Verwendung ist
+      const usagesSnapshot = await this.vehicleUsagesCollection
+        .where("vehicleId", "==", vehicleId)
+        .limit(1)
+        .get();
+      
+      if (!usagesSnapshot.empty) {
+        // Fahrzeug wird verwendet, daher nur als inaktiv markieren
+        console.log("Fahrzeug wird verwendet, deaktiviere es stattdessen");
+        await this.vehiclesCollection.doc(vehicleId).update({
+          isActive: false,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        return { success: true, deactivated: true };
+      }
+      
+      // Wenn nicht in Verwendung, vollständig löschen
+      console.log("Lösche Fahrzeug mit ID:", vehicleId);
+      try {
+        await this.vehiclesCollection.doc(vehicleId).delete();
+        console.log("Fahrzeug erfolgreich gelöscht.");
+        return { success: true, deactivated: false };
+      } catch (deleteError) {
+        console.error("Firestore-Fehler beim Löschen:", deleteError);
+        
+        // Falls Firestore-Regeln das Löschen verhindern, setze das Fahrzeug auf inaktiv
+        if (deleteError.code === "permission-denied") {
+          console.log("Löschberechtigung verweigert, deaktiviere Fahrzeug stattdessen");
+          await this.vehiclesCollection.doc(vehicleId).update({
+            isActive: false,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          return { success: true, deactivated: true, note: "Fahrzeug wurde deaktiviert, da Löschberechtigungen fehlen." };
+        } else {
+          throw deleteError;
+        }
+      }
+    } catch (error) {
+      console.error("Fehler beim Löschen des Fahrzeugs:", error);
+      throw error;
+    }
+  },
+  
+  // Prüft, ob der aktuelle Benutzer Admin-Rechte hat
+  async isUserAdmin(uid = null) {
+    try {
+      // Wenn UID angegeben, verwende diese, ansonsten den aktuell angemeldeten Benutzer
+      const userUid = uid || (firebase.auth().currentUser?.uid);
+      if (!userUid) return false;
+      
+      console.log("Prüfe Admin-Status für UID:", userUid);
+      
+      // Prüfe Admin-Status in der employees-Collection
+      const userDoc = await this.employeesCollection.doc(userUid).get();
+      
+      // Debug
+      if (userDoc.exists) {
+        console.log("Benutzerdaten gefunden:", userDoc.data());
+        console.log("Admin-Status:", userDoc.data().isAdmin === true);
+      } else {
+        console.log("Benutzer nicht in employees-Collection gefunden");
+      }
+      
+      return userDoc.exists && userDoc.data().isAdmin === true;
+    } catch (error) {
+      console.error("Fehler bei Admin-Prüfung:", error);
+      return false;
+    }
+  },
+
+  // Fahrzeugnutzung Funktionen
+  async createVehicleUsage(usageData) {
+    await this._authReadyPromise;
+    try {
+      if (!usageData || !usageData.timeEntryId || !usageData.vehicleId || !usageData.hoursUsed) {
+        throw new Error("Zeiteintrags-ID, Fahrzeug-ID und Nutzungsstunden müssen angegeben werden");
+      }
+      
+      // Überprüfen, ob der Zeiteintrag existiert
+      const timeEntryDoc = await this.timeEntriesCollection.doc(usageData.timeEntryId).get();
+      if (!timeEntryDoc.exists) {
+        throw new Error(`Zeiteintrag mit ID ${usageData.timeEntryId} nicht gefunden`);
+      }
+      
+      // Überprüfen, ob das Fahrzeug existiert und aktiv ist
+      const vehicleDoc = await this.vehiclesCollection.doc(usageData.vehicleId).get();
+      if (!vehicleDoc.exists) {
+        throw new Error(`Fahrzeug mit ID ${usageData.vehicleId} nicht gefunden`);
+      }
+      
+      const vehicle = vehicleDoc.data();
+      if (!vehicle.isActive) {
+        throw new Error(`Fahrzeug ${vehicle.name} ist nicht aktiv und kann nicht verwendet werden`);
+      }
+      
+      const timeEntryData = timeEntryDoc.data();
+      
+      const newVehicleUsage = {
+        timeEntryId: usageData.timeEntryId,
+        vehicleId: usageData.vehicleId,
+        employeeId: timeEntryData.employeeId,
+        projectId: timeEntryData.projectId,
+        hoursUsed: parseFloat(usageData.hoursUsed),
+        date: timeEntryData.date || timeEntryData.clockInTime,
+        hourlyRate: parseFloat(vehicle.hourlyRate),
+        vehicleName: vehicle.name,
+        comment: usageData.comment || "",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      
+      const docRef = await this.vehicleUsagesCollection.add(newVehicleUsage);
+      return {
+        id: docRef.id,
+        ...newVehicleUsage,
+      };
+    } catch (error) {
+      console.error("Fehler beim Erstellen der Fahrzeugnutzung:", error);
+      throw error;
+    }
+  },
+  
+  async getVehicleUsagesByTimeEntry(timeEntryId) {
+    await this._authReadyPromise;
+    try {
+      if (!timeEntryId) {
+        throw new Error("Keine Zeiteintrags-ID angegeben");
+      }
+      
+      const snapshot = await this.vehicleUsagesCollection
+        .where("timeEntryId", "==", timeEntryId)
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hoursUsed: parseFloat(doc.data().hoursUsed || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeugnutzungen für Zeiteintrag:", error);
+      return [];
+    }
+  },
+  
+  async getVehicleUsagesByProject(projectId) {
+    await this._authReadyPromise;
+    try {
+      if (!projectId) {
+        throw new Error("Keine Projekt-ID angegeben");
+      }
+      
+      const snapshot = await this.vehicleUsagesCollection
+        .where("projectId", "==", projectId)
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hoursUsed: parseFloat(doc.data().hoursUsed || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeugnutzungen für Projekt:", error);
+      return [];
+    }
+  },
+  
+  async getVehicleUsagesByDateRange(startDate, endDate) {
+    await this._authReadyPromise;
+    try {
+      startDate = startDate ? new Date(startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+      endDate = endDate ? new Date(endDate) : new Date();
+      
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      
+      const snapshot = await this.vehicleUsagesCollection
+        .where("date", ">=", startDate)
+        .where("date", "<=", endDate)
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hoursUsed: parseFloat(doc.data().hoursUsed || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeugnutzungen für Zeitraum:", error);
+      return [];
+    }
+  },
+  
+  async deleteVehicleUsage(usageId) {
+    await this._authReadyPromise;
+    try {
+      if (!usageId) {
+        throw new Error("Keine Nutzungs-ID angegeben");
+      }
+      
+      // Prüfen, ob Nutzungseintrag existiert
+      const usageDoc = await this.vehicleUsagesCollection.doc(usageId).get();
+      
+      if (!usageDoc.exists) {
+        throw new Error(`Fahrzeugnutzung mit ID ${usageId} nicht gefunden`);
+      }
+      
+      await this.vehicleUsagesCollection.doc(usageId).delete();
+      return { success: true };
+    } catch (error) {
+      console.error("Fehler beim Löschen der Fahrzeugnutzung:", error);
+      throw error;
+    }
+  },
+  
   async reviewDocumentation(
     fileId,
     reviewedBy,
