@@ -1841,6 +1841,64 @@ const DataService = {
     }
   },
   
+  async createDirectVehicleUsage(usageData) {
+    await this._authReadyPromise;
+    try {
+      if (!usageData || !usageData.vehicleId || !usageData.hoursUsed) {
+        throw new Error("Fahrzeug-ID und Nutzungsstunden müssen angegeben werden");
+      }
+      
+      // Überprüfen, ob das Fahrzeug existiert und aktiv ist
+      const vehicleDoc = await this.vehiclesCollection.doc(usageData.vehicleId).get();
+      if (!vehicleDoc.exists) {
+        throw new Error(`Fahrzeug mit ID ${usageData.vehicleId} nicht gefunden`);
+      }
+      
+      const vehicle = vehicleDoc.data();
+      if (!vehicle.isActive) {
+        throw new Error(`Fahrzeug ${vehicle.name} ist nicht aktiv und kann nicht verwendet werden`);
+      }
+      
+      const newVehicleUsage = {
+        vehicleId: usageData.vehicleId,
+        hoursUsed: parseFloat(usageData.hoursUsed),
+        date: usageData.date || new Date(),
+        hourlyRate: parseFloat(vehicle.hourlyRate),
+        vehicleName: vehicle.name,
+        comment: usageData.comment || "",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      
+      const docRef = await this.vehicleUsagesCollection.add(newVehicleUsage);
+      return {
+        id: docRef.id,
+        ...newVehicleUsage,
+      };
+    } catch (error) {
+      console.error("Fehler beim Erstellen der direkten Fahrzeugnutzung:", error);
+      throw error;
+    }
+  },
+  
+  async getDirectVehicleUsages() {
+    await this._authReadyPromise;
+    try {
+      const snapshot = await this.vehicleUsagesCollection
+        .where("timeEntryId", "==", null)
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hoursUsed: parseFloat(doc.data().hoursUsed || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der direkten Fahrzeugnutzungen:", error);
+      return [];
+    }
+  },
+  
   async getVehicleUsagesByTimeEntry(timeEntryId) {
     await this._authReadyPromise;
     try {
@@ -1917,14 +1975,7 @@ const DataService = {
     await this._authReadyPromise;
     try {
       if (!usageId) {
-        throw new Error("Keine Nutzungs-ID angegeben");
-      }
-      
-      // Prüfen, ob Nutzungseintrag existiert
-      const usageDoc = await this.vehicleUsagesCollection.doc(usageId).get();
-      
-      if (!usageDoc.exists) {
-        throw new Error(`Fahrzeugnutzung mit ID ${usageId} nicht gefunden`);
+        throw new Error("Keine Fahrzeugnutzungs-ID angegeben");
       }
       
       await this.vehicleUsagesCollection.doc(usageId).delete();
@@ -1932,6 +1983,183 @@ const DataService = {
     } catch (error) {
       console.error("Fehler beim Löschen der Fahrzeugnutzung:", error);
       throw error;
+    }
+  },
+  
+  /**
+   * Erstellt einen direkten Fahrzeugzeitbuchungseintrag (ohne Verknüpfung mit einem Zeiteintrag)
+   * @param {Object} bookingData - Die Daten für die Fahrzeugbuchung
+   * @returns {Promise<Object>} - Die gespeicherte Fahrzeugbuchung mit ID
+   */
+  async createVehicleTimeBooking(bookingData) {
+    await this._authReadyPromise;
+    try {
+      if (!bookingData || !bookingData.vehicleId || !bookingData.hours || 
+          !bookingData.projectId || !bookingData.employeeId) {
+        throw new Error("Fahrzeug-ID, Stunden, Projekt-ID und Mitarbeiter-ID müssen angegeben werden");
+      }
+      
+      // Überprüfen, ob das Fahrzeug existiert und aktiv ist
+      const vehicleDoc = await this.vehiclesCollection.doc(bookingData.vehicleId).get();
+      if (!vehicleDoc.exists) {
+        throw new Error(`Fahrzeug mit ID ${bookingData.vehicleId} nicht gefunden`);
+      }
+      
+      const vehicle = vehicleDoc.data();
+      if (!vehicle.isActive) {
+        throw new Error(`Fahrzeug ${vehicle.name} ist nicht aktiv und kann nicht verwendet werden`);
+      }
+      
+      // Überprüfen, ob das Projekt existiert
+      const projectDoc = await this.projectsCollection.doc(bookingData.projectId).get();
+      if (!projectDoc.exists) {
+        throw new Error(`Projekt mit ID ${bookingData.projectId} nicht gefunden`);
+      }
+      
+      // Überprüfen, ob der Mitarbeiter existiert
+      const employeeDoc = await this.employeesCollection.doc(bookingData.employeeId).get();
+      if (!employeeDoc.exists) {
+        throw new Error(`Mitarbeiter mit ID ${bookingData.employeeId} nicht gefunden`);
+      }
+      
+      const newVehicleBooking = {
+        vehicleId: bookingData.vehicleId,
+        projectId: bookingData.projectId,
+        employeeId: bookingData.employeeId,
+        hours: parseFloat(bookingData.hours),
+        date: bookingData.date || new Date().toISOString().split('T')[0],  // Format YYYY-MM-DD
+        hourlyRate: parseFloat(vehicle.hourlyRate || 0),
+        vehicleName: vehicle.name,
+        employeeName: employeeDoc.data().name,
+        projectName: projectDoc.data().name,
+        comment: bookingData.comment || "",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        isDirectBooking: true,  // Kennzeichnung als direkte Buchung ohne Zeiteintrag
+      };
+      
+      const docRef = await this.vehicleUsagesCollection.add(newVehicleBooking);
+      return {
+        id: docRef.id,
+        ...newVehicleBooking,
+      };
+    } catch (error) {
+      console.error("Fehler beim Erstellen der Fahrzeugbuchung:", error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Ruft alle Fahrzeugzeitbuchungen für ein Projekt ab
+   * @param {string} projectId - Die Projekt-ID
+   * @returns {Promise<Array>} - Eine Liste der Fahrzeugbuchungen
+   */
+  async getVehicleTimeBookingsByProject(projectId) {
+    await this._authReadyPromise;
+    try {
+      if (!projectId) {
+        throw new Error("Keine Projekt-ID angegeben");
+      }
+      
+      const snapshot = await this.vehicleUsagesCollection
+        .where("projectId", "==", projectId)
+        .where("isDirectBooking", "==", true)
+        .orderBy("date", "desc")
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hours: parseFloat(doc.data().hours || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeugbuchungen für Projekt:", error);
+      return [];
+    }
+  },
+  
+  /**
+   * Ruft die Fahrzeugbuchungen für einen bestimmten Tag ab
+   * @param {string} date - Das Datum im Format YYYY-MM-DD
+   * @param {string} projectId - Optional: Die Projekt-ID zur Filterung
+   * @returns {Promise<Array>} - Eine Liste der Fahrzeugbuchungen für den Tag
+   */
+  async getVehicleTimeBookingsByDate(date, projectId = null) {
+    await this._authReadyPromise;
+    try {
+      if (!date) {
+        throw new Error("Kein Datum angegeben");
+      }
+      
+      let query = this.vehicleUsagesCollection
+        .where("date", "==", date)
+        .where("isDirectBooking", "==", true);
+      
+      if (projectId) {
+        query = query.where("projectId", "==", projectId);
+      }
+      
+      const snapshot = await query.get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        hours: parseFloat(doc.data().hours || 0),
+        hourlyRate: parseFloat(doc.data().hourlyRate || 0),
+      }));
+    } catch (error) {
+      console.error("Fehler beim Laden der Fahrzeugbuchungen für Datum:", error);
+      return [];
+    }
+  },
+  
+  /**
+   * Aggregiert die Fahrzeugbuchungen nach Fahrzeug, Datum und Projekt
+   * @param {string} projectId - Die Projekt-ID
+   * @returns {Promise<Array>} - Eine Liste der aggregierten Fahrzeugbuchungen
+   */
+  async getAggregatedVehicleTimeBookings(projectId) {
+    await this._authReadyPromise;
+    try {
+      if (!projectId) {
+        throw new Error("Keine Projekt-ID angegeben");
+      }
+      
+      // Alle Buchungen für das Projekt laden
+      const bookings = await this.getVehicleTimeBookingsByProject(projectId);
+      
+      // Aggregation nach Fahrzeug und Datum
+      const aggregatedBookings = {};
+      
+      bookings.forEach(booking => {
+        const key = `${booking.vehicleId}_${booking.date}`;
+        
+        if (!aggregatedBookings[key]) {
+          aggregatedBookings[key] = {
+            vehicleId: booking.vehicleId,
+            vehicleName: booking.vehicleName,
+            date: booking.date,
+            projectId: booking.projectId,
+            totalHours: 0,
+            hourlyRate: booking.hourlyRate,
+            bookings: [],
+          };
+        }
+        
+        aggregatedBookings[key].totalHours += booking.hours;
+        aggregatedBookings[key].bookings.push(booking);
+      });
+      
+      // In Array umwandeln und nach Datum sortieren
+      return Object.values(aggregatedBookings).sort((a, b) => {
+        if (a.date === b.date) {
+          return a.vehicleName.localeCompare(b.vehicleName);
+        }
+        return b.date.localeCompare(a.date); // Absteigend nach Datum
+      });
+    } catch (error) {
+      console.error("Fehler bei der Aggregation der Fahrzeugbuchungen:", error);
+      return [];
     }
   },
   
@@ -2370,6 +2598,83 @@ const DataService = {
   async getFirebaseUser() {
     await this._authReadyPromise;
     return firebase.auth().currentUser;
+  },
+
+  /**
+   * Lädt alle Fahrzeugbuchungen für ein bestimmtes Projekt
+   * @param {string} projectId - Die ID des Projekts
+   * @returns {Promise<Array>} - Array mit Fahrzeugbuchungen
+   */
+  async getVehicleUsagesForProject(projectId) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!projectId) {
+        throw new Error('Keine Projekt-ID angegeben');
+      }
+      
+      // Fahrzeugbuchungen für das Projekt laden
+      const snapshot = await this.vehicleUsagesCollection
+        .where('projectId', '==', projectId)
+        .orderBy('date', 'desc')
+        .get();
+      
+      if (snapshot.empty) {
+        console.log(`Keine Fahrzeugbuchungen für Projekt ${projectId} gefunden`);
+        return [];
+      }
+      
+      // Fahrzeugbuchungen sammeln
+      const usages = [];
+      
+      for (const doc of snapshot.docs) {
+        const usage = {
+          id: doc.id,
+          ...doc.data()
+        };
+        usages.push(usage);
+      }
+      
+      console.log(`${usages.length} Fahrzeugbuchungen für Projekt ${projectId} geladen`);
+      
+      // Fahrzeug- und Mitarbeiterdaten nachladen
+      const usagesWithDetails = await Promise.all(usages.map(async (usage) => {
+        // Fahrzeugdaten laden
+        let vehicleData = { name: 'Unbekanntes Fahrzeug' };
+        if (usage.vehicleId) {
+          const vehicleDoc = await this.vehiclesCollection.doc(usage.vehicleId).get();
+          if (vehicleDoc.exists) {
+            vehicleData = { 
+              id: vehicleDoc.id,
+              ...vehicleDoc.data()
+            };
+          }
+        }
+        
+        // Mitarbeiterdaten laden
+        let employeeData = { name: 'Unbekannter Mitarbeiter' };
+        if (usage.employeeId) {
+          const employeeDoc = await this.employeesCollection.doc(usage.employeeId).get();
+          if (employeeDoc.exists) {
+            employeeData = { 
+              id: employeeDoc.id,
+              ...employeeDoc.data()
+            };
+          }
+        }
+        
+        return {
+          ...usage,
+          vehicle: vehicleData,
+          employee: employeeData
+        };
+      }));
+      
+      return usagesWithDetails;
+    } catch (error) {
+      console.error('Fehler beim Laden der Fahrzeugbuchungen:', error);
+      throw error;
+    }
   },
 };
 
