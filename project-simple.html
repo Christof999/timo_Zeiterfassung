@@ -570,6 +570,34 @@
             </section>
             
             <section>
+                <h2><i class="fas fa-car"></i> Fahrzeugbuchungen</h2>
+                <div class="admin-controls" id="admin-vehicle-usage-controls">
+                    <button id="add-vehicle-usage-btn" class="btn btn-primary" title="Neue Fahrzeugbuchung erstellen">
+                        <i class="fas fa-plus-circle"></i> Fahrzeugbuchung hinzufügen
+                    </button>
+                </div>
+                <div id="vehicle-usages-container">
+                    <p>Fahrzeugbuchungen werden geladen...</p>
+                    <table id="vehicle-usages-table">
+                        <thead>
+                            <tr>
+                                <th>Mitarbeiter</th>
+                                <th>Fahrzeug</th>
+                                <th>Datum</th>
+                                <th>Startkilometer</th>
+                                <th>Endkilometer</th>
+                                <th>Gefahrene km</th>
+                                <th>Notizen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehicle-usages-body">
+                            <!-- Fahrzeugbuchungen werden hier eingefügt -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <section>
                 <h2><i class="fas fa-camera"></i> Baustellenbilder</h2>
                 <div id="construction-images" class="gallery">
                     <p>Bilder werden geladen...</p>
@@ -601,7 +629,7 @@
         let allProjectFiles = null; // Cache für alle Projektdateien
         
         // DOM-Elemente - werden nach DOM-Load initialisiert
-        let pdfContent, exportBtn, projectTitleEl, projectInfoEl, timeEntriesBodyEl, constructionImagesEl, documentsGalleryEl, backLinkEl;
+        let pdfContent, exportBtn, projectTitleEl, projectInfoEl, timeEntriesBodyEl, vehicleUsagesBodyEl, constructionImagesEl, documentsGalleryEl, backLinkEl;
         
         // Seite initialisieren
         document.addEventListener('DOMContentLoaded', function() {
@@ -741,6 +769,7 @@
             const containers = [
                 document.getElementById('project-info'),
                 document.getElementById('time-entries-container'),
+                document.getElementById('vehicle-usages-container'),
                 document.getElementById('construction-images'),
                 document.getElementById('documents-gallery')
             ];
@@ -848,16 +877,19 @@
                     console.error('projectInfoEl nicht gefunden!');
                 }
                 
-                // Zeiteinträge, Bilder und Dokumente laden
+                // Zeiteinträge, Bilder, Fahrzeugbuchungen und Dokumente laden
                 console.log('=== STARTE LADEN DER UNTERGEORDNETEN DATEN ===');
                 
                 console.log('1. Lade Zeiteinträge...');
                 await loadTimeEntries();
                 
-                console.log('2. Lade Baustellenbilder...');
+                console.log('2. Lade Fahrzeugbuchungen...');
+                await loadVehicleUsages();
+                
+                console.log('3. Lade Baustellenbilder...');
                 await loadProjectImages('construction_site');
                 
-                console.log('3. Lade Dokumente...');
+                console.log('4. Lade Dokumente...');
                 await loadProjectImages('delivery_note');
                 
                 console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
@@ -1033,10 +1065,8 @@
                         }
                     }
                     
-                    // Zeile erstellen
+                    // Zeile zur Tabelle hinzufügen
                     const row = document.createElement('tr');
-                    
-                    // Zellen hinzufügen
                     row.innerHTML = `
                         <td>${employee.name}</td>
                         <td>${date}</td>
@@ -1045,7 +1075,6 @@
                         <td>${workHours}</td>
                         <td>${entry.notes || '-'}</td>
                     `;
-                    
                     tableBody.appendChild(row);
                 });
                 
@@ -1059,6 +1088,101 @@
         }
         
         // Bilder laden
+        // Fahrzeugbuchungen laden
+        async function loadVehicleUsages() {
+            try {
+                const vehicleUsagesContainer = document.getElementById('vehicle-usages-container');
+                vehicleUsagesContainer.innerHTML = '<p>Fahrzeugbuchungen werden geladen...</p>';
+                
+                // Fahrzeugbuchungen über DataService laden
+                const vehicleUsages = await DataService.getVehicleUsagesForProject(projectId);
+                
+                if (!vehicleUsages || vehicleUsages.length === 0) {
+                    console.log('Keine Fahrzeugbuchungen gefunden');
+                    vehicleUsagesContainer.innerHTML = '<p>Keine Fahrzeugbuchungen vorhanden.</p>';
+                    return;
+                }
+                
+                console.log(`${vehicleUsages.length} Fahrzeugbuchungen gefunden`);
+                
+                // Nach Datum sortieren (neueste zuerst)
+                vehicleUsages.sort((a, b) => {
+                    // Sichere Konvertierung für verschiedene Timestamp-Formate
+                    const getDateFromTimestamp = (timestamp) => {
+                        if (!timestamp) return new Date(0);
+                        if (timestamp instanceof firebase.firestore.Timestamp) return timestamp.toDate();
+                        if (timestamp.seconds) return new Date(timestamp.seconds * 1000);
+                        return new Date(timestamp);
+                    };
+                    
+                    const dateA = getDateFromTimestamp(a.date);
+                    const dateB = getDateFromTimestamp(b.date);
+                    
+                    return dateB - dateA; // Absteigend (neueste zuerst)
+                });
+                
+                // Tabelle mit Fahrzeugbuchungen erstellen (vereinfachte Version)
+                vehicleUsagesContainer.innerHTML = `
+                    <table id="vehicle-usages-table">
+                        <thead>
+                            <tr>
+                                <th>Datum</th>
+                                <th>Mitarbeiter</th>
+                                <th>Fahrzeug</th>
+                                <th>Betriebsstunden</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehicle-usages-body"></tbody>
+                    </table>
+                `;
+                
+                const tableBody = document.getElementById('vehicle-usages-body');
+                
+                vehicleUsages.forEach((usage) => {
+                    // Datum formatieren
+                    let dateStr = 'Unbekannt';
+                    let startKm = usage.startKm || '-';
+                    let endKm = usage.endKm || '-';
+                    let drivenKm = '-';
+                    
+                    // Datum konvertieren und formatieren
+                    if (usage.date) {
+                        const dateObj = usage.date instanceof firebase.firestore.Timestamp ? 
+                            usage.date.toDate() : new Date(usage.date);
+                        dateStr = dateObj.toLocaleDateString('de-DE');
+                    }
+                    
+                    // Gefahrene Kilometer berechnen, wenn Start- und Endkilometer vorhanden sind
+                    if (usage.startKm !== undefined && usage.endKm !== undefined) {
+                        drivenKm = Math.max(0, usage.endKm - usage.startKm) + ' km';
+                    }
+                    
+                    // Zeile erstellen
+                    const row = document.createElement('tr');
+                    
+                    // Betriebsstunden aus dem hours Feld oder alternativ aus operatingHours extrahieren
+                    const operatingHours = usage.hours || usage.operatingHours || '-';
+                    
+                    // Zellen hinzufügen (vereinfachte Version)
+                    row.innerHTML = `
+                        <td>${dateStr}</td>
+                        <td>${usage.employee?.name || 'Unbekannt'}</td>
+                        <td>${usage.vehicle?.name || 'Unbekannt'}</td>
+                        <td>${operatingHours}</td>
+                    `;
+                    
+                    tableBody.appendChild(row);
+                });
+                
+                console.log(`${vehicleUsages.length} Fahrzeugbuchungen angezeigt`);
+                
+            } catch (error) {
+                console.error('Fehler beim Laden der Fahrzeugbuchungen:', error);
+                const vehicleUsagesContainer = document.getElementById('vehicle-usages-container');
+                vehicleUsagesContainer.innerHTML = '<p class="error">Fehler beim Laden der Fahrzeugbuchungen.</p>';
+            }
+        }
+        
         async function loadProjectImages(type) {
             try {
                 console.log(`=== LADE ${type.toUpperCase()}-BILDER ===`);
@@ -1552,6 +1676,9 @@
     <!-- Admin Zeiteintrag Funktionen -->
     <script src="admin-time-entry.js"></script>
     
+    <!-- Admin-Funktionen -->
+    <script src="admin-vehicle-usage.js"></script>
+    
     <!-- Report-functions und PDF-Export am Ende laden -->
     <script src="report-functions.js"></script>
     <script src="pdf-export.js"></script>
@@ -1593,6 +1720,48 @@
                 <div class="form-actions">
                     <button type="button" id="cancel-time-entry-btn" class="btn btn-secondary">Abbrechen</button>
                     <button type="submit" id="save-time-entry-btn" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Admin Vehicle Usage Modal -->
+    <div id="admin-vehicle-usage-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h2>Fahrzeugbuchung hinzufügen</h2>
+            <form id="admin-vehicle-usage-form">
+                <div class="form-group">
+                    <label for="vehicle-usage-employee-select">Mitarbeiter:</label>
+                    <select id="vehicle-usage-employee-select" required>
+                        <option value="">-- Mitarbeiter auswählen --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="vehicle-select">Fahrzeug:</label>
+                    <select id="vehicle-select" required>
+                        <option value="">-- Fahrzeug auswählen --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="vehicle-usage-date">Datum:</label>
+                    <input type="date" id="vehicle-usage-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="start-km">Startkilometer:</label>
+                    <input type="number" id="start-km" required min="0">
+                </div>
+                <div class="form-group">
+                    <label for="end-km">Endkilometer:</label>
+                    <input type="number" id="end-km" required min="0">
+                </div>
+                <div class="form-group">
+                    <label for="vehicle-usage-notes">Notizen:</label>
+                    <textarea id="vehicle-usage-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-vehicle-usage-btn" class="btn btn-secondary">Abbrechen</button>
+                    <button type="submit" id="save-vehicle-usage-btn" class="btn btn-primary">Speichern</button>
                 </div>
             </form>
         </div>
