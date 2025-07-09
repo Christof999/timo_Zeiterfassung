@@ -444,6 +444,40 @@
             margin-bottom: 10px;
         }
         
+        /* Nachkalkulation Styles */
+        .nachkalkulation-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        .nachkalkulation-table th {
+            background-color: #5e8c2f;
+            color: white;
+            text-align: left;
+            padding: 10px;
+        }
+        
+        .nachkalkulation-table td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .nachkalkulation-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .nachkalkulation-table .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+        }
+        
+        .nachkalkulation-table .grand-total-row {
+            font-weight: bold;
+            background-color: #e6e6e6;
+            font-size: 1.1em;
+        }
+        
         /* Styling für Admin-Zeiteintragsformular */
         .form-group {
             margin-bottom: 15px;
@@ -594,6 +628,15 @@
                             <!-- Fahrzeugbuchungen werden hier eingefügt -->
                         </tbody>
                     </table>
+                </div>
+            </section>
+            
+            <section>
+                <h2><i class="fas fa-calculator"></i> Nachkalkulation</h2>
+                <div id="nachkalkulation-container">
+                    <div id="nachkalkulation-content">
+                        <p>Nachkalkulation wird berechnet...</p>
+                    </div>
                 </div>
             </section>
             
@@ -886,10 +929,13 @@
                 console.log('2. Lade Fahrzeugbuchungen...');
                 await loadVehicleUsages();
                 
-                console.log('3. Lade Baustellenbilder...');
+                console.log('3. Lade Nachkalkulation...');
+                await loadNachkalkulation();
+
+                console.log('4. Lade Baustellenbilder...');
                 await loadProjectImages('construction_site');
                 
-                console.log('4. Lade Dokumente...');
+                console.log('5. Lade Dokumente...');
                 await loadProjectImages('delivery_note');
                 
                 console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
@@ -1181,6 +1227,285 @@
                 const vehicleUsagesContainer = document.getElementById('vehicle-usages-container');
                 vehicleUsagesContainer.innerHTML = '<p class="error">Fehler beim Laden der Fahrzeugbuchungen.</p>';
             }
+        }
+
+        // Nachkalkulation laden
+        async function loadNachkalkulation() {
+            try {
+                console.log('Starte Laden der Nachkalkulation...');
+                const nachkalkulationContainer = document.getElementById('nachkalkulation-container');
+                
+                if (!nachkalkulationContainer) {
+                    console.error('Nachkalkulation-Container nicht gefunden');
+                    return;
+                }
+                
+                // Nur für Admins anzeigen
+                const currentAdmin = DataService.getCurrentAdmin();
+                if (!currentAdmin) {
+                    nachkalkulationContainer.innerHTML = '<p>Nachkalkulation nur für Administratoren verfügbar.</p>';
+                    return;
+                }
+                
+                // Nachkalkulation für das aktuelle Projekt laden
+                loadNachkalkulationData(projectId);
+                
+            } catch (error) {
+                console.error('Fehler beim Laden der Nachkalkulation:', error);
+                const nachkalkulationContainer = document.getElementById('nachkalkulation-container');
+                if (nachkalkulationContainer) {
+                    nachkalkulationContainer.innerHTML = `<p>Fehler beim Laden der Nachkalkulation: ${error.message}</p>`;
+                }
+            }
+        }
+        
+        // Nachkalkulationsdaten für ein bestimmtes Projekt laden
+        async function loadNachkalkulationData(targetProjectId) {
+            try {
+                console.log(`Lade Nachkalkulationsdaten für Projekt: ${targetProjectId}`);
+                const nachkalkulationContent = document.getElementById('nachkalkulation-content');
+                nachkalkulationContent.innerHTML = '<p>Daten werden berechnet...</p>';
+                
+                // Projektdaten laden
+                const project = await DataService.getProjectById(targetProjectId);
+                if (!project) {
+                    throw new Error('Projekt nicht gefunden');
+                }
+                
+                // 1. Mitarbeiterdaten sammeln
+                const timeEntries = await DataService.getProjectTimeEntries(targetProjectId);
+                const employeeData = {};
+                
+                // Zeiten pro Mitarbeiter zusammenfassen
+                for (const entry of timeEntries) {
+                    if (!entry.employeeId) continue;
+                    
+                    // Arbeitszeit berechnen
+                    let workHours = 0;
+                    if (entry.clockInTime && entry.clockOutTime) {
+                        const inTime = entry.clockInTime instanceof firebase.firestore.Timestamp ? 
+                            entry.clockInTime.toDate() : new Date(entry.clockInTime);
+                        
+                        const outTime = entry.clockOutTime instanceof firebase.firestore.Timestamp ? 
+                            entry.clockOutTime.toDate() : new Date(entry.clockOutTime);
+                        
+                        // Berechne die Arbeitsstunden als Differenz, berücksichtige Pause
+                        const pauseMinutes = entry.pauseMinutes || 0;
+                        const diffMs = outTime.getTime() - inTime.getTime();
+                        const diffHours = diffMs / (1000 * 60 * 60); // Millisekunden in Stunden
+                        workHours = diffHours - (pauseMinutes / 60); // Pause abziehen (in Stunden)
+                        
+                        if (workHours < 0) workHours = 0; // Negativ verhindern
+                    }
+                    
+                    // Mitarbeiterdaten abrufen, falls nicht vorhanden
+                    if (!employeeData[entry.employeeId]) {
+                        const employeeDoc = await DataService.employeesCollection.doc(entry.employeeId).get();
+                        if (employeeDoc.exists) {
+                            const employee = { id: employeeDoc.id, ...employeeDoc.data() };
+                            employeeData[entry.employeeId] = {
+                                name: employee.name || 'Unbekannt',
+                                hourlyRate: employee.hourlyRate || 0,
+                                totalHours: 0,
+                                totalCost: 0
+                            };
+                        } else {
+                            employeeData[entry.employeeId] = {
+                                name: 'Unbekannter Mitarbeiter',
+                                hourlyRate: 0,
+                                totalHours: 0,
+                                totalCost: 0
+                            };
+                        }
+                    }
+                    
+                    // Stunden aufaddieren
+                    employeeData[entry.employeeId].totalHours += workHours;
+                }
+                
+                // Kosten für jeden Mitarbeiter berechnen
+                let totalEmployeeCost = 0;
+                for (const employeeId in employeeData) {
+                    const employee = employeeData[employeeId];
+                    employee.totalCost = employee.hourlyRate * employee.totalHours;
+                    totalEmployeeCost += employee.totalCost;
+                }
+                
+                // 2. Fahrzeugdaten sammeln
+                const vehicleUsages = await DataService.getVehicleUsagesForProject(targetProjectId);
+                const vehicleData = {};
+                
+                // Stunden pro Fahrzeug zusammenfassen (aus Start-/End-Kilometern)
+                for (const usage of vehicleUsages) {
+                    if (!usage.vehicleId) continue;
+                    
+                    // Fahrzeugdaten abrufen, falls nicht vorhanden
+                    if (!vehicleData[usage.vehicleId]) {
+                        const vehicleDoc = await DataService.vehiclesCollection.doc(usage.vehicleId).get();
+                        if (vehicleDoc.exists) {
+                            const vehicle = { id: vehicleDoc.id, ...vehicleDoc.data() };
+                            vehicleData[usage.vehicleId] = {
+                                name: vehicle.name || 'Unbekannt',
+                                hourlyRate: vehicle.hourlyRate || 0,
+                                totalHours: 0,
+                                totalCost: 0
+                            };
+                        } else {
+                            vehicleData[usage.vehicleId] = {
+                                name: 'Unbekanntes Fahrzeug',
+                                hourlyRate: 0,
+                                totalHours: 0,
+                                totalCost: 0
+                            };
+                        }
+                    }
+                    
+                    // Vereinfachte Annahme: 1 Eintrag = 1 Stunde Fahrzeugnutzung
+                    // Falls tatsächliche Nutzungsdauer vorhanden ist, diese verwenden
+                    const usageHours = usage.usageHours || 1;
+                    
+                    // Stunden aufaddieren
+                    vehicleData[usage.vehicleId].totalHours += usageHours;
+                }
+                
+                // Kosten für jedes Fahrzeug berechnen
+                let totalVehicleCost = 0;
+                for (const vehicleId in vehicleData) {
+                    const vehicle = vehicleData[vehicleId];
+                    vehicle.totalCost = vehicle.hourlyRate * vehicle.totalHours;
+                    totalVehicleCost += vehicle.totalCost;
+                }
+                
+                // 3. Gesamtkosten berechnen
+                const totalProjectCost = totalEmployeeCost + totalVehicleCost;
+                
+                // 4. Daten für die Anzeige aufbereiten und anzeigen
+                displayNachkalkulation(employeeData, vehicleData, totalEmployeeCost, totalVehicleCost, totalProjectCost);
+                
+            } catch (error) {
+                console.error('Fehler beim Berechnen der Nachkalkulation:', error);
+                const nachkalkulationContent = document.getElementById('nachkalkulation-content');
+                if (nachkalkulationContent) {
+                    nachkalkulationContent.innerHTML = `<p>Fehler beim Berechnen der Nachkalkulation: ${error.message}</p>`;
+                }
+            }
+        }
+        
+        // Nachkalkulation im UI anzeigen
+        function displayNachkalkulation(employeeData, vehicleData, totalEmployeeCost, totalVehicleCost, totalProjectCost) {
+            const nachkalkulationContent = document.getElementById('nachkalkulation-content');
+            if (!nachkalkulationContent) return;
+            
+            // Formatieren für Euro-Darstellung
+            function formatCurrency(amount) {
+                return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
+            }
+            
+            // Formatieren für Stundenangabe
+            function formatHours(hours) {
+                return parseFloat(hours.toFixed(2)).toLocaleString('de-DE') + ' h';
+            }
+            
+            // HTML für die Ausgabe erstellen
+            let html = `
+                <h3>Personalkosten:</h3>
+                <table class="nachkalkulation-table">
+                    <thead>
+                        <tr>
+                            <th>Mitarbeiter</th>
+                            <th>Stunden</th>
+                            <th>Stundensatz</th>
+                            <th>Summe</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            // Mitarbeiterdaten einfügen
+            const employees = Object.values(employeeData);
+            if (employees.length > 0) {
+                employees.forEach(employee => {
+                    html += `
+                        <tr>
+                            <td>${employee.name}</td>
+                            <td>${formatHours(employee.totalHours)}</td>
+                            <td>${formatCurrency(employee.hourlyRate)}</td>
+                            <td>${formatCurrency(employee.totalCost)}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                html += `
+                    <tr>
+                        <td colspan="4">Keine Mitarbeiterdaten verfügbar</td>
+                    </tr>
+                `;
+            }
+            
+            // Summenzeile für Personal
+            html += `
+                <tr class="total-row">
+                    <td colspan="3">Summe Personalkosten</td>
+                    <td>${formatCurrency(totalEmployeeCost)}</td>
+                </tr>
+            </tbody>
+            </table>
+            
+            <h3>Fahrzeugkosten:</h3>
+            <table class="nachkalkulation-table">
+                <thead>
+                    <tr>
+                        <th>Fahrzeug</th>
+                        <th>Stunden</th>
+                        <th>Stundensatz</th>
+                        <th>Summe</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            // Fahrzeugdaten einfügen
+            const vehicles = Object.values(vehicleData);
+            if (vehicles.length > 0) {
+                vehicles.forEach(vehicle => {
+                    html += `
+                        <tr>
+                            <td>${vehicle.name}</td>
+                            <td>${formatHours(vehicle.totalHours)}</td>
+                            <td>${formatCurrency(vehicle.hourlyRate)}</td>
+                            <td>${formatCurrency(vehicle.totalCost)}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                html += `
+                    <tr>
+                        <td colspan="4">Keine Fahrzeugdaten verfügbar</td>
+                    </tr>
+                `;
+            }
+            
+            // Summenzeile für Fahrzeuge
+            html += `
+                <tr class="total-row">
+                    <td colspan="3">Summe Fahrzeugkosten</td>
+                    <td>${formatCurrency(totalVehicleCost)}</td>
+                </tr>
+            </tbody>
+            </table>
+            
+            <h3>Gesamtkosten:</h3>
+            <table class="nachkalkulation-table">
+                <tbody>
+                    <tr class="grand-total-row">
+                        <td colspan="3">GESAMTKOSTEN PROJEKT</td>
+                        <td>${formatCurrency(totalProjectCost)}</td>
+                    </tr>
+                </tbody>
+            </table>
+            `;
+            
+            nachkalkulationContent.innerHTML = html;
         }
         
         async function loadProjectImages(type) {
