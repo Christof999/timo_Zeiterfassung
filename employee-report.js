@@ -188,8 +188,12 @@ async function generateEmployeeReport() {
         
         console.log('Nach Filterung verbleibende Einträge:', filteredEntries.length);
         
-        // Einträge im globalen Objekt speichern
-        currentReportEntries = filteredEntries;
+        // Einträge im globalen Objekt speichern und nach Datum aufsteigend sortieren
+        currentReportEntries = filteredEntries.sort((a, b) => {
+            const dateA = a.clockInTime?.toDate ? a.clockInTime.toDate() : new Date(a.clockInTime);
+            const dateB = b.clockInTime?.toDate ? b.clockInTime.toDate() : new Date(b.clockInTime);
+            return dateA - dateB; // Aufsteigend nach Datum sortieren
+        });
         
         // Mitarbeiter-Details laden
         const employee = await DataService.getEmployeeById(currentEmployeeId);
