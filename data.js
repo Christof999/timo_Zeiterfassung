@@ -15,10 +15,15 @@ const DataService = {
   fileUploadsCollection: null,
   vehiclesCollection: null,
   vehicleUsagesCollection: null,
+  leaveRequestsCollection: null,
 
   // Ein Promise, das sicherstellt, dass keine DB-Anfrage gesendet wird,
   // bevor die anonyme Anmeldung abgeschlossen ist.
   _authReadyPromise: null,
+  // Öffentlicher Zugriff auf das Auth-Ready-Promise
+  get authReady() {
+    return this._authReadyPromise;
+  },
 
   // Initialisierung der Firebase-Verbindung und der Authentifizierung
   init() {
@@ -39,6 +44,7 @@ const DataService = {
     this.fileUploadsCollection = this.db.collection("fileUploads");
     this.vehiclesCollection = this.db.collection("vehicles");
     this.vehicleUsagesCollection = this.db.collection("vehicleUsages");
+    this.leaveRequestsCollection = this.db.collection("leaveRequests");
 
     // Check for session stored admin login
     const storedAdmin = this.getCurrentAdmin();
@@ -141,7 +147,53 @@ const DataService = {
 
   clearCurrentUser() {
     this._currentUser = null;
-    localStorage.removeItem("lauffer_current_user");
+    localStorage.removeItem("lauffer_user");
+  },
+  
+  /**
+   * Gibt den aktuell angemeldeten Mitarbeiter zurück
+   * @returns {Object|null} Die Daten des angemeldeten Mitarbeiters oder null
+   */
+  getCurrentEmployee() {
+    return this.getCurrentUser();
+  },
+  
+  /**
+   * Prüft, ob der aktuell angemeldete Benutzer Admin-Rechte hat
+   * @returns {Promise<boolean>} True, wenn der Benutzer Admin-Rechte hat, sonst false
+   */
+  async isAdmin() {
+    await this._authReadyPromise;
+    try {
+      // Zuerst prüfen, ob ein Admin in der Session gespeichert ist
+      const storedAdmin = this.getCurrentAdmin();
+      if (storedAdmin) {
+        return true;
+      }
+      
+      // Wenn kein Admin in der Session, dann prüfen, ob der angemeldete Benutzer Admin-Rechte hat
+      const currentUser = this.getCurrentUser();
+      if (currentUser && currentUser.isAdmin === true) {
+        return true;
+      }
+      
+      // Falls Firebase Auth nicht anonym ist, den Benutzer aus der Datenbank laden
+      const firebaseUser = firebase.auth().currentUser;
+      if (firebaseUser && !firebaseUser.isAnonymous) {
+        const userDoc = await this.employeesCollection.doc(firebaseUser.uid).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          if (userData.isAdmin === true) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Fehler bei der Überprüfung der Admin-Rechte:', error);
+      return false;
+    }
   },
 
   // --- AB HIER MUSS JED E FUNKTION AUF DIE AUTH WARTEN ---
@@ -165,9 +217,27 @@ const DataService = {
         console.error("Keine gültige ID angegeben");
         return null;
       }
-      const doc = await this.employeesCollection.doc(id).get();
+      
+      // Erzwinge ein Abrufen der aktuellsten Daten ohne Cache
+      const doc = await this.employeesCollection.doc(id).get({ source: 'server' });
+      
       if (doc.exists) {
-        return { id: doc.id, ...doc.data() };
+        const employeeData = { id: doc.id, ...doc.data() };
+        console.log("Mitarbeiterdaten geladen:", employeeData);
+        
+        // Zusätzliches Logging für Urlaubsdaten
+        if (employeeData.vacationDays) {
+          console.log("Urlaubsdaten in Firestore:", {
+            total: employeeData.vacationDays.total,
+            used: employeeData.vacationDays.used,
+            year: employeeData.vacationDays.year,
+            verfügbar: employeeData.vacationDays.total - employeeData.vacationDays.used
+          });
+        } else {
+          console.log("Keine Urlaubsdaten in Firestore gefunden!");
+        }
+        
+        return employeeData;
       }
       console.log("Mitarbeiter nicht gefunden");
       return null;
@@ -213,6 +283,15 @@ const DataService = {
       // Falls hourlyWage angegeben ist, sicherstellen, dass es als Zahl gespeichert wird
       if (employeeData.hourlyWage !== undefined) {
         employeeData.hourlyWage = parseFloat(employeeData.hourlyWage);
+      }
+      
+      // Standard-Urlaubsdaten hinzufügen, falls nicht vorhanden
+      if (employeeData.vacationDays === undefined) {
+        employeeData.vacationDays = {
+          total: 30, // Jährliches Kontingent: 30 Tage
+          used: 0,   // Bisher genutzte Tage
+          year: new Date().getFullYear() // Aktuelles Jahr
+        };
       }
       
       const result = await this.employeesCollection.add(employeeData);
@@ -2676,6 +2755,428 @@ const DataService = {
       throw error;
     }
   },
+
+  /**
+   * Erstellt einen neuen Urlaubsantrag
+   * @param {Object} leaveRequestData - Die Daten des Urlaubsantrags
+   * @returns {Promise<string>} - Die ID des erstellten Urlaubsantrags
+   */
+  async createLeaveRequest(leaveRequestData) {
+    try {
+      await this._authReadyPromise;
+      
+      // Mitarbeiter-Details prüfen
+      if (!leaveRequestData.employeeId) {
+        throw new Error('Keine Mitarbeiter-ID angegeben');
+      }
+      
+      // Prüfen, ob Start- und Enddatum vorhanden sind
+      if (!leaveRequestData.startDate || !leaveRequestData.endDate) {
+        throw new Error('Start- und Enddatum müssen angegeben werden');
+      }
+      
+      // Standardwerte setzen
+      const leaveRequest = {
+        ...leaveRequestData,
+        status: 'pending',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // In Firestore speichern
+      const docRef = await this.leaveRequestsCollection.add(leaveRequest);
+      return docRef.id;
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Urlaubsantrags:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Aktualisiert einen Urlaubsantrag
+   * @param {string} id - Die ID des Urlaubsantrags
+   * @param {Object} leaveRequestData - Die aktualisierten Daten
+   * @returns {Promise<void>}
+   */
+  async updateLeaveRequest(id, leaveRequestData) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!id) {
+        throw new Error('Keine Urlaubsantrag-ID angegeben');
+      }
+      
+      // Timestamp für die Aktualisierung setzen
+      const updateData = {
+        ...leaveRequestData,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // In Firestore aktualisieren
+      await this.leaveRequestsCollection.doc(id).update(updateData);
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren des Urlaubsantrags:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Genehmigt oder lehnt einen Urlaubsantrag ab
+   * @param {string} id - Die ID des Urlaubsantrags
+   * @param {string} status - Der neue Status ('approved' oder 'rejected')
+   * @param {string} adminId - Die ID des Admins, der den Antrag bearbeitet
+   * @param {string} adminComment - Optional: Kommentar des Admins
+   * @returns {Promise<void>}
+   */
+  async processLeaveRequest(id, status, adminId, adminComment = '') {
+    try {
+      await this._authReadyPromise;
+      
+      if (!id) {
+        throw new Error('Keine Urlaubsantrag-ID angegeben');
+      }
+      
+      if (status !== 'approved' && status !== 'rejected') {
+        throw new Error('Ungültiger Status. Erlaubte Werte: approved, rejected');
+      }
+      
+      // Urlaubsantrag laden
+      const leaveRequestDoc = await this.leaveRequestsCollection.doc(id).get();
+      
+      if (!leaveRequestDoc.exists) {
+        throw new Error('Urlaubsantrag nicht gefunden');
+      }
+      
+      const leaveRequest = {
+        id: leaveRequestDoc.id,
+        ...leaveRequestDoc.data()
+      };
+      
+      // Aktualisierungsdaten vorbereiten
+      const updateData = {
+        status,
+        reviewedBy: adminId,
+        reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      if (adminComment) {
+        updateData.adminComment = adminComment;
+      }
+      
+      // Wenn genehmigt, Urlaubstage zum Mitarbeiter hinzufügen
+      if (status === 'approved') {
+        // Mitarbeiter laden
+        const employeeDoc = await this.employeesCollection.doc(leaveRequest.employeeId).get();
+        
+        if (!employeeDoc.exists) {
+          throw new Error('Mitarbeiter nicht gefunden');
+        }
+        
+        const employee = employeeDoc.data();
+        
+        // Aktuelles Jahr prüfen und ggf. zurücksetzen
+        const currentYear = new Date().getFullYear();
+        
+        // Urlaubstage-Objekt initialisieren oder aktualisieren
+        let vacationDaysObj;
+        if (!employee.vacationDays || employee.vacationDays.year !== currentYear) {
+          // Neues Jahr - setze neue Urlaubsdaten
+          vacationDaysObj = {
+            total: 30,
+            used: 0,
+            year: currentYear
+          };
+        } else {
+          // Bestehendes Jahr - behalte bestehende Daten
+          vacationDaysObj = {
+            total: employee.vacationDays.total || 30, // Standardwert, falls undefiniert
+            used: employee.vacationDays.used || 0,    // Standardwert, falls undefiniert
+            year: currentYear
+          };
+        }
+        
+        // Urlaubstage berechnen (ohne Wochenenden und Feiertage)
+        const vacationDays = this.calculateWorkingDaysBetweenDates(
+          leaveRequest.startDate.toDate(),
+          leaveRequest.endDate.toDate()
+        );
+        
+        // Überprüfen, ob genügend Urlaubstage vorhanden sind
+        if (vacationDaysObj.used + vacationDays > vacationDaysObj.total) {
+          throw new Error('Nicht genügend Urlaubstage verfügbar');
+        }
+        
+        // Neue Gesamtzahl der verwendeten Urlaubstage
+        const updatedUsedDays = vacationDaysObj.used + vacationDays;
+        
+        // Gesamtes Urlaubstage-Objekt aktualisieren
+        await this.employeesCollection.doc(leaveRequest.employeeId).update({
+          vacationDays: {
+            total: vacationDaysObj.total,
+            used: updatedUsedDays,
+            year: currentYear
+          }
+        });
+        
+        console.log(`Urlaubstage für Mitarbeiter ${leaveRequest.employeeId} aktualisiert:`, {
+          total: vacationDaysObj.total,
+          used: updatedUsedDays,
+          year: currentYear,
+          verfügbar: vacationDaysObj.total - updatedUsedDays
+        });
+        
+        // Genehmigte Urlaubstage als Zeiteinträge hinzufügen
+        const startDate = leaveRequest.startDate.toDate();
+        const endDate = leaveRequest.endDate.toDate();
+        let currentDate = new Date(startDate);
+        
+        while (currentDate <= endDate) {
+          // Prüfen, ob es sich um einen Arbeitstag handelt
+          if (this.isWorkingDay(currentDate)) {
+            // Zeiteintrag für den Urlaubstag erstellen
+            const timeEntry = {
+              employeeId: leaveRequest.employeeId,
+              date: new Date(currentDate),
+              clockInTime: new Date(currentDate.setHours(8, 0, 0)), // 8:00 Uhr
+              clockOutTime: new Date(currentDate.setHours(16, 0, 0)), // 16:00 Uhr
+              notes: `Genehmigter Urlaub (Antrag #${id})`,
+              isVacationDay: true, // Markierung als Urlaubstag
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            await this.timeEntriesCollection.add(timeEntry);
+            
+            // Zeit zurücksetzen für den nächsten Durchlauf
+            currentDate.setHours(0, 0, 0, 0);
+          }
+          
+          // Zum nächsten Tag
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+      
+      // Urlaubsantrag aktualisieren
+      await this.leaveRequestsCollection.doc(id).update(updateData);
+    } catch (error) {
+      console.error('Fehler bei der Bearbeitung des Urlaubsantrags:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Lädt einen Urlaubsantrag anhand seiner ID
+   * @param {string} id - Die ID des Urlaubsantrags
+   * @returns {Promise<Object>} - Der Urlaubsantrag
+   */
+  async getLeaveRequestById(id) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!id) {
+        throw new Error('Keine Urlaubsantrag-ID angegeben');
+      }
+      
+      const doc = await this.leaveRequestsCollection.doc(id).get();
+      
+      if (!doc.exists) {
+        throw new Error('Urlaubsantrag nicht gefunden');
+      }
+      
+      return {
+        id: doc.id,
+        ...doc.data()
+      };
+    } catch (error) {
+      console.error('Fehler beim Laden des Urlaubsantrags:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Lädt alle Urlaubsanträge eines Mitarbeiters
+   * @param {string} employeeId - Die ID des Mitarbeiters
+   * @returns {Promise<Array>} - Array mit Urlaubsanträgen
+   */
+  async getLeaveRequestsByEmployeeId(employeeId) {
+    try {
+      await this._authReadyPromise;
+      
+      if (!employeeId) {
+        throw new Error('Keine Mitarbeiter-ID angegeben');
+      }
+      
+      const snapshot = await this.leaveRequestsCollection
+        .where('employeeId', '==', employeeId)
+        .orderBy('createdAt', 'desc')
+        .get();
+      
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('Fehler beim Laden der Urlaubsanträge:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Lädt alle Urlaubsanträge (für Admin-Übersicht)
+   * @param {string} status - Optional: Filter nach Status
+   * @returns {Promise<Array>} - Array mit Urlaubsanträgen und Mitarbeiterdaten
+   */
+  async getAllLeaveRequests(status = null) {
+    try {
+      await this._authReadyPromise;
+      
+      let query = this.leaveRequestsCollection.orderBy('createdAt', 'desc');
+      
+      if (status) {
+        query = query.where('status', '==', status);
+      }
+      
+      const snapshot = await query.get();
+      
+      const leaveRequests = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Mitarbeiterdaten laden
+      const leaveRequestsWithEmployeeData = await Promise.all(
+        leaveRequests.map(async (request) => {
+          const employeeDoc = await this.employeesCollection.doc(request.employeeId).get();
+          const employeeData = employeeDoc.exists ? employeeDoc.data() : { name: 'Unbekannter Mitarbeiter' };
+          
+          return {
+            ...request,
+            employeeName: employeeData.name
+          };
+        })
+      );
+      
+      return leaveRequestsWithEmployeeData;
+    } catch (error) {
+      console.error('Fehler beim Laden der Urlaubsanträge:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Berechnet die Anzahl der Arbeitstage zwischen zwei Daten
+   * (ohne Wochenenden und Feiertage in Bayern)
+   * @param {Date} startDate - Startdatum
+   * @param {Date} endDate - Enddatum
+   * @returns {number} - Anzahl der Arbeitstage
+   */
+  calculateWorkingDaysBetweenDates(startDate, endDate) {
+    let workingDays = 0;
+    const currentDate = new Date(startDate);
+    currentDate.setHours(0, 0, 0, 0);
+    
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    
+    while (currentDate <= end) {
+      if (this.isWorkingDay(currentDate)) {
+        workingDays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return workingDays;
+  },
+  
+  /**
+   * Prüft, ob ein Datum ein Arbeitstag ist (kein Wochenende und kein Feiertag in Bayern)
+   * @param {Date} date - Das zu prüfende Datum
+   * @returns {boolean} - true, wenn es ein Arbeitstag ist
+   */
+  isWorkingDay(date) {
+    const day = date.getDay();
+    
+    // Wochenende ausschließen (0 = Sonntag, 6 = Samstag)
+    if (day === 0 || day === 6) {
+      return false;
+    }
+    
+    // Bayerische Feiertage prüfen
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // Januar = 1
+    const dayOfMonth = date.getDate();
+    
+    // Formatierung des Datums als 'YYYY-MM-DD' für den Vergleich
+    const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
+    
+    // Statische bayerische Feiertage
+    const holidays = [
+      `${year}-01-01`, // Neujahr
+      `${year}-01-06`, // Heilige Drei Könige
+      `${year}-05-01`, // Tag der Arbeit
+      `${year}-08-15`, // Mariä Himmelfahrt
+      `${year}-10-03`, // Tag der Deutschen Einheit
+      `${year}-11-01`, // Allerheiligen
+      `${year}-12-25`, // 1. Weihnachtsfeiertag
+      `${year}-12-26`  // 2. Weihnachtsfeiertag
+    ];
+    
+    // Berechnung der beweglichen Feiertage
+    const easterDate = this.calculateEaster(year);
+    const karfreitag = new Date(easterDate);
+    karfreitag.setDate(easterDate.getDate() - 2);
+    
+    const ostermontag = new Date(easterDate);
+    ostermontag.setDate(easterDate.getDate() + 1);
+    
+    const christiHimmelfahrt = new Date(easterDate);
+    christiHimmelfahrt.setDate(easterDate.getDate() + 39);
+    
+    const pfingstsonntag = new Date(easterDate);
+    pfingstsonntag.setDate(easterDate.getDate() + 49);
+    
+    const pfingstmontag = new Date(easterDate);
+    pfingstmontag.setDate(easterDate.getDate() + 50);
+    
+    const fronleichnam = new Date(easterDate);
+    fronleichnam.setDate(easterDate.getDate() + 60);
+    
+    // Formatierung der beweglichen Feiertage
+    holidays.push(
+      `${karfreitag.getFullYear()}-${String(karfreitag.getMonth()+1).padStart(2, '0')}-${String(karfreitag.getDate()).padStart(2, '0')}`,
+      `${ostermontag.getFullYear()}-${String(ostermontag.getMonth()+1).padStart(2, '0')}-${String(ostermontag.getDate()).padStart(2, '0')}`,
+      `${christiHimmelfahrt.getFullYear()}-${String(christiHimmelfahrt.getMonth()+1).padStart(2, '0')}-${String(christiHimmelfahrt.getDate()).padStart(2, '0')}`,
+      `${pfingstmontag.getFullYear()}-${String(pfingstmontag.getMonth()+1).padStart(2, '0')}-${String(pfingstmontag.getDate()).padStart(2, '0')}`,
+      `${fronleichnam.getFullYear()}-${String(fronleichnam.getMonth()+1).padStart(2, '0')}-${String(fronleichnam.getDate()).padStart(2, '0')}`
+    );
+    
+    // Prüfen, ob das Datum ein Feiertag ist
+    return !holidays.includes(formattedDate);
+  },
+  
+  /**
+   * Berechnet das Osterdatum für ein gegebenes Jahr
+   * @param {number} year - Das Jahr
+   * @returns {Date} - Das Osterdatum
+   */
+  calculateEaster(year) {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    
+    return new Date(year, month - 1, day);
+  }
 };
 
 document.addEventListener("DOMContentLoaded", () => {

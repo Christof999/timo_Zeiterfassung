@@ -81,6 +81,7 @@
                 <div class="dashboard-tabs">
                     <button class="tab-btn active" data-tab="overview">Übersicht</button>
                     <button class="tab-btn" data-tab="employees">Mitarbeiter</button>
+                    <button class="tab-btn" data-tab="vacation">Urlaubsanträge</button>
                     <button class="tab-btn" data-tab="projects">Projekte</button>
                     <button class="tab-btn" data-tab="vehicles">Fahrzeuge</button>
                     <button class="tab-btn" data-tab="reports">Berichte</button>
@@ -190,6 +191,19 @@
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>
+
+                <div id="vacation-tab" class="tab-content">
+                    <div class="tab-header">
+                        <h3>Urlaubsanträge</h3>
+                        <a href="admin-vacation.html" class="btn primary-btn">
+                            <i class="fas fa-calendar-alt"></i> Urlaubsverwaltung öffnen
+                        </a>
+                    </div>
+                    <div class="info-message">
+                        <i class="fas fa-info-circle"></i>
+                        <p>Die Urlaubsverwaltung öffnet sich in einer separaten Seite, wo Sie alle Funktionen zur Verwaltung von Urlaubsanträgen nutzen können.</p>
                     </div>
                 </div>
 
@@ -576,6 +590,28 @@
                         .report-module .btn i {
                             margin-right: 8px;
                         }
+                        
+                        .info-message {
+                            display: flex;
+                            align-items: flex-start;
+                            padding: 15px;
+                            margin-top: 20px;
+                            background-color: #e7f3ff;
+                            border-left: 4px solid #4a7c59;
+                            border-radius: 4px;
+                        }
+                        
+                        .info-message i {
+                            font-size: 24px;
+                            color: #4a7c59;
+                            margin-right: 15px;
+                        }
+                        
+                        .info-message p {
+                            margin: 0;
+                            color: #333;
+                            line-height: 1.5;
+                        }
                     </style>
                 </div>
             </div>
@@ -619,6 +655,9 @@
     
     <!-- Fahrzeugverwaltung -->
     <script src="vehicle-admin.js"></script>
+    
+    <!-- Urlaubsverwaltung -->
+    <script src="admin-vacation.js"></script>
     
     <!-- Nur Admin-Funktionen, Berichtsanzeige entfernt -->
 </body>
