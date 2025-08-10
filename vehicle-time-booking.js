@@ -136,7 +136,7 @@ async function loadVehiclesForBooking() {
             console.log(`- ${vehicle.id}: ${vehicle.name} (${vehicle.type}), Rate: ${vehicle.hourlyRate}€/h, Aktiv: ${vehicle.isActive}`);
             const option = document.createElement('option');
             option.value = vehicle.id;
-            option.textContent = `${vehicle.name} (${vehicle.type}) - ${vehicle.hourlyRate || 0}€/h`;
+            option.textContent = `${vehicle.name} (${vehicle.type})`;
             vehicleSelect.appendChild(option);
         });
         
@@ -231,6 +231,10 @@ async function submitVehicleTimeBooking(event) {
  * @param {string} type - Der Typ der Benachrichtigung ('success', 'error', 'warning', 'info')
  */
 function showNotification(message, type = 'info') {
+    if (typeof window !== 'undefined' && typeof window.notify === 'function') {
+        window.notify(message, type);
+        return;
+    }
     if (window.app && window.app.showNotification) {
         window.app.showNotification(message, type);
     } else {

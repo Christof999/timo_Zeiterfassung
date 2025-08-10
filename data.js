@@ -3,6 +3,54 @@
  * Verantwortlich für die Speicherung und Abfrage von Mitarbeitern, Projekten, Zeiteinträgen und Fahrzeugen
  * Firebase-Version - JETZT MIT ANONYMER AUTHENTIFIZIERUNG
  */
+ 
+/**
+ * @typedef {Object} Employee
+ * @property {string} id
+ * @property {string} username
+ * @property {string} [name]
+ * @property {string} [firstName]
+ * @property {string} [lastName]
+ * @property {number} [hourlyWage]
+ * @property {boolean} [isAdmin]
+ * @property {('active'|'inactive')} [status]
+ * @property {{ total:number, used:number, year:number }} [vacationDays]
+ */
+
+/**
+ * @typedef {Object} Project
+ * @property {string} id
+ * @property {string} [name]
+ * @property {string} [client]
+ * @property {string} [location]
+ * @property {any} [startDate]
+ * @property {any} [endDate]
+ * @property {string} [description]
+ */
+
+/**
+ * @typedef {Object} Vehicle
+ * @property {string} id
+ * @property {string} name
+ * @property {string} [type]
+ * @property {string} [licensePlate]
+ * @property {number} [hourlyRate]
+ * @property {boolean} [isActive]
+ */
+
+/**
+ * @typedef {Object} TimeEntry
+ * @property {string} id
+ * @property {string} employeeId
+ * @property {string} projectId
+ * @property {Date|any} clockInTime
+ * @property {Date|any|null} clockOutTime
+ * @property {{lat:number|null,lng:number|null}|null} [clockInLocation]
+ * @property {{lat:number|null,lng:number|null}|null} [clockOutLocation]
+ * @property {string} [notes]
+ * @property {number} [pauseTotalTime]
+ * @property {Array<{start:any,end:any,duration:number,startedBy?:string,endedBy?:string}>} [pauseDetails]
+ */
 
 const DataService = {
   // Firebase-Referenzen werden bei der Initialisierung gesetzt

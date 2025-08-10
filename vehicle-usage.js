@@ -205,6 +205,10 @@ function escapeHTML(text) {
  * @param {string} type - Typ der Nachricht (success, error, warning)
  */
 function showNotification(message, type = 'info') {
+    if (typeof window !== 'undefined' && typeof window.notify === 'function') {
+        window.notify(message, type);
+        return;
+    }
     if (window.app && window.app.showNotification) {
         window.app.showNotification(message, type);
     } else {

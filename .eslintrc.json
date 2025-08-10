@@ -1,0 +1,27 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2020": true
+  },
+  "globals": {
+    "firebase": "readonly",
+    "DataService": "readonly"
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "script"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "vars": "all", "args": "after-used", "ignoreRestSiblings": true }],
+    "no-undef": "warn",
+    "eqeqeq": ["warn", "always"],
+    "prefer-const": "warn",
+    "no-console": ["off"]
+  }
+}
+
+
