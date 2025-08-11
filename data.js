@@ -65,6 +65,8 @@ const DataService = {
   vehicleUsagesCollection: null,
   leaveRequestsCollection: null,
 
+  // In-Memory Deduplizierung (zurückgesetzt auf ursprüngliches Verhalten - nicht verwendet)
+
   // Ein Promise, das sicherstellt, dass keine DB-Anfrage gesendet wird,
   // bevor die anonyme Anmeldung abgeschlossen ist.
   _authReadyPromise: null,
@@ -657,7 +659,18 @@ const DataService = {
       const filePromises = fileIds.map((id) => this.getFileUploadById(id));
       const files = await Promise.all(filePromises);
       const validFiles = files.filter((file) => file !== null);
-      return [...validFiles, ...directFiles];
+      // Duplikate entfernen (z. B. wenn Datei sowohl als Upload-Dokument als auch direkt am Zeiteintrag vorhanden ist)
+      const combined = [...validFiles, ...directFiles];
+      const seen = new Set();
+      const deduped = [];
+      for (const f of combined) {
+        const key = f.id || f.url || `${f.fileName}|${f.fileSize}|${f.employeeId}|${f.projectId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(f);
+        }
+      }
+      return deduped;
     } catch (error) {
       console.error(
         `Fehler beim Laden der Dateien für Projekt ${projectId}:`,
@@ -1152,7 +1165,13 @@ const DataService = {
         endTimestamp.setHours(23, 59, 59, 999);
         query = query.where("clockInTime", "<=", endTimestamp);
       }
-      const snapshot = await query.get();
+      let snapshot;
+      try {
+        snapshot = await query.get({ source: "server" });
+      } catch (e) {
+        console.warn("⚠️ Server-Abfrage fehlgeschlagen, nutze Cache für getProjectFiles:", e && e.message);
+        snapshot = await query.get();
+      }
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
       console.error(
@@ -1313,6 +1332,7 @@ const DataService = {
       if (!this.storage) {
         throw new Error("Firebase Storage ist nicht verfügbar");
       }
+      // Ursprüngliches, einfaches Verhalten: Direkt speichern
       const base64Result = await this.uploadFileAsBase64(
         file,
         projectId,
@@ -1366,6 +1386,8 @@ const DataService = {
           );
         }
       }
+      // Hinweis: Duplikatsprüfung deaktiviert, damit jeder Upload einen eigenen Datensatz erhält
+
       const uniqueId = `local_${Date.now()}_${Math.random()
         .toString(36)
         .substr(2, 9)}_${file.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
@@ -1389,7 +1411,20 @@ const DataService = {
         url: base64DataUrl,
       };
       const docRef = await DataService.fileUploadsCollection.add(fileData);
+      // Sicherstellen, dass wir die echte Firestore-ID verwenden und den Datensatz verifizieren
+      try {
+        const savedDoc = await DataService.fileUploadsCollection.doc(docRef.id).get();
+        if (savedDoc.exists) {
+          const savedData = { id: savedDoc.id, ...savedDoc.data() };
+          console.log(`📄 Datei in Firestore gespeichert: fileUploads/${savedDoc.id}`);
+          return savedData;
+        }
+      } catch (verifyErr) {
+        console.warn('⚠️ Konnte gespeicherten Upload nicht verifizieren:', verifyErr && verifyErr.message);
+      }
+      // Fallback: mindestens die richtige ID zurückgeben
       fileData.id = docRef.id;
+      console.log(`📄 Datei in Firestore gespeichert (ohne Verifizierungsdaten): fileUploads/${docRef.id}`);
       return fileData;
     } catch (error) {
       console.error("❌ Base64-Upload Fehler:", error);
@@ -1483,7 +1518,18 @@ const DataService = {
         query = query.where("isDraft", "==", false);
       }
       const snapshot = await query.get();
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const files = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      // Duplikate anhand id/url entfernen
+      const seen = new Set();
+      const deduped = [];
+      for (const f of files) {
+        const key = f.id || f.url || `${f.fileName}|${f.fileSize}|${f.employeeId}|${f.projectId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(f);
+        }
+      }
+      return deduped;
     } catch (error) {
       console.error(
         `Fehler beim Abrufen der Dateien für Projekt ${projectId}:`,
@@ -2333,9 +2379,17 @@ const DataService = {
         files = filesSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         return files;
       }
-      const timeEntriesSnapshot = await this.timeEntriesCollection
-        .where("projectId", "==", projectId)
-        .get();
+      let timeEntriesSnapshot;
+      try {
+        timeEntriesSnapshot = await this.timeEntriesCollection
+          .where("projectId", "==", projectId)
+          .get({ source: "server" });
+      } catch (e) {
+        console.warn("⚠️ Server-Abfrage fehlgeschlagen, nutze Cache für timeEntries:", e && e.message);
+        timeEntriesSnapshot = await this.timeEntriesCollection
+          .where("projectId", "==", projectId)
+          .get();
+      }
       if (timeEntriesSnapshot.empty) {
         return [];
       }
@@ -2437,9 +2491,17 @@ const DataService = {
         construction_site: [],
         delivery_note: [],
       };
-      const filesSnapshot = await this.fileUploadsCollection
-        .where("projectId", "==", projectId)
-        .get();
+      let filesSnapshot;
+      try {
+        filesSnapshot = await this.fileUploadsCollection
+          .where("projectId", "==", projectId)
+          .get({ source: "server" });
+      } catch (e) {
+        console.warn("⚠️ Server-Abfrage fehlgeschlagen, nutze Cache für fileUploads:", e && e.message);
+        filesSnapshot = await this.fileUploadsCollection
+          .where("projectId", "==", projectId)
+          .get();
+      }
       if (!filesSnapshot.empty) {
         filesSnapshot.docs.forEach((doc) => {
           const file = { id: doc.id, ...doc.data() };
@@ -2552,6 +2614,21 @@ const DataService = {
             : new Date(b.timestamp || b.uploadTime || 0);
         return dateB - dateA;
       });
+      // Duplikate in beiden Listen entfernen (z. B. gleiche Datei aus mehreren Quellen)
+      function dedupe(list) {
+        const seen = new Set();
+        const out = [];
+        for (const f of list) {
+          const key = f.id || f.url || `${f.fileName}|${f.fileSize}|${f.employeeId}|${f.projectId}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push(f);
+          }
+        }
+        return out;
+      }
+      result.construction_site = dedupe(result.construction_site);
+      result.delivery_note = dedupe(result.delivery_note);
       return result;
     } catch (error) {
       console.error(

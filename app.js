@@ -762,9 +762,16 @@ async function handleLiveDocumentationSave(event) {
                 lastModified: f.lastModified 
             })));
             
+            const seenKeys = new Set();
             for (let i = 0; i < allLiveSitePhotos.length; i++) {
                 try {
                     const file = allLiveSitePhotos[i];
+                    const key = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (seenKeys.has(key)) {
+                        console.log(`⏭️ Überspringe doppeltes Bild (Session): ${file.name}`);
+                        continue;
+                    }
+                    seenKeys.add(key);
                     console.log(`📷 Uploade Baustellenfoto ${i + 1}/${allLiveSitePhotos.length}: ${file.name}`);
                     
                     // Kommentar für dieses Bild finden
@@ -839,9 +846,16 @@ async function handleLiveDocumentationSave(event) {
             
             console.log(`🔄 Starte Upload von ${allLiveDocumentPhotos.length} Dokumenten...`);
             
+            const seenDocKeys = new Set();
             for (let i = 0; i < allLiveDocumentPhotos.length; i++) {
                 try {
                     const file = allLiveDocumentPhotos[i];
+                    const key = `${file.name}_${file.size}_${file.lastModified}`;
+                    if (seenDocKeys.has(key)) {
+                        console.log(`⏭️ Überspringe doppeltes Dokument (Session): ${file.name}`);
+                        continue;
+                    }
+                    seenDocKeys.add(key);
                     console.log(`📄 Uploade Dokument ${i + 1}/${allLiveDocumentPhotos.length}: ${file.name}`);
                     
                     // Kommentar für dieses Dokument finden
@@ -949,10 +963,16 @@ async function handleLiveDocumentationSave(event) {
 }
 
 // Erweitertes Ausstempeln mit Dokumentation
+let isSubmittingExtendedClockOut = false;
 async function handleExtendedClockOut(event) {
     if (event) {
         event.preventDefault();
     }
+    if (isSubmittingExtendedClockOut) {
+        console.log('Erweitertes Ausstempeln wird bereits verarbeitet, überspringe...');
+        return;
+    }
+    isSubmittingExtendedClockOut = true;
     
     try {
         const user = getCurrentUser();
@@ -1156,7 +1176,7 @@ async function handleExtendedClockOut(event) {
             locationOut: location,
             sitePhotoUploads: sitePhotoUploads,
             documentPhotoUploads: documentPhotoUploads,
-            // Zusätzlich die vollständigen Objekte speichern für einfacheren Zugriff
+            // Zusätzlich die vollständigen Objekte speichern für Kompatibilität älterer Ansichten
             sitePhotos: sitePhotoObjects,
             documents: documentPhotoObjects,
             hasDocumentation: (sitePhotoObjects.length > 0 || documentPhotoObjects.length > 0 || notes.trim() !== '')
@@ -1210,6 +1230,8 @@ async function handleExtendedClockOut(event) {
     } catch (error) {
         console.error('Fehler beim erweiterten Ausstempeln:', error);
         alert('Fehler beim Ausstempeln: ' + error.message);
+    } finally {
+        isSubmittingExtendedClockOut = false;
     }
 }
 

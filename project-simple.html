@@ -763,9 +763,8 @@
                 const testQuery = await Promise.race([testPromise, timeoutPromise]);
                 console.log('✅ Firestore-Test erfolgreich, Anzahl Docs:', testQuery.size);
                 
-                // Nach erfolgreichem Test das Projekt laden
-                console.log('🚀 Starte Projekt-Laden nach erfolgreichem Firestore-Test...');
-                loadProject();
+                // Nach erfolgreichem Test: Projekt-Laden wird weiter unten zentral gestartet
+                console.log('🚀 Firestore-Test erfolgreich – Projekt wird gleich geladen...');
                 
                 // Die Modal-Funktionen werden automatisch durch time-entry-report.js initialisiert
                 // beim DOM-Content-Loaded Event
@@ -794,7 +793,7 @@
             console.log('=== STARTE LADEN DER PROJEKTDATEN ===');
             console.log('Projekt-ID für Laden:', projectId);
             
-            // Daten laden
+            // Daten laden (einmalig)
             console.log('Rufe loadProject() auf...');
             loadProject().then(() => {
                 console.log('loadProject() abgeschlossen');
@@ -1523,16 +1522,32 @@
                 // Container leeren und Ladeindikator anzeigen
                 container.innerHTML = `<p>${type === 'construction_site' ? 'Baustellenfotos' : 'Dokumente'} werden geladen...</p>`;
                 
-                // ALLE Projektdateien über den verbesserten DataService laden
-                // Diese Funktion sucht in allen Quellen und Unterordnern
-                if (!allProjectFiles) {
-                    console.log('Lade alle Projektdateien erstmalig...');
-                    allProjectFiles = await DataService.getProjectAllFiles(projectId);
-                    console.log('Alle Projektdateien geladen:', allProjectFiles);
+                // Dateien direkt für den gewünschten Typ laden (robuster, keine Abhängigkeit von Cache)
+                let files = [];
+                try {
+                    files = await DataService.getProjectFiles(projectId, type);
+                    // Falls es sich um Dokumente handelt, zusätzlich auch 'invoice' laden und zusammenführen
+                    if (type === 'delivery_note') {
+                        const invoiceFiles = await DataService.getProjectFiles(projectId, 'invoice');
+                        files = [...files, ...invoiceFiles];
+                    }
+                } catch (e) {
+                    console.error('Fehler beim Laden der Dateien:', e);
+                    files = [];
                 }
-                
-                // Dateien je nach Typ auswählen
-                const files = allProjectFiles[type] || [];
+
+                // Deduplizieren nach id/url/Dateiattributen
+                const seen = new Set();
+                const deduped = [];
+                for (const f of files) {
+                    const key = f.id || f.url || `${f.fileName}|${f.fileSize}|${f.employeeId}|${f.projectId}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        deduped.push(f);
+                    }
+                }
+                files = deduped;
+
                 console.log(`Anzahl ${type}-Dateien gefunden:`, files.length);
                 
                 if (!files || files.length === 0) {
@@ -1640,7 +1655,9 @@
                     // Bild-Element erstellen
                     const img = document.createElement('img');
                     img.className = 'gallery-img';
-                    img.src = file.url || file.downloadURL || '';
+                    // Fallback: Wenn keine URL vorhanden ist, aber Base64 vorliegt, diese zusammensetzen
+                    const fallbackDataUrl = (file.base64String && file.mimeType) ? `${file.mimeType},${file.base64String}` : '';
+                    img.src = file.url || file.downloadURL || fallbackDataUrl || '';
                     img.alt = type === 'construction_site' ? 'Baustellenfoto' : 'Dokument';
                     
                     // Bild-Ladeüberwachung für Lightbox-Initialisierung
