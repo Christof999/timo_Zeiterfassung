@@ -5,6 +5,119 @@
     margin-bottom: 25px;
 }
 
+.admin-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* Admin Hamburger Menu Styles */
+.admin-nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    flex-direction: column;
+    cursor: pointer;
+    padding: 8px;
+    gap: 4px;
+    z-index: 1001;
+}
+
+.admin-nav-toggle .hamburger-line {
+    width: 25px;
+    height: 3px;
+    background-color: var(--primary-color);
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+
+.admin-nav-toggle.active .hamburger-line:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+}
+
+.admin-nav-toggle.active .hamburger-line:nth-child(2) {
+    opacity: 0;
+}
+
+.admin-nav-toggle.active .hamburger-line:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* Dashboard Tabs Responsive */
+.dashboard-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.tab-btn {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Responsive Admin Navigation */
+@media (max-width: 992px) {
+    .admin-nav-toggle {
+        display: flex;
+    }
+    
+    .dashboard-tabs {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 320px;
+        height: 100vh;
+        background-color: var(--card-background);
+        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        transition: right 0.3s ease;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding: 80px 20px 20px;
+        z-index: 1000;
+        border-left: 4px solid var(--primary-color);
+        gap: 0;
+    }
+    
+    .dashboard-tabs.active {
+        right: 0;
+    }
+    
+    .tab-btn {
+        width: 100%;
+        margin-bottom: 15px;
+        text-align: left;
+        font-size: 1.1rem;
+        padding: 15px 20px;
+        justify-content: flex-start;
+        border-radius: 8px;
+    }
+    
+    /* Overlay für das geöffnete Admin-Menü */
+    .dashboard-tabs.active::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: -320px;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: -1;
+    }
+    
+    .admin-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .admin-controls span {
+        font-size: 0.9rem;
+    }
+}
+
 /* Stile für Bildkommentare in der Galerie */
 .image-comment-display {
     margin-top: 8px;

@@ -30,6 +30,12 @@ body {
     background-color: var(--background-color);
 }
 
+/* Verhindert horizontales Überlaufen auf kleinen Viewports */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -366,6 +372,98 @@ input:focus, select:focus, textarea:focus {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Hamburger Menu Styles */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    flex-direction: column;
+    cursor: pointer;
+    padding: 8px;
+    gap: 4px;
+    z-index: 1001;
+}
+
+.hamburger-line {
+    width: 25px;
+    height: 3px;
+    background-color: var(--primary-color);
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+
+.nav-toggle.active .hamburger-line:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+}
+
+.nav-toggle.active .hamburger-line:nth-child(2) {
+    opacity: 0;
+}
+
+.nav-toggle.active .hamburger-line:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* Navigation Menu */
+.nav-menu {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+}
+
+.nav-item {
+    white-space: nowrap;
+}
+
+/* Responsive Navigation */
+@media (max-width: 992px) {
+    .nav-toggle {
+        display: flex;
+    }
+    
+    .nav-menu {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 300px;
+        height: 100vh;
+        background-color: var(--card-background);
+        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        transition: right 0.3s ease;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding: 80px 20px 20px;
+        z-index: 1000;
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .nav-menu.active {
+        right: 0;
+    }
+    
+    .nav-item {
+        width: 100%;
+        margin-bottom: 15px;
+        text-align: center;
+        font-size: 1.1rem;
+        padding: 15px 20px;
+    }
+    
+    /* Overlay für das geöffnete Menü */
+    .nav-menu.active::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: -300px;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: -1;
+    }
+}
+
 .time-status {
     text-align: center;
     margin: 20px 0;
@@ -656,9 +754,10 @@ footer {
     
     /* Mobile Navigation */
     .user-info {
-        flex-direction: column;
-        gap: 10px;
-        text-align: center;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        text-align: left;
     }
     
     .time-status {

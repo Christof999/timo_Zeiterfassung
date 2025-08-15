@@ -3,7 +3,7 @@
  * Verantwortlich für die Speicherung und Abfrage von Mitarbeitern, Projekten, Zeiteinträgen und Fahrzeugen
  * Firebase-Version - JETZT MIT ANONYMER AUTHENTIFIZIERUNG
  */
- 
+
 /**
  * @typedef {Object} Employee
  * @property {string} id
@@ -2387,8 +2387,8 @@ const DataService = {
       } catch (e) {
         console.warn("⚠️ Server-Abfrage fehlgeschlagen, nutze Cache für timeEntries:", e && e.message);
         timeEntriesSnapshot = await this.timeEntriesCollection
-          .where("projectId", "==", projectId)
-          .get();
+        .where("projectId", "==", projectId)
+        .get();
       }
       if (timeEntriesSnapshot.empty) {
         return [];
@@ -2499,8 +2499,8 @@ const DataService = {
       } catch (e) {
         console.warn("⚠️ Server-Abfrage fehlgeschlagen, nutze Cache für fileUploads:", e && e.message);
         filesSnapshot = await this.fileUploadsCollection
-          .where("projectId", "==", projectId)
-          .get();
+        .where("projectId", "==", projectId)
+        .get();
       }
       if (!filesSnapshot.empty) {
         filesSnapshot.docs.forEach((doc) => {

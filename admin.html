@@ -72,20 +72,44 @@
             <div id="admin-dashboard" class="section hidden">
                 <div class="admin-header">
                     <h2>Admin Dashboard</h2>
-                    <div class="admin-controls">
-                        <span id="admin-name"></span>
-                        <button id="admin-logout-btn" class="btn secondary-btn">Abmelden</button>
+                    <div class="admin-header-controls">
+                        <!-- Hamburger Menu Button (nur auf kleinen Bildschirmen sichtbar) -->
+                        <button id="admin-nav-toggle" class="admin-nav-toggle" aria-label="Navigation umschalten">
+                            <span class="hamburger-line"></span>
+                            <span class="hamburger-line"></span>
+                            <span class="hamburger-line"></span>
+                        </button>
+                        
+                        <div class="admin-controls">
+                            <span id="admin-name"></span>
+                            <button id="admin-logout-btn" class="btn secondary-btn">
+                                <i class="fas fa-sign-out-alt"></i> Abmelden
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="dashboard-tabs">
-                    <button class="tab-btn active" data-tab="overview">Übersicht</button>
-                    <button class="tab-btn" data-tab="employees">Mitarbeiter</button>
-                    <button class="tab-btn" data-tab="vacation">Urlaubsanträge</button>
-                    <button class="tab-btn" data-tab="projects">Projekte</button>
-                    <button class="tab-btn" data-tab="vehicles">Fahrzeuge</button>
-                    <button class="tab-btn" data-tab="reports">Berichte</button>
-                </div>
+                <!-- Tab Navigation -->
+                <nav class="dashboard-tabs" id="admin-nav-menu">
+                    <button class="tab-btn active" data-tab="overview">
+                        <i class="fas fa-tachometer-alt"></i> Übersicht
+                    </button>
+                    <button class="tab-btn" data-tab="employees">
+                        <i class="fas fa-users"></i> Mitarbeiter
+                    </button>
+                    <button class="tab-btn" data-tab="vacation">
+                        <i class="fas fa-calendar-alt"></i> Urlaubsanträge
+                    </button>
+                    <button class="tab-btn" data-tab="projects">
+                        <i class="fas fa-project-diagram"></i> Projekte
+                    </button>
+                    <button class="tab-btn" data-tab="vehicles">
+                        <i class="fas fa-truck"></i> Fahrzeuge
+                    </button>
+                    <button class="tab-btn" data-tab="reports">
+                        <i class="fas fa-chart-bar"></i> Berichte
+                    </button>
+                </nav>
 
                 <div id="overview-tab" class="tab-content active">
                     <h3>Übersicht</h3>
@@ -634,6 +658,10 @@
     <script src="data.js"></script>
     <!-- Hier Ihren Google Maps API-Key eintragen (ersetzen Sie YOUR_API_KEY mit Ihrem tatsächlichen Key) -->
     <script src="https://maps.googleapis.com/maps/api/js?key=REDACTED_GOOGLE_MAPS_API_KEY_ROTATE&libraries=places" async></script>
+    
+    <!-- Utils -->
+    <script src="utils/notify.js"></script>
+    <script src="utils/admin-nav-menu.js"></script>
     
     <!-- Vereinfachte Admin JS Datei für grundlegende Anmeldung -->
     <script src="admin-minimal.js?v=1.0.1"></script>

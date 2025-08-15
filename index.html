@@ -74,12 +74,26 @@
                 <h2>Zeiterfassung</h2>
                 <div class="user-info">
                     <p>Angemeldet als: <span id="user-name"></span></p>
-                    <div class="user-actions">
-                        <a href="vacation-requests.html" class="btn primary-btn">
+                    
+                    <!-- Hamburger Menu Button (nur auf kleinen Bildschirmen sichtbar) -->
+                    <button id="nav-toggle" class="nav-toggle" aria-label="Navigation umschalten">
+                        <span class="hamburger-line"></span>
+                        <span class="hamburger-line"></span>
+                        <span class="hamburger-line"></span>
+                    </button>
+                    
+                    <!-- Navigation Menu -->
+                    <nav class="nav-menu" id="nav-menu">
+                        <a href="employee-reports.html" class="nav-item btn info-btn">
+                            <i class="fas fa-chart-bar"></i> Berichte
+                        </a>
+                        <a href="vacation-requests.html" class="nav-item btn primary-btn">
                             <i class="fas fa-calendar-alt"></i> Urlaubsanträge
                         </a>
-                        <button id="logout-btn" class="btn secondary-btn">Abmelden</button>
-                    </div>
+                        <button id="logout-btn" class="nav-item btn secondary-btn">
+                            <i class="fas fa-sign-out-alt"></i> Abmelden
+                        </button>
+                    </nav>
                 </div>
 
                 <div class="time-status">
@@ -310,6 +324,7 @@
     <script src="firebase-config.js" defer></script>
     <script src="config.js" defer></script>
     <script src="utils/notify.js" defer></script>
+    <script src="utils/nav-menu.js" defer></script>
     <script src="data.js" defer></script>
     <script src="app.js" defer></script>
     <script src="vehicle-time-booking.js" defer></script>
