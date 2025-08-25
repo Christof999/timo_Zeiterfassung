@@ -410,7 +410,12 @@ async function handleClockIn() {
             alert('Sie wurden erfolgreich eingestempelt!');
         } catch (error) {
             console.error('Fehler beim Einstempeln:', error);
-            alert('Fehler beim Einstempeln: ' + error.message);
+            // Spezifische Fehlermeldung für Validierungsfehler
+            if (error.message && error.message.includes('bereits')) {
+                alert(error.message);
+            } else {
+                alert('Fehler beim Einstempeln: ' + error.message);
+            }
         }
     } catch (error) {
         console.error('Fehler beim Einstempeln:', error);

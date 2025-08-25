@@ -308,7 +308,12 @@ async function saveTimeEntry() {
         alert('Zeiteintrag wurde erfolgreich gespeichert');
     } catch (error) {
         console.error('Fehler beim Speichern des Zeiteintrags:', error);
-        alert(`Fehler beim Speichern: ${error.message}`);
+        // Spezifische Fehlermeldung für Validierungsfehler
+        if (error.message && error.message.includes('überlappen')) {
+            alert(error.message);
+        } else {
+            alert(`Fehler beim Speichern: ${error.message}`);
+        }
     } finally {
         // Speicherbutton zurücksetzen
         if (saveTimeEntryBtn) {

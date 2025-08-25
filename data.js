@@ -1084,9 +1084,103 @@ const DataService = {
     }
   },
 
+  // Validierung für doppelte Einstempelungen
+  async validateTimeEntry(timeEntryData) {
+    await this._authReadyPromise;
+    try {
+      const employeeId = timeEntryData.employeeId;
+      const clockInTime = timeEntryData.clockInTime;
+      
+      // Wenn clockOutTime bereits gesetzt ist (vollständiger Eintrag), keine Validierung nötig
+      if (timeEntryData.clockOutTime) {
+        // Prüfung auf überlappende Zeiteinträge
+        await this.checkForOverlappingTimeEntries(timeEntryData);
+        return true;
+      }
+      
+      // Prüfen, ob der Mitarbeiter bereits aktiv ist (clockOutTime ist null)
+      const activeTimeEntries = await this.timeEntriesCollection
+        .where('employeeId', '==', employeeId)
+        .where('clockOutTime', '==', null)
+        .get();
+      
+      if (!activeTimeEntries.empty) {
+        const activeEntry = activeTimeEntries.docs[0].data();
+        const activeProject = await this.getProjectById(activeEntry.projectId);
+        throw new Error(`Mitarbeiter ist bereits in Projekt "${activeProject ? activeProject.name : 'Unbekannt'}" eingestempelt. Bitte erst ausstempeln bevor Sie erneut einstempeln.`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Fehler bei der Validierung des Zeiteintrags:", error);
+      throw error;
+    }
+  },
+
+  // Prüfung auf überlappende Zeiteinträge
+  async checkForOverlappingTimeEntries(timeEntryData) {
+    await this._authReadyPromise;
+    try {
+      const employeeId = timeEntryData.employeeId;
+      const clockInTime = timeEntryData.clockInTime instanceof firebase.firestore.Timestamp 
+        ? timeEntryData.clockInTime.toDate() 
+        : new Date(timeEntryData.clockInTime);
+      const clockOutTime = timeEntryData.clockOutTime instanceof firebase.firestore.Timestamp 
+        ? timeEntryData.clockOutTime.toDate() 
+        : new Date(timeEntryData.clockOutTime);
+      
+      // Zeiteinträge des Mitarbeiters für den Tag abrufen
+      const startOfDay = new Date(clockInTime);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(clockInTime);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const existingEntries = await this.timeEntriesCollection
+        .where('employeeId', '==', employeeId)
+        .where('clockInTime', '>=', firebase.firestore.Timestamp.fromDate(startOfDay))
+        .where('clockInTime', '<=', firebase.firestore.Timestamp.fromDate(endOfDay))
+        .get();
+      
+      // Prüfung auf Überlappungen
+      for (const doc of existingEntries.docs) {
+        const entry = doc.data();
+        
+        // Überspringen wenn es der gleiche Eintrag ist (bei Updates)
+        if (timeEntryData.entryId && doc.id === timeEntryData.entryId) {
+          continue;
+        }
+        
+        if (entry.clockOutTime) {
+          const existingClockIn = entry.clockInTime instanceof firebase.firestore.Timestamp 
+            ? entry.clockInTime.toDate() 
+            : new Date(entry.clockInTime);
+          const existingClockOut = entry.clockOutTime instanceof firebase.firestore.Timestamp 
+            ? entry.clockOutTime.toDate() 
+            : new Date(entry.clockOutTime);
+          
+          // Prüfung auf Zeitüberlappung
+          const overlap = (clockInTime < existingClockOut && clockOutTime > existingClockIn);
+          
+          if (overlap) {
+            const project = await this.getProjectById(entry.projectId);
+            throw new Error(`Zeiteinträge überlappen sich mit einem bestehenden Eintrag in Projekt "${project ? project.name : 'Unbekannt'}" von ${existingClockIn.toLocaleTimeString()} bis ${existingClockOut.toLocaleTimeString()}.`);
+          }
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Fehler bei der Prüfung auf überlappende Zeiteinträge:", error);
+      throw error;
+    }
+  },
+
   async addTimeEntry(timeEntryData) {
     await this._authReadyPromise;
     try {
+      // Validierung vor dem Hinzufügen
+      await this.validateTimeEntry(timeEntryData);
+      
       if (
         timeEntryData.clockInTime &&
         !(timeEntryData.clockInTime instanceof firebase.firestore.Timestamp)
@@ -1116,6 +1210,11 @@ const DataService = {
       console.error("Fehler beim Hinzufügen des Zeiteintrags:", error);
       throw error;
     }
+  },
+
+  // Alias für addTimeEntry (für Abwärtskompatibilität)
+  async createTimeEntry(timeEntryData) {
+    return await this.addTimeEntry(timeEntryData);
   },
 
   async updateTimeEntry(timeEntryId, timeEntryData) {

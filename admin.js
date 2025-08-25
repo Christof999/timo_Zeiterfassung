@@ -962,7 +962,12 @@ async function handleClockInEmployeeForm(event) {
         alert('Mitarbeiter erfolgreich eingestempelt.');
     } catch (error) {
         console.error('Fehler beim Einstempeln des Mitarbeiters:', error);
-        alert('Fehler beim Einstempeln. Bitte versuchen Sie es später erneut.');
+        // Spezifische Fehlermeldung für Validierungsfehler
+        if (error.message && (error.message.includes('bereits') || error.message.includes('überlappen'))) {
+            alert(error.message);
+        } else {
+            alert('Fehler beim Einstempeln. Bitte versuchen Sie es später erneut.');
+        }
     }
 }
 
@@ -1178,7 +1183,7 @@ function hideClockInEmployeeModal() {
 }
 
 // Mitarbeiter einstempeln (Admin-Funktion)
-function handleAdminClockIn(event) {
+async function handleAdminClockIn(event) {
     event.preventDefault();
     
     const employeeId = parseInt(document.getElementById('admin-employee-id').value);
@@ -1213,14 +1218,27 @@ function handleAdminClockIn(event) {
         notes: notes
     };
     
-    // Zeiteintrag speichern
-    DataService.addTimeEntry(timeEntry);
-    
-    // Modal ausblenden
-    hideClockInEmployeeModal();
-    
-    // Dashboard aktualisieren
-    loadDashboardData();
+    try {
+        // Zeiteintrag speichern
+        await DataService.addTimeEntry(timeEntry);
+        
+        // Modal ausblenden
+        hideClockInEmployeeModal();
+        
+        // Dashboard aktualisieren
+        loadDashboardData();
+        
+        // Erfolgsmeldung
+        alert('Mitarbeiter erfolgreich eingestempelt.');
+    } catch (error) {
+        console.error('Fehler beim Einstempeln des Mitarbeiters:', error);
+        // Spezifische Fehlermeldung für Validierungsfehler
+        if (error.message && (error.message.includes('bereits') || error.message.includes('überlappen'))) {
+            alert(error.message);
+        } else {
+            alert('Fehler beim Einstempeln. Bitte versuchen Sie es später erneut.');
+        }
+    }
 }
 
 // Mitarbeitertabelle laden
