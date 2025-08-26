@@ -34,20 +34,49 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Authentifizierung überprüfen
             await DataService.authReady;
             
-            // Prüfen, ob Benutzer Admin-Rechte hat
-            const isAdmin = await DataService.isAdmin();
+            // Prüfen, ob Admin angemeldet ist
+            let currentAdmin = DataService.getCurrentAdmin();
             
-            if (!isAdmin) {
-                showNotification('Sie haben keine Berechtigung, diese Seite aufzurufen.', 'error');
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 2000);
-                return;
+            // Falls kein Admin in DataService, prüfe traditionellen localStorage
+            if (!currentAdmin) {
+                try {
+                    const savedAdmin = localStorage.getItem('lauffer_current_admin');
+                    if (savedAdmin) {
+                        currentAdmin = JSON.parse(savedAdmin);
+                        console.log('Admin aus localStorage geladen:', currentAdmin);
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Laden des Admins aus localStorage:', error);
+                }
             }
             
-            // Admin-ID speichern
-            const currentUser = await DataService.getCurrentUser();
-            adminId = currentUser.uid;
+            if (!currentAdmin) {
+                console.warn('Kein Admin angemeldet - verwende Fallback-Prüfung');
+                const isAdmin = await DataService.isAdmin();
+                if (!isAdmin) {
+                    showNotification('Sie haben keine Berechtigung, diese Seite aufzurufen.', 'error');
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 2000);
+                    return;
+                }
+            }
+            
+            // Admin-ID speichern - verwende bereits geladenen currentAdmin
+            if (currentAdmin) {
+                // Verwende Admin-Username oder UID falls vorhanden
+                adminId = currentAdmin.uid || currentAdmin.username || 'admin';
+                console.log('Admin ID für Urlaubsanträge:', adminId);
+            } else {
+                // Fallback für direkte Admin-Session
+                const currentUser = await DataService.getCurrentUser();
+                if (currentUser) {
+                    adminId = currentUser.uid;
+                } else {
+                    console.warn('Kein Admin angemeldet - verwende Fallback');
+                    adminId = 'admin'; // Fallback für lokale Tests
+                }
+            }
             
             // Alle Mitarbeiter laden
             allEmployees = await DataService.getAllEmployees();
@@ -292,6 +321,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             locale: 'de',
+            height: 600, // Feste Höhe für vollständigen Monatsanzeige
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
@@ -305,11 +335,25 @@ document.addEventListener('DOMContentLoaded', async function() {
             },
             weekNumbers: true,
             firstDay: 1, // Montag
+            // aspectRatio entfernt - verwende feste Höhe für vollständigen Monat
             eventTimeFormat: {
                 hour: '2-digit',
                 minute: '2-digit',
                 meridiem: false,
                 hour12: false
+            },
+            // Responsive Verhalten verbessern
+            windowResize: function() {
+                calendar.updateSize();
+            },
+            // Event-Darstellung verbessern
+            eventDidMount: function(info) {
+                // Tooltip für bessere Übersicht hinzufügen
+                const request = allLeaveRequests.find(req => req.id === info.event.extendedProps.requestId);
+                if (request) {
+                    const tooltip = `${request.employeeName}\nStatus: ${getStatusText(request.status)}\nZeitraum: ${request.workingDays} Arbeitstage`;
+                    info.el.setAttribute('title', tooltip);
+                }
             },
             eventClick: function(info) {
                 // Event-Details anzeigen
@@ -379,13 +423,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (request.status === 'approved') backgroundColor = '#28a745';
             if (request.status === 'rejected') backgroundColor = '#dc3545';
             
+            // Status-Emojis für bessere visuelle Darstellung
+            const statusEmoji = {
+                'pending': '⏳',
+                'approved': '✅',
+                'rejected': '❌'
+            }[request.status] || '';
+            
             calendar.addEvent({
-                title: `Urlaub: ${request.employeeName}`,
+                title: `${statusEmoji} ${request.employeeName} - Urlaub`,
                 start: startDate,
                 end: displayEndDate,
                 allDay: true,
                 backgroundColor: backgroundColor,
                 borderColor: backgroundColor,
+                className: `status-${request.status}`, // CSS-Klasse für zusätzliches Styling
                 extendedProps: {
                     requestId: request.id,
                     status: request.status,
@@ -501,6 +553,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Daten neu laden
             await loadAllLeaveRequests();
             await loadTeamOverview();
+            
+            // Badge im Hauptdashboard aktualisieren
+            if (typeof window.updateVacationBadge === 'function') {
+                window.updateVacationBadge();
+            }
             
         } catch (error) {
             console.error('Fehler bei der Genehmigung des Urlaubsantrags:', error);

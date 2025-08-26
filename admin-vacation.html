@@ -85,13 +85,151 @@
             display: block;
         }
         
-        /* Kalender-Tab */
+        /* Kalender-Tab - Responsive Design mit Scroll */
         .calendar-container {
             background-color: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            height: 600px;
+            /* Dynamische Höhe mit Scroll bei Bedarf */
+            max-height: calc(100vh - 280px); /* Maximale Höhe basierend auf Viewport */
+            min-height: 500px; /* Mindesthöhe um sicherzustellen, dass Kalender sichtbar ist */
+            overflow-y: auto; /* Vertikaler Scroll bei Bedarf */
+            overflow-x: hidden; /* Horizontaler Scroll vermeiden */
+        }
+        
+        /* Kalender Header */
+        .calendar-header {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        
+        .calendar-header h3 {
+            margin: 0 0 5px 0;
+            color: #4A7C59;
+            font-size: 1.4em;
+        }
+        
+        .calendar-description {
+            margin: 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        /* FullCalendar spezifische Anpassungen */
+        #vacation-calendar {
+            max-width: 100%;
+            /* Entferne height: calc() - FullCalendar soll seine eigene Höhe verwalten */
+            /* Bei zu wenig Platz wird der Container scrollbar */
+        }
+        
+        /* FullCalendar Design-Verbesserungen */
+        .fc-theme-standard .fc-scrollgrid {
+            border: 1px solid #e0e0e0;
+        }
+        
+        .fc-theme-standard .fc-list {
+            border: 1px solid #e0e0e0;
+        }
+        
+        .fc-button-primary {
+            background-color: #4A7C59 !important;
+            border-color: #4A7C59 !important;
+        }
+        
+        .fc-button-primary:hover {
+            background-color: #3d6b4a !important;
+            border-color: #3d6b4a !important;
+        }
+        
+        .fc-today-button {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+        }
+        
+        /* Event-Styling für bessere Lesbarkeit */
+        .fc-event {
+            border-radius: 4px;
+            font-size: 0.85em;
+            padding: 2px 4px;
+        }
+        
+        /* Farben für verschiedene Status */
+        .fc-event.status-pending {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #000;
+        }
+        
+        .fc-event.status-approved {
+            background-color: #28a745;
+            border-color: #28a745;
+            color: #fff;
+        }
+        
+        .fc-event.status-rejected {
+            background-color: #dc3545;
+            border-color: #dc3545;
+            color: #fff;
+        }
+        
+        /* Bessere Lesbarkeit der Kalenderzellen */
+        .fc-daygrid-day {
+            min-height: 80px;
+        }
+        
+        .fc-day-today {
+            background-color: #f8f9fa !important;
+        }
+        
+        /* Mobile Responsive Anpassungen */
+        @media (max-width: 768px) {
+            .calendar-container {
+                max-height: calc(100vh - 320px); /* Mehr Platz für mobile Navigation */
+                padding: 15px;
+                min-height: 400px; /* Mindesthöhe für mobile Geräte */
+            }
+            
+            /* FullCalendar mobile Anpassungen */
+            .fc-toolbar {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .fc-toolbar-chunk {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 5px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .calendar-container {
+                max-height: calc(100vh - 360px);
+                padding: 10px;
+                min-height: 350px; /* Ausreichend Platz für vollständigen Kalender */
+            }
+            
+            .calendar-header h3 {
+                font-size: 1.2em;
+            }
+            
+            .calendar-description {
+                font-size: 0.8em;
+            }
+            
+            /* FullCalendar mobile Button-Styling */
+            .fc-button {
+                padding: 0.2em 0.4em;
+                font-size: 0.8em;
+            }
+            
+            .fc-daygrid-day-number {
+                font-size: 0.8em;
+            }
         }
         
         /* Übersichts-Tab */
@@ -363,6 +501,10 @@
                     <!-- Kalenderansicht Tab -->
                     <div id="calendar-view" class="tab-content">
                         <div class="calendar-container">
+                            <div class="calendar-header">
+                                <h3>Urlaubskalender</h3>
+                                <p class="calendar-description">Übersicht aller genehmigten und ausstehenden Urlaubsanträge</p>
+                            </div>
                             <div id="vacation-calendar"></div>
                         </div>
                     </div>

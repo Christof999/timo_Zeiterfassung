@@ -21,6 +21,50 @@ function getDashboardRefreshInterval() {
     return window.adminMinimalApp.dashboardRefreshInterval;
 }
 
+// Urlaubsanträge-Badge aktualisieren
+async function updateVacationBadge() {
+    try {
+        console.log('🔄 Badge wird aktualisiert...');
+        const pendingCount = await DataService.getPendingLeaveRequestsCount();
+        console.log('📊 Anzahl ausstehender Urlaubsanträge:', pendingCount);
+        
+        const badge = document.getElementById('vacation-badge');
+        const tabBtn = document.getElementById('vacation-tab-btn');
+        
+        console.log('🎯 Badge Element gefunden:', !!badge);
+        console.log('🎯 Tab Button Element gefunden:', !!tabBtn);
+        
+        if (!badge || !tabBtn) {
+            console.warn('❌ Vacation badge oder tab button nicht gefunden');
+            console.warn('Badge element:', badge);
+            console.warn('Tab button element:', tabBtn);
+            return;
+        }
+        
+        if (pendingCount > 0) {
+            console.log('✅ Badge wird angezeigt mit Anzahl:', pendingCount);
+            // Badge anzeigen und Anzahl setzen
+            badge.textContent = pendingCount.toString();
+            badge.style.display = 'block';
+            
+            // Tab rot hinterlegen
+            tabBtn.classList.add('has-pending');
+        } else {
+            console.log('🔄 Badge wird versteckt (keine ausstehenden Anträge)');
+            // Badge verstecken
+            badge.style.display = 'none';
+            
+            // Rote Hinterlegung entfernen
+            tabBtn.classList.remove('has-pending');
+        }
+    } catch (error) {
+        console.error('❌ Fehler beim Aktualisieren des Urlaubsanträge-Badges:', error);
+    }
+}
+
+// Globale Funktion für externe Aufrufe
+window.updateVacationBadge = updateVacationBadge;
+
 // DOMContentLoaded Event
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Admin Minimal JS geladen');
@@ -89,8 +133,16 @@ document.addEventListener('DOMContentLoaded', function() {
             loadProjectsTable();
             loadReportFilters();
             
+            // Badge für Urlaubsanträge aktualisieren
+            setTimeout(() => {
+                updateVacationBadge();
+            }, 3000);
+            
             // Dashboard-Daten regelmäßig aktualisieren
-            const newInterval = setInterval(loadDashboardData, 30000); // Alle 30 Sekunden
+            const newInterval = setInterval(() => {
+                loadDashboardData();
+                updateVacationBadge(); // Badge auch regelmäßig aktualisieren
+            }, 30000); // Alle 30 Sekunden
             setDashboardRefreshInterval(newInterval);
         } catch (error) {
             console.error('Fehler beim Parsen des gespeicherten Admins:', error);
@@ -195,6 +247,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadDashboardData();
                     loadEmployeesTable();
                     loadProjectsTable();
+                    
+                    // Badge für Urlaubsanträge nach Login aktualisieren
+                    setTimeout(() => {
+                        updateVacationBadge();
+                    }, 2000);
                     loadReportFilters();
                 }, 1000);
                 

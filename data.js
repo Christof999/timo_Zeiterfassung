@@ -153,7 +153,12 @@ const DataService = {
 
   getCurrentAdmin() {
     try {
-      const savedAdmin = localStorage.getItem("lauffer_admin_user");
+      // Zuerst neuere Admin-Session prüfen
+      let savedAdmin = localStorage.getItem("lauffer_admin_user");
+      if (!savedAdmin) {
+        // Fallback für kompatibilität mit admin.js
+        savedAdmin = localStorage.getItem("lauffer_current_admin");
+      }
       return savedAdmin ? JSON.parse(savedAdmin) : null;
     } catch (error) {
       console.error("Fehler beim Laden des Admins:", error);
@@ -165,6 +170,11 @@ const DataService = {
     this._currentAdmin = admin;
     if (admin) {
       localStorage.setItem("lauffer_admin_user", JSON.stringify(admin));
+      // Auch für Kompatibilität mit admin.js
+      localStorage.setItem("lauffer_current_admin", JSON.stringify(admin));
+    } else {
+      localStorage.removeItem("lauffer_admin_user");
+      localStorage.removeItem("lauffer_current_admin");
     }
   },
 
@@ -1215,6 +1225,22 @@ const DataService = {
   // Alias für addTimeEntry (für Abwärtskompatibilität)
   async createTimeEntry(timeEntryData) {
     return await this.addTimeEntry(timeEntryData);
+  },
+
+  // Ausstehende Urlaubsanträge zählen
+  async getPendingLeaveRequestsCount() {
+    await this._authReadyPromise;
+    try {
+      console.log('📋 Zähle ausstehende Urlaubsanträge...');
+      const snapshot = await this.leaveRequestsCollection
+        .where('status', '==', 'pending')
+        .get();
+      console.log('📊 Gefundene ausstehende Anträge:', snapshot.size);
+      return snapshot.size;
+    } catch (error) {
+      console.error('❌ Fehler beim Zählen der ausstehenden Urlaubsanträge:', error);
+      return 0;
+    }
   },
 
   async updateTimeEntry(timeEntryId, timeEntryData) {
