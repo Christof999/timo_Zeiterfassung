@@ -1390,15 +1390,44 @@ const DataService = {
         : new Date(timeEntry.clockInTime);
       const clockOutDate = clockOutTime.toDate();
       const diffMs = clockOutDate - clockInDate;
-      const pauseTime = timeEntry.pauseTotalTime || 0;
-      const actualWorkTime = diffMs - pauseTime;
+      
+      // Automatische Pause berechnen (deutsche Gesetze)
+      const workingHours = diffMs / (1000 * 60 * 60);
+      const automaticBreak = this.createAutomaticBreak(clockInDate, clockOutDate);
+      
+      let totalPauseTime = timeEntry.pauseTotalTime || 0;
+      let breaks = timeEntry.breaks || [];
+      
+      // Automatische Pause hinzufügen, falls erforderlich
+      if (automaticBreak) {
+        breaks.push(automaticBreak);
+        totalPauseTime += automaticBreak.duration;
+        
+        console.log(`✅ Automatische Pause hinzugefügt: ${automaticBreak.reason}`);
+        
+        // Pauseninformation für die Rückgabe speichern
+        updateData.automaticBreakAdded = {
+          duration: automaticBreak.duration / (1000 * 60), // in Minuten
+          reason: automaticBreak.reason
+        };
+      }
+      
+      const actualWorkTime = diffMs - totalPauseTime;
       updateData.totalWorkTime = actualWorkTime;
+      updateData.breaks = breaks;
+      updateData.pauseTotalTime = totalPauseTime;
       
       // Zeiteintrag aktualisieren
       await this.updateTimeEntry(timeEntryId, updateData);
       
       console.log(`✅ Mitarbeiter erfolgreich ausgestempelt (ID: ${timeEntryId})`);
-      return true;
+      
+      // Rückgabe mit Pauseninformation
+      const result = { success: true };
+      if (updateData.automaticBreakAdded) {
+        result.automaticBreak = updateData.automaticBreakAdded;
+      }
+      return result;
     } catch (error) {
       console.error(`❌ Fehler beim Ausstempeln des Mitarbeiters mit Zeiteintrag ${timeEntryId}:`, error);
       throw error;
@@ -1835,6 +1864,52 @@ const DataService = {
     }
   },
 
+  /**
+   * Berechnet die automatische Pausenzeit basierend auf der Arbeitszeit (deutsche Gesetze)
+   * @param {number} workingHours - Arbeitszeit in Stunden
+   * @returns {number} Pausenzeit in Minuten
+   */
+  calculateAutomaticBreakTime(workingHours) {
+    if (workingHours >= 10) {
+      // Ab 10 Stunden: 60 Minuten Pause
+      return 60;
+    } else if (workingHours >= 6) {
+      // 6-9:59 Stunden: 30 Minuten Pause
+      return 30;
+    } else {
+      // Unter 6 Stunden: keine Pause erforderlich
+      return 0;
+    }
+  },
+
+  /**
+   * Erstellt einen automatischen Pauseneintrag basierend auf der Arbeitszeit
+   * @param {Date} clockInTime - Einstempelzeit
+   * @param {Date} clockOutTime - Ausstempelzeit
+   * @returns {Object|null} Automatischer Pauseneintrag oder null
+   */
+  createAutomaticBreak(clockInTime, clockOutTime) {
+    const workingTimeMs = clockOutTime - clockInTime;
+    const workingHours = workingTimeMs / (1000 * 60 * 60);
+    
+    const breakMinutes = this.calculateAutomaticBreakTime(workingHours);
+    
+    if (breakMinutes > 0) {
+      // Pausenstart etwa in der Mitte der Arbeitszeit
+      const breakStartTime = new Date(clockInTime.getTime() + (workingTimeMs / 2) - (breakMinutes * 60 * 1000 / 2));
+      const breakEndTime = new Date(breakStartTime.getTime() + (breakMinutes * 60 * 1000));
+      
+      return {
+        startTime: breakStartTime,
+        endTime: breakEndTime,
+        duration: breakMinutes * 60 * 1000, // in Millisekunden
+        type: 'automatic',
+        reason: `Gesetzliche Pause (${breakMinutes} Min.) bei ${workingHours.toFixed(1)}h Arbeitszeit`
+      };
+    }
+    
+    return null;
+  },
 
   // Fahrzeug-Verwaltung Funktionen
   async createVehicle(vehicleData) {

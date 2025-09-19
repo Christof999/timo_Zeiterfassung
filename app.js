@@ -37,8 +37,7 @@ const clockOutForm = document.getElementById('clock-out-form');
 const activeProjectSpan = document.getElementById('active-project');
 const clockInTimeSpan = document.getElementById('clock-in-time');
 const activitiesList = document.getElementById('activities-list');
-const pauseBtn = document.getElementById('pause-btn');
-const resumeBtn = document.getElementById('resume-btn');
+// Pause-Buttons entfernt - automatische Pausenberechnung
 const sitePhotosComments = document.getElementById('site-photos-comments');
 const documentPhotosComments = document.getElementById('document-photos-comments');
 
@@ -138,14 +137,7 @@ async function initApp() {
         extendedClockOutForm.addEventListener('submit', handleExtendedClockOut);
     }
     
-    // Event-Listener für Pause-Buttons
-    if (pauseBtn) {
-        pauseBtn.addEventListener('click', handlePause);
-    }
-    
-    if (resumeBtn) {
-        resumeBtn.addEventListener('click', handleResumeFromPause);
-    }
+    // Pause-Buttons entfernt - automatische Pausenberechnung beim Ausstempeln
     
     if (cancelClockOutBtn) {
         cancelClockOutBtn.addEventListener('click', function() {
@@ -447,19 +439,20 @@ async function handleSimpleClockOut() {
             const location = await getCurrentLocationForClockOut();
             const now = new Date();
             
-            // Zeiterfassungseintrag aktualisieren
-            await DataService.updateTimeEntry(timeEntry.id, {
-                clockOutTime: now,
-                clockOutLocation: location,
-                notes: timeEntry.notes || ''
-            });
+            // Mitarbeiter ausstempeln mit automatischer Pausenberechnung
+            const result = await DataService.clockOutEmployee(timeEntry.id, timeEntry.notes || '', location);
             
             // UI aktualisieren
             showClockedOutState();
             setCurrentTimeEntry(null);
             await loadUserActivities();
             
-            alert('Sie wurden erfolgreich ausgestempelt!');
+            // Benachrichtigung über automatische Pause anzeigen
+            if (result.automaticBreak) {
+                alert(`Erfolgreich ausgestempelt!\n\n✅ Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten\n(${result.automaticBreak.reason})`);
+            } else {
+                alert('Sie wurden erfolgreich ausgestempelt!');
+            }
         } catch (locationError) {
             console.error('Standortabfrage fehlgeschlagen:', locationError);
             alert('Der Standort konnte nicht abgefragt werden. Bitte erlauben Sie den Zugriff auf Ihren Standort.');
@@ -1198,7 +1191,20 @@ async function handleExtendedClockOut(event) {
         }
         
         console.log('Aktualisiere Zeiteintrag mit Dokumentation:', updateData);
-        await DataService.updateTimeEntry(timeEntry.id, updateData);
+        
+        // Zuerst ausstempeln mit automatischer Pausenberechnung
+        const result = await DataService.clockOutEmployee(timeEntry.id, notes, location);
+        
+        // Dann die Dokumentation hinzufügen
+        const docUpdateData = {
+            sitePhotoUploads: sitePhotoUploads,
+            documentPhotoUploads: documentPhotoUploads,
+            sitePhotos: sitePhotoObjects,
+            documents: documentPhotoObjects,
+            hasDocumentation: (sitePhotoObjects.length > 0 || documentPhotoObjects.length > 0 || notes.trim() !== '')
+        };
+        
+        await DataService.updateTimeEntry(timeEntry.id, docUpdateData);
         
         // Globale Variablen zurücksetzen
         setCurrentTimeEntry(null);
@@ -1230,8 +1236,12 @@ async function handleExtendedClockOut(event) {
             modal.style.display = 'none';
         }
         
-        // Erfolgsmeldung anzeigen
-        alert('Erfolgreich ausgestempelt mit Dokumentation!');
+        // Benachrichtigung über automatische Pause anzeigen
+        if (result.automaticBreak) {
+            alert(`Erfolgreich ausgestempelt mit Dokumentation!\n\n✅ Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten\n(${result.automaticBreak.reason})`);
+        } else {
+            alert('Erfolgreich ausgestempelt mit Dokumentation!');
+        }
     } catch (error) {
         console.error('Fehler beim erweiterten Ausstempeln:', error);
         alert('Fehler beim Ausstempeln: ' + error.message);
@@ -1279,12 +1289,8 @@ function showClockedInState(project, timeEntry) {
             }
         }
         
-        // Pausenzustand zurücksetzen
+        // Pausenzustand zurücksetzen (nicht mehr benötigt)
         window.app.isPaused = false;
-        if (pauseBtn && resumeBtn) {
-            pauseBtn.classList.remove('hidden');
-            resumeBtn.classList.add('hidden');
-        }
         
         // Timer für die Zeitanzeige aktualisieren
         const currentTimer = getClockTimer();
@@ -1809,122 +1815,8 @@ function setupDualFilePreview(baseInputId, previewId) {
 }
 
 // Pause-Funktion
-function handlePause() {
-    // Prüfen, ob ein aktiver Zeiteintrag existiert
-    const timeEntry = getCurrentTimeEntry();
-    if (!timeEntry) {
-        alert('Es gibt keinen aktiven Zeiteintrag für eine Pause.');
-        return;
-    }
-    
-    // Prüfen, ob bereits eine Pause läuft
-    if (window.app.isPaused) {
-        alert('Es läuft bereits eine Pause. Bitte beenden Sie zuerst die aktuelle Pause.');
-        return;
-    }
-    
-    // Pause beginnen
-    const pauseStartTime = new Date();
-    window.app.isPaused = true;
-    window.app.pauseStartTime = pauseStartTime;
-    
-    // UI anpassen
-    pauseBtn.classList.add('hidden');
-    resumeBtn.classList.remove('hidden');
-    statusText.textContent = 'Pause';
-    statusText.style.color = '#ff9800';
-    
-    // Pause in der Datenbank speichern
-    try {
-        // Aktuellen Benutzer abrufen
-        const currentUser = getCurrentUser();
-        const username = currentUser ? currentUser.username : 'Unbekannt';
-        
-        // Pauseninformationen im Zeiteintrag speichern
-        DataService.updateTimeEntry(timeEntry.id, {
-            hasPause: true,
-            lastPauseStart: pauseStartTime,
-            currentPauseInfo: {
-                start: pauseStartTime,
-                startedBy: username
-            }
-        });
-        
-        // Benachrichtigung anzeigen
-        alert('Pause gestartet!');
-    } catch (error) {
-        console.error('Fehler beim Starten der Pause:', error);
-        alert('Fehler beim Starten der Pause. Bitte versuchen Sie es erneut.');
-    }
-}
-
-// Pause beenden
-function handleResumeFromPause() {
-    // Prüfen, ob eine Pause läuft
-    if (!window.app.isPaused || !window.app.pauseStartTime) {
-        alert('Es läuft keine Pause, die beendet werden kann.');
-        return;
-    }
-    
-    // Pausendauer berechnen
-    const pauseStart = window.app.pauseStartTime;
-    const pauseEnd = new Date();
-    const pauseDuration = pauseEnd - pauseStart;
-    window.app.pauseTotalTime += pauseDuration;
-    
-    // Pause beenden
-    window.app.isPaused = false;
-    
-    // UI anpassen
-    resumeBtn.classList.add('hidden');
-    pauseBtn.classList.remove('hidden');
-    statusText.textContent = 'Eingestempelt';
-    statusText.style.color = '#4CAF50';
-    
-    // Pause in der Datenbank speichern
-    const timeEntry = getCurrentTimeEntry();
-    if (timeEntry) {
-        try {
-            // Aktuellen Benutzer abrufen
-            const currentUser = getCurrentUser();
-            const username = currentUser ? currentUser.username : 'Unbekannt';
-            
-            // Details für diese Pause erstellen
-            const pauseDetail = {
-                start: pauseStart,
-                end: pauseEnd,
-                duration: pauseDuration,
-                startedBy: timeEntry.currentPauseInfo ? timeEntry.currentPauseInfo.startedBy : username,
-                endedBy: username
-            };
-            
-            // Vorhandene Pausendetails abrufen
-            let pauseDetails = timeEntry.pauseDetails || [];
-            
-            // Neue Pausendetails hinzufügen
-            pauseDetails.push(pauseDetail);
-            
-            // Zeiteintrag aktualisieren
-            DataService.updateTimeEntry(timeEntry.id, {
-                pauseTotalTime: (timeEntry.pauseTotalTime || 0) + pauseDuration,
-                lastPauseEnd: pauseEnd,
-                pauseDetails: pauseDetails,
-                currentPauseInfo: null // Aktuelle Pauseninformation zurücksetzen
-            });
-            
-            // Pausendauer formatieren und anzeigen
-            const pauseMinutes = Math.floor(pauseDuration / 60000);
-            const pauseSeconds = Math.floor((pauseDuration % 60000) / 1000);
-            alert(`Pause beendet! Dauer: ${pauseMinutes} Min. ${pauseSeconds} Sek.`);
-            
-            // Aktivitätenliste aktualisieren, um die Pause anzuzeigen
-            loadUserActivities();
-        } catch (error) {
-            console.error('Fehler beim Beenden der Pause:', error);
-            alert('Fehler beim Beenden der Pause. Die Pausenzeit wurde möglicherweise nicht korrekt gespeichert.');
-        }
-    }
-}
+// Pause-Funktionen entfernt - automatische Pausenberechnung nach deutschen Gesetzen
+// wird beim Ausstempeln automatisch hinzugefügt
 
 // App starten
 document.addEventListener('DOMContentLoaded', () => {

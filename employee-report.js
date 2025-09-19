@@ -10,6 +10,10 @@ let currentEndDate = null;
 let currentReportEntries = [];
 let totalHours = 0;
 
+// Bearbeitungsmodus Variablen
+let isEditModeActive = false;
+let editedEntries = new Map(); // Speichert temporäre Änderungen
+
 // Event-Listener registrieren
 document.addEventListener('DOMContentLoaded', function() {
     setupEmployeeReportUI();
@@ -32,6 +36,18 @@ function setupEmployeeReportUI() {
     const exportReportBtn = document.getElementById('export-employee-report-btn');
     if (exportReportBtn) {
         exportReportBtn.addEventListener('click', exportEmployeeReport);
+    }
+    
+    // Event-Listener für den Bearbeitungsmodus-Button
+    const toggleEditModeBtn = document.getElementById('toggle-edit-mode-btn');
+    if (toggleEditModeBtn) {
+        toggleEditModeBtn.addEventListener('click', toggleEditMode);
+    }
+    
+    // Event-Listener für den Zurücksetzen-Button
+    const resetChangesBtn = document.getElementById('reset-changes-btn');
+    if (resetChangesBtn) {
+        resetChangesBtn.addEventListener('click', resetAllChanges);
     }
     
     // Datum-Inputs mit aktuellem Monat vorbelegen
@@ -275,14 +291,17 @@ async function generateEmployeeReport() {
                     pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
                 }
                 
-                // Zeile mit Daten füllen
+                // Zeile mit Daten füllen (mit bearbeitbaren Zellen)
+                const entryId = entry.id || `entry_${Date.now()}_${Math.random()}`;
+                row.dataset.entryId = entryId;
+                
                 row.innerHTML = `
                     <td>${formatDate(clockInTime)}</td>
                     <td>${project.name}</td>
-                    <td>${formatTime(clockInTime)}</td>
-                    <td>${clockOutTime ? formatTime(clockOutTime) : '-'}</td>
+                    <td class="editable-cell time-cell" data-field="clockInTime" data-entry-id="${entryId}">${formatTime(clockInTime)}</td>
+                    <td class="editable-cell time-cell" data-field="clockOutTime" data-entry-id="${entryId}">${clockOutTime ? formatTime(clockOutTime) : '-'}</td>
                     <td class="duration-cell">${duration}</td>
-                    <td class="pause-time">${pauseTime}</td>
+                    <td class="editable-cell pause-cell" data-field="pauseTime" data-entry-id="${entryId}">${pauseTime}</td>
                     <td>${entry.notes || '-'}</td>
                 `;
                 
@@ -306,6 +325,18 @@ async function generateEmployeeReport() {
         if (exportReportBtn) {
             exportReportBtn.disabled = currentReportEntries.length === 0;
         }
+        
+        // Bearbeitungsmodus-Button anzeigen
+        const toggleEditModeBtn = document.getElementById('toggle-edit-mode-btn');
+        if (toggleEditModeBtn) {
+            toggleEditModeBtn.style.display = currentReportEntries.length > 0 ? 'inline-block' : 'none';
+        }
+        
+        // Bearbeitungsmodus zurücksetzen
+        isEditModeActive = false;
+        editedEntries.clear();
+        updateEditModeUI();
+        
     } catch (error) {
         console.error('Fehler beim Generieren des Berichts:', error);
         reportContainer.innerHTML = `
@@ -443,4 +474,336 @@ function formatTime(date) {
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
+}
+
+/**
+ * Schaltet den Bearbeitungsmodus ein/aus
+ */
+function toggleEditMode() {
+    isEditModeActive = !isEditModeActive;
+    updateEditModeUI();
+    
+    if (isEditModeActive) {
+        setupEditableTable();
+    } else {
+        removeEditableTable();
+    }
+}
+
+/**
+ * Aktualisiert die Benutzeroberfläche basierend auf dem Bearbeitungsmodus
+ */
+function updateEditModeUI() {
+    const toggleBtn = document.getElementById('toggle-edit-mode-btn');
+    const instructions = document.getElementById('edit-instructions');
+    
+    if (toggleBtn) {
+        if (isEditModeActive) {
+            toggleBtn.innerHTML = '<i class="fas fa-times"></i> Bearbeiten deaktivieren';
+            toggleBtn.classList.add('active');
+        } else {
+            toggleBtn.innerHTML = '<i class="fas fa-edit"></i> Bearbeiten aktivieren';
+            toggleBtn.classList.remove('active');
+        }
+    }
+    
+    if (instructions) {
+        if (isEditModeActive) {
+            instructions.classList.add('show');
+        } else {
+            instructions.classList.remove('show');
+        }
+    }
+}
+
+/**
+ * Macht die Tabelle bearbeitbar
+ */
+function setupEditableTable() {
+    const editableCells = document.querySelectorAll('.editable-cell');
+    
+    editableCells.forEach(cell => {
+        cell.addEventListener('click', handleCellClick);
+    });
+}
+
+/**
+ * Entfernt die Bearbeitbarkeit von der Tabelle
+ */
+function removeEditableTable() {
+    const editableCells = document.querySelectorAll('.editable-cell');
+    
+    editableCells.forEach(cell => {
+        cell.removeEventListener('click', handleCellClick);
+        cell.classList.remove('editing');
+    });
+}
+
+/**
+ * Behandelt Klicks auf bearbeitbare Zellen
+ */
+function handleCellClick(event) {
+    if (!isEditModeActive) return;
+    
+    const cell = event.target;
+    const field = cell.dataset.field;
+    const entryId = cell.dataset.entryId;
+    
+    if (cell.classList.contains('editing')) return;
+    
+    const currentValue = cell.textContent.trim();
+    cell.classList.add('editing');
+    
+    let inputElement;
+    
+    if (field === 'pauseTime') {
+        // Für Pausenzeit: Eingabe in Minuten
+        const currentMinutes = parsePauseTimeToMinutes(currentValue);
+        inputElement = document.createElement('input');
+        inputElement.type = 'number';
+        inputElement.min = '0';
+        inputElement.max = '480'; // Max 8 Stunden Pause
+        inputElement.step = '1';
+        inputElement.value = currentMinutes;
+        inputElement.placeholder = 'Minuten (z.B. 30 für 30min)';
+        inputElement.title = 'Pausenzeit in Minuten eingeben (z.B. 30 für 30min, 90 für 1h 30min)';
+    } else {
+        // Für Zeit-Felder: HH:MM Format
+        inputElement = document.createElement('input');
+        inputElement.type = 'time';
+        inputElement.value = currentValue !== '-' ? currentValue : '';
+    }
+    
+    inputElement.addEventListener('blur', () => finishEditing(cell, inputElement, field, entryId));
+    inputElement.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            finishEditing(cell, inputElement, field, entryId);
+        } else if (e.key === 'Escape') {
+            cancelEditing(cell, currentValue);
+        }
+    });
+    
+    cell.innerHTML = '';
+    cell.appendChild(inputElement);
+    inputElement.focus();
+}
+
+/**
+ * Beendet die Bearbeitung einer Zelle
+ */
+function finishEditing(cell, inputElement, field, entryId) {
+    const newValue = inputElement.value.trim();
+    let displayValue;
+    
+    if (field === 'pauseTime') {
+        const minutes = parseInt(newValue) || 0;
+        if (minutes > 0) {
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            if (hours > 0 && remainingMinutes > 0) {
+                displayValue = `${hours}h ${remainingMinutes}min`;
+            } else if (hours > 0) {
+                displayValue = `${hours}h`;
+            } else {
+                displayValue = `${remainingMinutes}min`;
+            }
+        } else {
+            displayValue = '-';
+        }
+    } else {
+        displayValue = newValue || '-';
+    }
+    
+    cell.classList.remove('editing');
+    cell.innerHTML = displayValue;
+    
+    // Änderung speichern
+    if (!editedEntries.has(entryId)) {
+        editedEntries.set(entryId, {});
+    }
+    editedEntries.get(entryId)[field] = newValue;
+    
+    // Zeile als bearbeitet markieren
+    const row = cell.closest('tr');
+    row.classList.add('edited-entry');
+    
+    // Indikator hinzufügen
+    if (!cell.querySelector('.edit-indicator')) {
+        const indicator = document.createElement('div');
+        indicator.className = 'edit-indicator';
+        cell.appendChild(indicator);
+    }
+    
+    // Dauer neu berechnen wenn Zeit geändert wurde
+    if (field === 'clockInTime' || field === 'clockOutTime') {
+        recalculateDuration(row, entryId);
+    }
+    
+    // Gesamtstunden neu berechnen
+    recalculateTotalHours();
+    
+    // Reset-Button anzeigen/verstecken
+    updateResetButton();
+}
+
+/**
+ * Bricht die Bearbeitung ab
+ */
+function cancelEditing(cell, originalValue) {
+    cell.classList.remove('editing');
+    cell.innerHTML = originalValue;
+}
+
+/**
+ * Berechnet die Dauer einer Zeile neu
+ */
+function recalculateDuration(row, entryId) {
+    const clockInCell = row.querySelector('[data-field="clockInTime"]');
+    const clockOutCell = row.querySelector('[data-field="clockOutTime"]');
+    const durationCell = row.querySelector('.duration-cell');
+    
+    const clockInText = clockInCell.textContent.trim();
+    const clockOutText = clockOutCell.textContent.trim();
+    
+    if (clockInText !== '-' && clockOutText !== '-') {
+        try {
+            const clockInTime = parseTimeString(clockInText);
+            const clockOutTime = parseTimeString(clockOutText);
+            
+            if (clockInTime && clockOutTime) {
+                let durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
+                
+                // Behandlung von Tageswechseln (negative Dauer bedeutet Übernachtarbeit)
+                if (durationHours < 0) {
+                    durationHours += 24; // Füge 24 Stunden hinzu für Tageswechsel
+                }
+                
+                const displayDuration = durationHours > 0 ? durationHours.toFixed(2) + ' h' : '-';
+                durationCell.textContent = displayDuration;
+            }
+        } catch (error) {
+            console.error('Fehler bei Dauerberechnung:', error);
+            durationCell.textContent = '-';
+        }
+    } else {
+        durationCell.textContent = '-';
+    }
+}
+
+/**
+ * Berechnet die Gesamtstunden neu
+ */
+function recalculateTotalHours() {
+    const durationCells = document.querySelectorAll('.duration-cell');
+    let total = 0;
+    
+    durationCells.forEach(cell => {
+        const text = cell.textContent.trim();
+        if (text !== '-') {
+            const hours = parseFloat(text.replace(' h', ''));
+            if (!isNaN(hours)) {
+                total += hours;
+            }
+        }
+    });
+    
+    // Zusammenfassung aktualisieren
+    const reportSummary = document.getElementById('employee-report-summary');
+    if (reportSummary) {
+        reportSummary.innerHTML = `
+            <p><strong>Gesamtstunden:</strong> ${total.toFixed(2)} h</p>
+            <p><strong>Anzahl Einträge:</strong> ${currentReportEntries.length}</p>
+            ${editedEntries.size > 0 ? `<p><strong>Bearbeitete Einträge:</strong> ${editedEntries.size}</p>` : ''}
+        `;
+    }
+}
+
+/**
+ * Parst eine Zeit-String zu einem Date-Objekt (heute)
+ */
+function parseTimeString(timeStr) {
+    if (!timeStr || timeStr === '-') return null;
+    
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+}
+
+/**
+ * Parst Pausenzeit zu Minuten
+ * Unterstützt Formate: "1h 30min", "90min", "1,5h", "90"
+ */
+function parsePauseTimeToMinutes(pauseStr) {
+    if (!pauseStr || pauseStr === '-') return 0;
+    
+    // Entferne Leerzeichen für einfachere Verarbeitung
+    const cleanStr = pauseStr.replace(/\s+/g, '');
+    
+    // Format: "1h30min" oder "1h 30min"
+    const hourMinMatch = cleanStr.match(/(\d+)h(\d+)min/);
+    if (hourMinMatch) {
+        const hours = parseInt(hourMinMatch[1]);
+        const minutes = parseInt(hourMinMatch[2]);
+        return hours * 60 + minutes;
+    }
+    
+    // Format: "1h" 
+    const hourMatch = cleanStr.match(/^(\d+)h$/);
+    if (hourMatch) {
+        return parseInt(hourMatch[1]) * 60;
+    }
+    
+    // Format: "30min"
+    const minuteMatch = cleanStr.match(/^(\d+)min$/);
+    if (minuteMatch) {
+        return parseInt(minuteMatch[1]);
+    }
+    
+    // Format: "1,5h" oder "1.5h" (Dezimalstunden)
+    const decimalHourMatch = cleanStr.match(/^(\d+[,.]?\d*)h$/);
+    if (decimalHourMatch) {
+        const hours = parseFloat(decimalHourMatch[1].replace(',', '.'));
+        return Math.round(hours * 60);
+    }
+    
+    // Format: Nur Zahl (wird als Minuten interpretiert)
+    const numberMatch = cleanStr.match(/^\d+$/);
+    if (numberMatch) {
+        return parseInt(cleanStr);
+    }
+    
+    // Fallback: Versuche alte Parsing-Methode
+    const oldHourMatch = pauseStr.match(/(\d+)h/);
+    const oldMinuteMatch = pauseStr.match(/(\d+)min/);
+    
+    const hours = oldHourMatch ? parseInt(oldHourMatch[1]) : 0;
+    const minutes = oldMinuteMatch ? parseInt(oldMinuteMatch[1]) : 0;
+    
+    return hours * 60 + minutes;
+}
+
+/**
+ * Setzt alle Änderungen zurück
+ */
+function resetAllChanges() {
+    if (!confirm('Möchten Sie wirklich alle Änderungen zurücksetzen?')) {
+        return;
+    }
+    
+    // Editierte Einträge löschen
+    editedEntries.clear();
+    
+    // Bericht neu generieren
+    generateEmployeeReport();
+}
+
+/**
+ * Aktualisiert die Sichtbarkeit des Reset-Buttons
+ */
+function updateResetButton() {
+    const resetBtn = document.getElementById('reset-changes-btn');
+    if (resetBtn) {
+        resetBtn.style.display = editedEntries.size > 0 ? 'inline-block' : 'none';
+    }
 }

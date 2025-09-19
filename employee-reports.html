@@ -117,6 +117,77 @@
             margin-top: 20px;
         }
         
+        /* Bearbeitbare Zellen Styles */
+        .editable-cell {
+            position: relative;
+            cursor: pointer;
+            padding: 8px !important;
+        }
+        
+        .editable-cell:hover {
+            background-color: #f0f8ff;
+            border: 1px solid #4CAF50;
+        }
+        
+        .editable-cell.editing {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+        
+        .editable-cell input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-size: inherit;
+            font-family: inherit;
+            padding: 2px;
+        }
+        
+        .editable-cell input:focus {
+            outline: none;
+            background-color: white;
+            border: 1px solid #007bff;
+            border-radius: 3px;
+        }
+        
+        .edited-entry {
+            background-color: #e8f5e8 !important;
+        }
+        
+        .edit-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+        }
+        
+        .edit-mode-toggle {
+            margin-left: 10px;
+            background-color: #17a2b8;
+            color: white;
+        }
+        
+        .edit-mode-toggle.active {
+            background-color: #28a745;
+        }
+        
+        .edit-instructions {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .edit-instructions.show {
+            display: block;
+        }
+        
         @media print {
             .no-print {
                 display: none !important;
@@ -183,12 +254,26 @@
                         <button id="generate-employee-report-btn" class="btn primary-btn">
                             <i class="fas fa-search"></i> Bericht erstellen
                         </button>
+                        <button id="toggle-edit-mode-btn" class="btn edit-mode-toggle" style="display: none;">
+                            <i class="fas fa-edit"></i> Bearbeiten aktivieren
+                        </button>
                     </div>
                 </div>
                 
                 <div id="employee-report-container" class="employee-report-container hidden">
                     <div id="employee-report-header" class="employee-report-header">
                         <!-- Wird durch JavaScript gefüllt -->
+                    </div>
+                    
+                    <div id="edit-instructions" class="edit-instructions">
+                        <strong>Bearbeitungsmodus aktiv:</strong> Klicken Sie auf Einstempel-, Ausstempel- oder Pausenzeiten, um diese zu bearbeiten. 
+                        <br><strong>Pausenzeit:</strong> Eingabe in Minuten (z.B. 30 für 30min, 90 für 1h 30min).
+                        <br>Die Änderungen sind nur temporär für diesen Bericht und werden nicht gespeichert. 
+                        Die Dauer wird automatisch neu berechnet.
+                        <br>
+                        <button id="reset-changes-btn" class="btn secondary-btn" style="margin-top: 10px; display: none;">
+                            <i class="fas fa-undo"></i> Alle Änderungen zurücksetzen
+                        </button>
                     </div>
                     
                     <div class="report-table-container">

@@ -92,6 +92,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     
+    // Globale Event-Delegation für Projekt-Buttons (Fallback)
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('edit-project-btn') || e.target.closest('.edit-project-btn')) {
+            const btn = e.target.classList.contains('edit-project-btn') ? e.target : e.target.closest('.edit-project-btn');
+            const id = btn.dataset.id;
+            console.log('🔧 Global event delegation: Edit project clicked:', id);
+            if (id) {
+                e.preventDefault();
+                e.stopPropagation();
+                showProjectForm(id);
+            }
+        }
+    });
+    
     // Dashboard-Elemente
     const activeEmployeesCount = document.getElementById('active-employees-count');
     const activeProjectsCount = document.getElementById('active-projects-count');
@@ -794,15 +808,27 @@ async function loadProjectsTable() {
             projectsTable.appendChild(row);
         });
         
-        // Event-Listener für Bearbeiten- und Löschen-Buttons
-        document.querySelectorAll('.edit-project-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
+        // Event-Listener für Bearbeiten- und Löschen-Buttons nur für die neue Tabelle
+        const editButtons = projectsTable.querySelectorAll('.edit-project-btn');
+        console.log(`🔧 Füge Event-Listener für ${editButtons.length} Edit-Buttons hinzu`);
+        
+        editButtons.forEach((btn, index) => {
+            const id = btn.dataset.id;
+            console.log(`🔧 Button ${index}: ID = ${id}`);
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
                 const id = this.dataset.id;
-                showProjectForm(id);
+                console.log('🔧 Edit project clicked:', id, this);
+                if (id) {
+                    showProjectForm(id);
+                } else {
+                    console.error('Keine Projekt-ID gefunden');
+                }
             });
         });
         
-        document.querySelectorAll('.delete-project-btn').forEach(btn => {
+        projectsTable.querySelectorAll('.delete-project-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const id = this.dataset.id;
                 deleteProject(id);
@@ -810,7 +836,7 @@ async function loadProjectsTable() {
         });
         
         // Event-Listener für Details-Button
-        document.querySelectorAll('.view-details-btn').forEach(btn => {
+        projectsTable.querySelectorAll('.view-details-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const id = this.dataset.id;
                 showProjectDetails(id);
@@ -2759,7 +2785,13 @@ function showProjectForm(projectId = null) {
     const form = document.getElementById('project-form');
     const title = document.getElementById('project-form-title');
     
-    if (!modal || !form) return;
+    if (!modal || !form) {
+        console.error('Modal oder Form nicht gefunden');
+        return;
+    }
+    
+    // Modal vorbereiten
+    modal.classList.remove('visible');
     
     // Formular zurücksetzen
     form.reset();
@@ -2772,26 +2804,37 @@ function showProjectForm(projectId = null) {
         // Projektdaten laden und ins Formular einfüllen
         DataService.getProjectById(projectId).then(project => {
             if (project) {
+                console.log('Projekt gefunden:', project);
+                console.log('StartDate:', project.startDate, 'Type:', typeof project.startDate);
+                console.log('EndDate:', project.endDate, 'Type:', typeof project.endDate);
+                
                 document.getElementById('project-name').value = project.name || '';
                 document.getElementById('project-client').value = project.client || '';
+                document.getElementById('project-description').value = project.description || '';
+                document.getElementById('project-status').value = project.status || 'active';
                 
                 if (project.startDate) {
+                    console.log('Formatiere StartDate:', project.startDate);
                     const startDate = formatDateForInput(project.startDate);
+                    console.log('Formatiertes StartDate:', startDate);
                     document.getElementById('project-start-date').value = startDate;
                 }
                 
                 if (project.endDate) {
+                    console.log('Formatiere EndDate:', project.endDate);
                     const endDate = formatDateForInput(project.endDate);
+                    console.log('Formatiertes EndDate:', endDate);
                     document.getElementById('project-end-date').value = endDate;
                 }
                 
-                document.getElementById('project-description').value = project.description || '';
-                document.getElementById('project-status').value = project.status || 'active';
+                // Standortdaten einfügen (mit Fehlerbehandlung)
+                const addressField = document.getElementById('project-address');
+                const latField = document.getElementById('project-latitude');
+                const lngField = document.getElementById('project-longitude');
                 
-                // Standortdaten einfügen
-                document.getElementById('project-address').value = project.address || '';
-                document.getElementById('project-latitude').value = project.latitude || '';
-                document.getElementById('project-longitude').value = project.longitude || '';
+                if (addressField) addressField.value = project.address || '';
+                if (latField) latField.value = project.latitude || '';
+                if (lngField) lngField.value = project.longitude || '';
                 
                 // Wenn Koordinaten vorhanden sind, Karte initialisieren
                 if (project.latitude && project.longitude) {
@@ -2801,9 +2844,16 @@ function showProjectForm(projectId = null) {
                         }
                     }, 500);
                 }
+            } else {
+                console.error('Projekt nicht gefunden:', projectId);
+                notify('Projekt nicht gefunden', 'error');
             }
         }).catch(error => {
             console.error('Fehler beim Laden des Projekts:', error);
+            notify('Fehler beim Laden des Projekts: ' + error.message, 'error');
+            
+            // Modal trotzdem anzeigen, aber mit leeren Feldern
+            console.log('Zeige Modal trotz Fehler mit leeren Feldern');
         });
     } else {
         // Neues Projekt hinzufügen
@@ -2812,7 +2862,17 @@ function showProjectForm(projectId = null) {
     }
     
     // Modal anzeigen
+        console.log('🔧 Zeige Projekt-Modal für Projekt-ID:', projectId);
     modal.classList.add('visible');
+    
+    // Zusätzliche Überprüfung
+    setTimeout(() => {
+        if (modal.classList.contains('visible')) {
+            console.log('✅ Modal ist sichtbar');
+        } else {
+            console.error('❌ Modal ist nicht sichtbar');
+        }
+    }, 100);
 }
 
 // Projekt-Formular absenden
@@ -2881,16 +2941,42 @@ async function deleteProject(projectId) {
 
 // Hilfsfunktion: Datum für Input-Feld formatieren (YYYY-MM-DD)
 function formatDateForInput(date) {
-    let d;
-    if (typeof date === 'object' && date.toDate && typeof date.toDate === 'function') {
-        d = date.toDate();
-    } else if (date instanceof Date) {
-        d = date;
-    } else {
-        d = new Date(date);
+    if (!date) {
+        console.warn('formatDateForInput: Kein Datum übergeben');
+        return '';
     }
     
-    return d.toISOString().split('T')[0];
+    let d;
+    try {
+        if (typeof date === 'object' && date.toDate && typeof date.toDate === 'function') {
+            // Firebase Timestamp mit toDate() Methode
+            d = date.toDate();
+        } else if (typeof date === 'object' && date.seconds !== undefined) {
+            // Firebase Timestamp Objekt {seconds: ..., nanoseconds: ...}
+            d = new Date(date.seconds * 1000);
+            console.log('Firebase Timestamp konvertiert:', date, '→', d);
+        } else if (date instanceof Date) {
+            // JavaScript Date Objekt
+            d = date;
+        } else if (typeof date === 'string' || typeof date === 'number') {
+            // String oder Timestamp
+            d = new Date(date);
+        } else {
+            console.error('formatDateForInput: Unbekannter Datumstyp:', typeof date, date);
+            return '';
+        }
+        
+        // Überprüfen ob das Datum gültig ist
+        if (isNaN(d.getTime())) {
+            console.error('formatDateForInput: Ungültiges Datum:', date);
+            return '';
+        }
+        
+        return d.toISOString().split('T')[0];
+    } catch (error) {
+        console.error('formatDateForInput: Fehler beim Formatieren des Datums:', error, date);
+        return '';
+    }
 }
 
 // Funktion zum Anzeigen der detaillierten Zeiteinträge mit Standortinformationen
