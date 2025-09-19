@@ -1835,6 +1835,7 @@ const DataService = {
     }
   },
 
+
   // Fahrzeug-Verwaltung Funktionen
   async createVehicle(vehicleData) {
     await this._authReadyPromise;
@@ -1842,8 +1843,12 @@ const DataService = {
       // Debug-Ausgabe der eingehenden Daten
       console.log("Fahrzeug wird erstellt mit Daten:", vehicleData);
       
-      if (!vehicleData || !vehicleData.name || !vehicleData.hourlyRate) {
-        throw new Error("Fahrzeugname und Stundensatz müssen angegeben werden");
+      if (!vehicleData || !vehicleData.name || !vehicleData.type) {
+        throw new Error("Fahrzeugname und Typ müssen angegeben werden");
+      }
+      
+      if (vehicleData.hourlyRate === undefined || vehicleData.hourlyRate === null || isNaN(vehicleData.hourlyRate)) {
+        throw new Error("Stundensatz muss eine gültige Zahl sein");
       }
       
       const newVehicle = {

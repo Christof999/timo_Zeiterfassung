@@ -123,6 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const admin = JSON.parse(savedAdmin);
             console.log('Admin bereits angemeldet:', admin);
+            
+            
             adminLoginSection.classList.add('hidden');
             adminDashboard.classList.remove('hidden');
             adminNameSpan.textContent = admin.name || 'Administrator';
@@ -131,6 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loadDashboardData();
             loadEmployeesTable();
             loadProjectsTable();
+            loadVehiclesTable();
             loadReportFilters();
             
             // Badge für Urlaubsanträge aktualisieren
@@ -157,6 +160,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (addEmployeeBtn) {
         addEmployeeBtn.addEventListener('click', function() {
             showEmployeeForm();
+        });
+    }
+    
+    const addVehicleBtn = document.getElementById('add-vehicle-btn');
+    if (addVehicleBtn) {
+        addVehicleBtn.addEventListener('click', function() {
+            showVehicleForm();
         });
     }
     
@@ -247,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadDashboardData();
                     loadEmployeesTable();
                     loadProjectsTable();
+                    loadVehiclesTable();
                     
                     // Badge für Urlaubsanträge nach Login aktualisieren
                     setTimeout(() => {
@@ -330,6 +341,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const clockOutForm = document.getElementById('clock-out-employee-form');
     if (clockOutForm) {
         clockOutForm.addEventListener('submit', handleClockOutEmployee);
+    }
+    
+    // Fahrzeug-Formular Event-Listener
+    const vehicleForm = document.getElementById('vehicle-form');
+    if (vehicleForm) {
+        vehicleForm.addEventListener('submit', handleVehicleFormSubmit);
     }
 });
 
@@ -803,6 +820,188 @@ async function loadProjectsTable() {
     } catch (error) {
         console.error('Fehler beim Laden der Projekte:', error);
         projectsTable.innerHTML = '<tr><td colspan="6" class="text-center">Fehler beim Laden der Daten</td></tr>';
+    }
+}
+
+// Fahrzeug-Tabelle laden
+async function loadVehiclesTable() {
+    // DOM-Element erneut abrufen
+    const vehiclesTable = document.getElementById('vehicles-table')?.querySelector('tbody');
+    if (!vehiclesTable) return;
+    
+    try {
+        vehiclesTable.innerHTML = '';
+        
+        const vehicles = await DataService.getAllVehicles();
+        
+        if (vehicles.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="6" class="text-center">Keine Fahrzeuge gefunden</td>';
+            vehiclesTable.appendChild(row);
+            return;
+        }
+        
+        // Fahrzeuge nach Namen sortieren
+        vehicles.sort((a, b) => a.name.localeCompare(b.name));
+        
+        vehicles.forEach(vehicle => {
+            const row = document.createElement('tr');
+            row.dataset.id = vehicle.id;
+            
+            // Formatiere den Stundensatz mit 2 Dezimalstellen und Euro-Zeichen
+            const hourlyRateDisplay = vehicle.hourlyRate != null ? 
+                `${parseFloat(vehicle.hourlyRate).toFixed(2)} €` : '-';
+            
+            const statusBadge = vehicle.isActive !== false 
+                ? '<span class="status-badge active">Aktiv</span>' 
+                : '<span class="status-badge inactive">Inaktiv</span>';
+                
+            row.innerHTML = `
+                <td>${escapeHTML(vehicle.name)}</td>
+                <td>${escapeHTML(vehicle.type)}</td>
+                <td>${escapeHTML(vehicle.licensePlate || '-')}</td>
+                <td>${hourlyRateDisplay}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button class="btn small-btn edit-vehicle-btn" data-id="${vehicle.id}">Bearbeiten</button>
+                    <button class="btn small-btn delete-vehicle-btn" data-id="${vehicle.id}">Löschen</button>
+                </td>
+            `;
+            
+            vehiclesTable.appendChild(row);
+        });
+        
+        // Event-Listener für Bearbeiten- und Löschen-Buttons
+        document.querySelectorAll('.edit-vehicle-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                showVehicleForm(id);
+            });
+        });
+        
+        document.querySelectorAll('.delete-vehicle-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                deleteVehicle(id);
+            });
+        });
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Fahrzeuge:', error);
+        vehiclesTable.innerHTML = '<tr><td colspan="6" class="text-center">Fehler beim Laden der Fahrzeuge. Bitte versuchen Sie es später erneut.</td></tr>';
+    }
+}
+
+// Fahrzeug-Formular anzeigen (für Hinzufügen oder Bearbeiten)
+function showVehicleForm(vehicleId = null) {
+    const modal = document.getElementById('vehicle-form-modal');
+    const form = document.getElementById('vehicle-form');
+    const title = document.getElementById('vehicle-form-title');
+    
+    if (!modal || !form) return;
+    
+    // Formular zurücksetzen
+    form.reset();
+    
+    if (vehicleId) {
+        // Fahrzeug bearbeiten
+        title.textContent = 'Fahrzeug bearbeiten';
+        document.getElementById('vehicle-id').value = vehicleId;
+        
+        // Fahrzeugdaten laden und ins Formular einfüllen
+        DataService.getVehicleById(vehicleId).then(vehicle => {
+            if (vehicle) {
+                document.getElementById('vehicle-name').value = vehicle.name || '';
+                document.getElementById('vehicle-type').value = vehicle.type || '';
+                document.getElementById('vehicle-license').value = vehicle.licensePlate || '';
+                document.getElementById('vehicle-hourly-rate').value = vehicle.hourlyRate || '';
+            }
+        }).catch(error => {
+            console.error('Fehler beim Laden des Fahrzeugs:', error);
+            notify('Fehler beim Laden des Fahrzeugs', 'error');
+        });
+    } else {
+        // Neues Fahrzeug hinzufügen
+        title.textContent = 'Fahrzeug hinzufügen';
+        document.getElementById('vehicle-id').value = '';
+    }
+    
+    // Modal anzeigen
+    showModal(modal);
+}
+
+// Fahrzeug löschen
+async function deleteVehicle(vehicleId) {
+    if (!confirm('Sind Sie sicher, dass Sie dieses Fahrzeug löschen möchten?')) {
+        return;
+    }
+    
+    try {
+        await DataService.deleteVehicle(vehicleId);
+        notify('Fahrzeug erfolgreich gelöscht!', 'success');
+        loadVehiclesTable();
+    } catch (error) {
+        console.error('Fehler beim Löschen des Fahrzeugs:', error);
+        notify('Fehler beim Löschen: ' + error.message, 'error');
+    }
+}
+
+// Hilfsfunktion zum Escapen von HTML
+function escapeHTML(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Modal anzeigen
+function showModal(modal) {
+    modal.style.display = 'block';
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+}
+
+// Modal verbergen
+function hideModal(modal) {
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 300);
+}
+
+// Fahrzeug-Formular abschicken
+async function handleVehicleFormSubmit(event) {
+    event.preventDefault();
+    
+    try {
+        const vehicleId = document.getElementById('vehicle-id').value.trim() || null;
+        
+        const vehicleData = {
+            name: document.getElementById('vehicle-name').value.trim(),
+            type: document.getElementById('vehicle-type').value.trim(),
+            licensePlate: document.getElementById('vehicle-license').value.trim(),
+            hourlyRate: parseFloat(document.getElementById('vehicle-hourly-rate').value) || 0
+        };
+        
+        if (vehicleId) {
+            // Fahrzeug aktualisieren
+            await DataService.updateVehicle(vehicleId, vehicleData);
+            notify('Fahrzeug erfolgreich aktualisiert!', 'success');
+        } else {
+            // Neues Fahrzeug hinzufügen
+            await DataService.createVehicle(vehicleData);
+            notify('Fahrzeug erfolgreich hinzugefügt!', 'success');
+        }
+        
+        hideModal(document.getElementById('vehicle-form-modal'));
+        loadVehiclesTable();
+    } catch (error) {
+        console.error('Fehler beim Speichern des Fahrzeugs:', error);
+        notify('Fehler beim Speichern: ' + error.message, 'error');
     }
 }
 
@@ -2392,6 +2591,8 @@ async function handleTabChange(tabName) {
             await loadEmployeesTable();
         } else if (tabName === 'projects') {
             await loadProjectsTable();
+        } else if (tabName === 'vehicles') {
+            await loadVehiclesTable();
         } else if (tabName === 'reports') {
             await loadReportFilters();
             // Zeiteinträge-Übersicht laden
