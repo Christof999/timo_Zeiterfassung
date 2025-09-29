@@ -580,3 +580,131 @@ table tr:hover {
         margin-top: 10px;
     }
 }
+
+/* Report Header Styling - Override für Report Modal */
+.report .report-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 10px;
+}
+
+.report .report-header h2 {
+    margin: 0;
+    flex: 1;
+}
+
+.report .report-header .edit-time-entry-btn {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+    border: 1px solid #ffc107 !important;
+    padding: 8px 12px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+    z-index: 1000 !important;
+    position: relative !important;
+}
+
+.report .report-header .edit-time-entry-btn:hover {
+    background-color: #e0a800 !important;
+    border-color: #d39e00 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Edit Time Entry Button Styles */
+.edit-entry-btn {
+    background-color: #ffc107;
+    color: #212529;
+    border: 1px solid #ffc107;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 5px;
+}
+
+.edit-entry-btn:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+    transform: translateY(-1px);
+}
+
+.edit-entry-btn i {
+    margin-right: 3px;
+}
+
+/* Action Buttons Container */
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.actions-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Small Button Variants */
+.small-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.view-images-btn {
+    background-color: #17a2b8;
+    color: white;
+    border: 1px solid #17a2b8;
+}
+
+.view-images-btn:hover {
+    background-color: #138496;
+    border-color: #117a8b;
+}
+
+/* Edit Form Enhancements */
+.form-group label[for="edit-reason"] {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.form-group textarea#edit-reason {
+    border-color: #dc3545;
+    border-width: 2px;
+}
+
+.form-group textarea#edit-reason:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.3);
+}
+
+/* Audit Trail Indicators */
+.edited-entry {
+    background-color: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.edited-entry .employee-cell::after {
+    content: " ✏️";
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+/* Time Entry Table Improvements */
+.time-entries-table tr:hover .edit-entry-btn {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.edit-entry-btn {
+    opacity: 0.8;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}

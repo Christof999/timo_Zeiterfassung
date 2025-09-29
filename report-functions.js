@@ -16,109 +16,129 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // WICHTIG: Tabellenzellen prüfen und Report-Buttons hinzufügen
     function injectReportButtons() {
-        const timeTable = document.getElementById('time-entries-table');
-        if (!timeTable) {
-            // Tabelle noch nicht geladen - nichts tun
+        // Sofortige Prüfung auf employee-mode CSS-Klasse
+        if (document.body.classList.contains('employee-mode')) {
+            console.log('⛔ Employee-Mode erkannt - keine Bericht-Buttons für normale Mitarbeiter');
             return;
         }
         
-        const rows = timeTable.querySelectorAll('tbody tr');
-        let updatedRows = 0;
+        // Admin-Prüfung: Nur Administratoren dürfen Berichts-Buttons sehen
+        DataService.isAdmin().then(isAdmin => {
+            console.log('🔐 DataService.isAdmin() Ergebnis (report-functions.js):', isAdmin);
+            
+            if (!isAdmin) {
+                console.log('Berichts-Buttons werden für normale Mitarbeiter ausgeblendet');
+                // Setze employee-mode falls noch nicht gesetzt
+                document.body.classList.add('employee-mode');
+                return;
+            }
+
+            const timeTable = document.getElementById('time-entries-table');
+            if (!timeTable) {
+                // Tabelle noch nicht geladen - nichts tun
+                return;
+            }
         
-        rows.forEach(row => {
-            // Bereits verarbeitete Zeilen überspringen
-            const rowId = row.id || Math.random().toString(36).substring(2);
-            if (!row.id) row.id = rowId;
+            const rows = timeTable.querySelectorAll('tbody tr');
+            let updatedRows = 0;
+        
+            rows.forEach(row => {
+                // Bereits verarbeitete Zeilen überspringen
+                const rowId = row.id || Math.random().toString(36).substring(2);
+                if (!row.id) row.id = rowId;
             
-            if (processedRows.has(rowId) || row.querySelector('.report-btn')) {
-                return; // Diese Zeile wurde bereits verarbeitet
-            }
-            
-            // Prüfen, ob es sich um eine Datenspalte oder Meldung handelt
-            const cells = row.querySelectorAll('td');
-            if (cells.length <= 2 || cells[0].getAttribute('colspan')) {
-                processedRows.add(rowId);
-                return; // Keine reguläre Datenzeile
-            }
-            
-            // Prüfen, ob es bereits eine Aktionen-Spalte gibt
-            let actionsCell;
-            if (cells.length >= 7) {
-                actionsCell = cells[6]; // Nutze vorhandene Aktionen-Spalte
-            } else {
-                // Erstelle neue Aktionen-Spalte
-                actionsCell = document.createElement('td');
-                row.appendChild(actionsCell);
-            }
-            
-            // Zeiteintrags-ID extrahieren (falls möglich)
-            const rowData = row.dataset;
-            let entryId = rowData.entryId || '';
-            let projectId = rowData.projectId || '';
-            let employeeId = rowData.employeeId || '';
-            
-            // Versuche, die IDs aus dem DOM oder den Datenattributen zu extrahieren
-            if (!entryId || !projectId) {
-                // Versuche, die Informationen aus den Zelleninhalten zu extrahieren
-                const dateCell = cells[1] ? cells[1].textContent.trim() : '';
-                const nameCell = cells[0] ? cells[0].textContent.trim() : '';
-                
-                // Erstelle eine eindeutige ID basierend auf dem Datum und Namen
-                entryId = entryId || `entry-${dateCell}-${nameCell}`.replace(/[^a-z0-9]/gi, '-');
-                projectId = projectId || document.querySelector('#project-detail-title')?.textContent?.trim() || 'current-project';
-                employeeId = employeeId || nameCell.replace(/[^a-z0-9]/gi, '-');
-            }
-            
-            // Button erstellen
-            const reportButton = document.createElement('button');
-            reportButton.className = 'btn primary-btn report-btn';
-            reportButton.textContent = 'Bericht';
-            reportButton.dataset.entryId = entryId;
-            reportButton.dataset.projectId = projectId;
-            reportButton.dataset.employeeId = employeeId;
-            
-            // Button-Stil anpassen
-            reportButton.style.backgroundColor = '#ff6b00';
-            reportButton.style.color = 'white';
-            reportButton.style.fontWeight = 'bold';
-            reportButton.style.padding = '8px 12px';
-            reportButton.style.display = 'inline-block';
-            reportButton.style.margin = '0 auto';
-            reportButton.style.cursor = 'pointer';
-            reportButton.style.borderRadius = '4px';
-            reportButton.style.border = 'none';
-            reportButton.style.textAlign = 'center';
-            
-            // Alte Inhalte entfernen und Button hinzufügen
-            actionsCell.innerHTML = '';
-            actionsCell.appendChild(reportButton);
-            
-            // Event-Listener hinzufügen
-            reportButton.addEventListener('click', function(event) {
-                event.preventDefault();
-                event.stopPropagation();
-                
-                console.log('Bericht-Button geklickt', this.dataset);
-                
-                const entryId = this.dataset.entryId;
-                const projectId = this.dataset.projectId;
-                const employeeId = this.dataset.employeeId;
-                
-                if (entryId && projectId) {
-                    showTimeEntryReport(entryId, projectId, employeeId);
-                } else {
-                    console.error('Fehlende Daten für den Bericht', this.dataset);
+                if (processedRows.has(rowId) || row.querySelector('.report-btn')) {
+                    return; // Diese Zeile wurde bereits verarbeitet
                 }
-            });
             
-            // Als verarbeitet markieren
-            processedRows.add(rowId);
-            updatedRows++;
-        });
+                // Prüfen, ob es sich um eine Datenspalte oder Meldung handelt
+                const cells = row.querySelectorAll('td');
+                if (cells.length <= 2 || cells[0].getAttribute('colspan')) {
+                    processedRows.add(rowId);
+                    return; // Keine reguläre Datenzeile
+                }
+            
+                // Prüfen, ob es bereits eine Aktionen-Spalte gibt
+                let actionsCell;
+                if (cells.length >= 7) {
+                    actionsCell = cells[6]; // Nutze vorhandene Aktionen-Spalte
+                } else {
+                    // Erstelle neue Aktionen-Spalte
+                    actionsCell = document.createElement('td');
+                    row.appendChild(actionsCell);
+                }
+            
+                // Zeiteintrags-ID extrahieren (falls möglich)
+                const rowData = row.dataset;
+                let entryId = rowData.entryId || '';
+                let projectId = rowData.projectId || '';
+                let employeeId = rowData.employeeId || '';
+            
+                // Versuche, die IDs aus dem DOM oder den Datenattributen zu extrahieren
+                if (!entryId || !projectId) {
+                    // Versuche, die Informationen aus den Zelleninhalten zu extrahieren
+                    const dateCell = cells[1] ? cells[1].textContent.trim() : '';
+                    const nameCell = cells[0] ? cells[0].textContent.trim() : '';
+                
+                    // Erstelle eine eindeutige ID basierend auf dem Datum und Namen
+                    entryId = entryId || `entry-${dateCell}-${nameCell}`.replace(/[^a-z0-9]/gi, '-');
+                    projectId = projectId || document.querySelector('#project-detail-title')?.textContent?.trim() || 'current-project';
+                    employeeId = employeeId || nameCell.replace(/[^a-z0-9]/gi, '-');
+                }
+            
+                // Button erstellen
+                const reportButton = document.createElement('button');
+                reportButton.className = 'btn primary-btn report-btn';
+                reportButton.textContent = 'Bericht';
+                reportButton.dataset.entryId = entryId;
+                reportButton.dataset.projectId = projectId;
+                reportButton.dataset.employeeId = employeeId;
+            
+                // Button-Stil anpassen
+                reportButton.style.backgroundColor = '#ff6b00';
+                reportButton.style.color = 'white';
+                reportButton.style.fontWeight = 'bold';
+                reportButton.style.padding = '8px 12px';
+                reportButton.style.display = 'inline-block';
+                reportButton.style.margin = '0 auto';
+                reportButton.style.cursor = 'pointer';
+                reportButton.style.borderRadius = '4px';
+                reportButton.style.border = 'none';
+                reportButton.style.textAlign = 'center';
+            
+                // Alte Inhalte entfernen und Button hinzufügen
+                actionsCell.innerHTML = '';
+                actionsCell.appendChild(reportButton);
+            
+                // Event-Listener hinzufügen
+                reportButton.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                
+                    console.log('Bericht-Button geklickt', this.dataset);
+                
+                    const entryId = this.dataset.entryId;
+                    const projectId = this.dataset.projectId;
+                    const employeeId = this.dataset.employeeId;
+                
+                    if (entryId && projectId) {
+                        showTimeEntryReport(entryId, projectId, employeeId);
+                    } else {
+                        console.error('Fehlende Daten für den Bericht', this.dataset);
+                    }
+                });
+            
+                // Als verarbeitet markieren
+                processedRows.add(rowId);
+                updatedRows++;
+            });
         
-        if (updatedRows > 0) {
-            console.log(`${updatedRows} neue Report-Buttons hinzugefügt`);
-        }
+            if (updatedRows > 0) {
+                console.log(`${updatedRows} neue Report-Buttons hinzugefügt`);
+            }
+        }).catch(error => {
+            console.error('Fehler bei Admin-Prüfung für Report-Buttons:', error);
+        });
     }
     
     // Erste Ausführung
@@ -357,7 +377,7 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
         
         // Wenn der Mitarbeiter nicht gefunden wurde, versuche alle Mitarbeiter zu laden
         if (!employee) {
-            const allEmployees = await DataService.getAllEmployees();
+            const allEmployees = await DataService.getAllActiveEmployees();
             if (allEmployees && allEmployees.length > 0) {
                 // Suche nach einem Mitarbeiter mit ähnlichem Namen
                 const matchingEmployee = allEmployees.find(e => 
@@ -390,7 +410,7 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             // Erstelle ein Demo-Projekt, wenn keines gefunden wurde
             project = {
                 id: 'demo-project',
-                name: projectId || 'Unbekanntes Projekt'
+                name: timeEntry && timeEntry.isVacationDay ? 'Urlaub' : (projectId || 'Unbekanntes Projekt')
             };
         }
         

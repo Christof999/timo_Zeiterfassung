@@ -1451,7 +1451,7 @@ async function loadUserActivities() {
                 const date = clockInTime.toLocaleDateString('de-DE');
                 const timeIn = clockInTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
                 
-                let content = `<strong>${project ? project.name : 'Unbekanntes Projekt'}</strong><br>`;
+                let content = `<strong>${entry.isVacationDay ? 'Urlaub' : (project ? project.name : 'Unbekanntes Projekt')}</strong><br>`;
                 content += `Datum: ${date}<br>`;
                 content += `Eingestempelt: ${timeIn}`;
                 

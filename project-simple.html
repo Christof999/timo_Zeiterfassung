@@ -417,6 +417,140 @@
             color: #000;
         }
         
+        /* Edit Time Entry Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 10000;
+            overflow-y: auto;
+        }
+        
+        .modal.visible {
+            display: block;
+        }
+        
+        .modal-content {
+            position: relative;
+            background-color: #fff;
+            width: 90%;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 0;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            padding: 20px 20px 0 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            margin: 0 0 15px 0;
+            color: #5e8c2f;
+        }
+        
+        .close-modal {
+            font-size: 28px;
+            font-weight: bold;
+            color: #999;
+            cursor: pointer;
+            transition: color 0.2s;
+            line-height: 1;
+        }
+        
+        .close-modal:hover {
+            color: #000;
+        }
+        
+        .modal form {
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            border-color: #5e8c2f;
+            outline: none;
+            box-shadow: 0 0 5px rgba(94, 140, 47, 0.3);
+        }
+        
+        .form-group input[readonly] {
+            background-color: #f5f5f5;
+            color: #666;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .btn-primary {
+            background-color: #5e8c2f;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #4a6f24;
+        }
+        
         .report-btn {
             display: inline-block;
             padding: 5px 10px;
@@ -507,7 +641,92 @@
         
         .admin-controls {
             margin-bottom: 15px;
+        }
+
+        /* Verstecke Report-Buttons für Nicht-Administratoren */
+        body.employee-mode .report-btn,
+        body.employee-mode .report-button,
+        body.employee-mode button[class*="report"],
+        body.employee-mode button[onclick*="Report"],
+        body.employee-mode button[onclick*="report"],
+        body.employee-mode button:not(.edit-entry-btn):not(.btn-primary):not(.btn-export) {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Verstecke Edit-Buttons für Nicht-Administratoren */
+        body.employee-mode .edit-entry-btn,
+        body.employee-mode .edit-btn,
+        body.employee-mode button[class*="edit"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
         
+        /* Edit Button Styles */
+        .edit-entry-btn {
+            background-color: #ffc107;
+            color: #212529;
+            border: 1px solid #ffc107;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .edit-entry-btn:hover {
+            background-color: #e0a800;
+            border-color: #d39e00;
+            transform: translateY(-1px);
+        }
+
+        .small-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+        
+        /* Report Button Styles - kleiner machen für nebeneinander */
+        .report-btn {
+            background-color: #17a2b8;
+            color: white;
+            border: 1px solid #17a2b8;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .report-btn:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
+
+        /* Verstecke alle Report-bezogenen Buttons für normale Mitarbeiter */
+        body.employee-mode .report-btn,
+        body.employee-mode .report-button,
+        body.employee-mode button[class*="report"],
+        body.employee-mode .admin-controls {
+            display: none !important;
+        }
+        
+        /* Table Action Column Styles */
+        #time-entries-table th:last-child,
+        #time-entries-table td:last-child {
+            text-align: center;
+            width: 160px; /* Breitere Spalte für beide Buttons */
+            white-space: nowrap;
+        }
+        
+        /* Button Container für nebeneinander stehende Buttons */
+        .button-container {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            align-items: center;
         }
         
         .report-detail {
@@ -544,10 +763,10 @@
     </style>
 </head>
 <body>
-    <!-- Zeiteintrag-Bericht Modal -->
+    <!-- Zeiteintrag-Bericht Modal (einzige Instanz) -->
     <div id="time-entry-report-modal" class="report-modal">
         <div class="report-modal-content">
-            <span class="report-modal-close">&times;</span>
+            <button class="report-modal-close" type="button" aria-label="Schließen">&times;</button>
             <div id="time-entry-report-content"></div>
         </div>
     </div>
@@ -557,7 +776,7 @@
             <h1 id="project-title">Projektdetails</h1>
             <div class="actions-container">
                 <button id="export-pdf-btn" class="btn btn-export"><i class="fas fa-file-pdf"></i> PDF exportieren</button>
-                <a href="index.html" id="back-link" class="btn"><i class="fas fa-arrow-left"></i> Zurück zur Hauptseite</a>
+                <a href="admin.html" id="back-link" class="btn"><i class="fas fa-arrow-left"></i> Zurück zur Projektübersicht</a>
             </div>
         </div>
         <div class="info-box">
@@ -585,15 +804,15 @@
                 </div>
                 <div id="time-entries-container">
                     <p>Zeiteinträge werden geladen...</p>
-                    <table id="time-entries-table">
+                    <table id="time-entries-table" class="time-entries">
                         <thead>
                             <tr>
+                                <th>Bearbeitung</th>
                                 <th>Mitarbeiter</th>
                                 <th>Datum</th>
                                 <th>Stempelzeit Ein</th>
                                 <th>Stempelzeit Aus</th>
                                 <th>Arbeitszeit</th>
-                                <th>Notizen</th>
                             </tr>
                         </thead>
                         <tbody id="time-entries-body">
@@ -785,8 +1004,8 @@
             
             // Back-Link aktualisieren
             if (backLinkEl) {
-                backLinkEl.href = `index.html`;
-                console.log('Back-Link aktualisiert');
+                backLinkEl.href = `admin.html`;
+                console.log('Back-Link aktualisiert auf Projektübersicht');
             }
             
             // Debug-Ausgabe zur Verfolgung
@@ -851,6 +1070,26 @@
                     console.log('✅ DataService initialisiert');
                 } else {
                     console.log('✅ DataService bereits initialisiert');
+                }
+
+                // Admin-Prüfung für UI-Elemente
+                console.log('🔐 Überprüfe Admin-Status für UI-Steuerung...');
+                const isAdmin = await DataService.isAdmin();
+                console.log('🔐 Admin-Status:', isAdmin);
+                console.log('🔐 Current User:', DataService.getCurrentUser());
+                console.log('🔐 Current Admin:', DataService.getCurrentAdmin());
+                
+                // Body-Klasse für CSS-basierte Steuerung setzen
+                if (!isAdmin) {
+                    console.log('🔒 Setze employee-mode CSS-Klasse für normale Mitarbeiter');
+                    document.body.classList.add('employee-mode');
+                    document.body.classList.remove('admin-mode');
+                    window.hideEditButtonsForEmployee = true;
+                } else {
+                    console.log('✅ Setze admin-mode CSS-Klasse für Administratoren');
+                    document.body.classList.add('admin-mode');
+                    document.body.classList.remove('employee-mode');
+                    window.hideEditButtonsForEmployee = false;
                 }
                 
                 // Verfügbare Methoden loggen
@@ -939,6 +1178,17 @@
                 
                 console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
                 
+                // Report-Button-Überwachung für normale Mitarbeiter starten
+                if (document.body.classList.contains('employee-mode')) {
+                    console.log('🔒 Starte Report-Button-Überwachung für Mitarbeiter');
+                    // Sofortiges Verstecken
+                    hideAllReportButtons();
+                    // MutationObserver starten
+                    startReportButtonObserver();
+                    // Periodische Überwachung alle 2 Sekunden als Backup
+                    setInterval(hideAllReportButtons, 2000);
+                }
+                
             } catch (error) {
                 console.error('=== FEHLER BEIM LADEN DES PROJEKTS ===');
                 console.error('Fehler-Typ:', error.constructor.name);
@@ -1006,15 +1256,15 @@
                 
                 // Zeiteinträge anzeigen
                 timeEntriesContainer.innerHTML = `
-                    <table id="time-entries-table">
+                    <table id="time-entries-table" class="time-entries">
                         <thead>
                             <tr>
+                                <th>Bearbeitung</th>
                                 <th>Mitarbeiter</th>
                                 <th>Datum</th>
                                 <th>Einstempelzeit</th>
                                 <th>Ausstempelzeit</th>
                                 <th>Arbeitszeit</th>
-                                <th>Notizen</th>
                             </tr>
                         </thead>
                         <tbody id="time-entries-body"></tbody>
@@ -1112,24 +1362,146 @@
                     
                     // Zeile zur Tabelle hinzufügen
                     const row = document.createElement('tr');
+                    row.setAttribute('data-entry-id', entry.id); // Zeile selbst bekommt auch die ID
+                    
+                    // Edit-Button nur für Admins anzeigen
+                    const editButtonHtml = window.hideEditButtonsForEmployee ? '' : `
+                        <button class="btn small-btn edit-entry-btn" data-entry-id="${entry.id}" title="Zeiteintrag bearbeiten" onclick="openEditTimeEntryModal('${entry.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    `;
+                    
                     row.innerHTML = `
+                        <td>
+                            ${editButtonHtml}
+                        </td>
                         <td>${employee.name}</td>
                         <td>${date}</td>
                         <td>${clockInTime}</td>
                         <td>${clockOutTime}</td>
                         <td>${workHours}</td>
-                        <td>${entry.notes || '-'}</td>
                     `;
                     tableBody.appendChild(row);
                 });
                 
                 console.log(`${timeEntries.length} Zeiteinträge angezeigt`);
                 
+                // Report-Buttons für Mitarbeiter verstecken (zusätzliche Sicherheit)
+                if (document.body.classList.contains('employee-mode')) {
+                    setTimeout(hideAllReportButtons, 100);
+                }
+                
             } catch (error) {
                 console.error('Fehler beim Laden der Zeiteinträge:', error);
                 const timeEntriesContainer = document.getElementById('time-entries-container');
                 timeEntriesContainer.innerHTML = '<p class="error">Fehler beim Laden der Zeiteinträge.</p>';
             }
+        }
+
+        // Funktion zum Verstecken aller Report-Buttons für normale Mitarbeiter
+        function hideAllReportButtons() {
+            if (!document.body.classList.contains('employee-mode')) {
+                return; // Nur für normale Mitarbeiter ausführen
+            }
+            
+            console.log('🔒 Verstecke alle Report-Buttons für normale Mitarbeiter');
+            
+            // Alle möglichen Report-Button Selektoren
+            const reportButtonSelectors = [
+                '.report-btn',
+                '.report-button',
+                'button[class*="report"]',
+                'button[title*="Bericht"]',
+                'button[title*="Report"]',
+                '.btn[onclick*="report"]',
+                '.btn[onclick*="Report"]'
+            ];
+            
+            let hiddenCount = 0;
+            reportButtonSelectors.forEach(selector => {
+                const buttons = document.querySelectorAll(selector);
+                buttons.forEach(button => {
+                    if (button.style.display !== 'none') {
+                        button.style.display = 'none';
+                        hiddenCount++;
+                        console.log('🔒 Report-Button versteckt:', button);
+                    }
+                });
+            });
+            
+            // Zusätzlich: alle Buttons in der Bearbeitungs-Spalte prüfen
+            const editCells = document.querySelectorAll('#time-entries-table td:first-child');
+            editCells.forEach(cell => {
+                const reportButtons = cell.querySelectorAll('button:not(.edit-entry-btn)');
+                reportButtons.forEach(button => {
+                    if (button.textContent.toLowerCase().includes('bericht') || 
+                        button.textContent.toLowerCase().includes('report')) {
+                        if (button.style.display !== 'none') {
+                            button.style.display = 'none';
+                            hiddenCount++;
+                            console.log('🔒 Report-Button in Edit-Zelle versteckt:', button);
+                        }
+                    }
+                });
+            });
+            
+            if (hiddenCount > 0) {
+                console.log(`🔒 ${hiddenCount} Report-Buttons versteckt`);
+            }
+        }
+
+        // MutationObserver für das Überwachen neuer Report-Buttons
+        function startReportButtonObserver() {
+            if (!document.body.classList.contains('employee-mode')) {
+                return; // Nur für normale Mitarbeiter
+            }
+            
+            console.log('🔍 Starte MutationObserver für Report-Buttons');
+            
+            const observer = new MutationObserver(function(mutations) {
+                let shouldHide = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === 1) { // Element node
+                                // Prüfe, ob der neue Node oder seine Kinder Report-Buttons sind
+                                if (node.classList && (node.classList.contains('report-btn') || node.classList.contains('report-button'))) {
+                                    shouldHide = true;
+                                } else if (node.querySelectorAll) {
+                                    const reportButtons = node.querySelectorAll('.report-btn, .report-button, button[class*="report"]');
+                                    if (reportButtons.length > 0) {
+                                        shouldHide = true;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                if (shouldHide) {
+                    console.log('🔍 Neue Report-Buttons erkannt, verstecke sie');
+                    setTimeout(hideAllReportButtons, 10); // Kurze Verzögerung
+                }
+            });
+            
+            // Überwache die gesamte Tabelle und Admin-Controls
+            const tableContainer = document.getElementById('time-entries-container');
+            if (tableContainer) {
+                observer.observe(tableContainer, {
+                    childList: true,
+                    subtree: true,
+                    attributes: false
+                });
+            }
+            
+            const adminControls = document.querySelectorAll('.admin-controls');
+            adminControls.forEach(control => {
+                observer.observe(control, {
+                    childList: true,
+                    subtree: true,
+                    attributes: false
+                });
+            });
         }
         
         // Bilder laden
@@ -1962,13 +2334,7 @@
         }
     </script>
     
-    <!-- Modal für Zeiteintrag-Bericht -->
-    <div id="time-entry-report-modal" class="report-modal">
-        <div class="report-modal-content">
-            <button class="report-modal-close">&times;</button>
-            <div id="time-entry-report-content"></div>
-        </div>
-    </div>
+    <!-- (Entfernt: Doppeltes Zeiteintrag-Bericht Modal) -->
     
     <!-- Modal für admin Zeiteintrag Erstellung -->
     <div id="admin-time-entry-modal" class="report-modal">
@@ -2108,5 +2474,313 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal für Zeiteintrags-Bearbeitung -->
+    <div id="edit-time-entry-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Zeiteintrag bearbeiten</h3>
+                <span class="close-modal" onclick="closeEditTimeEntryModal()">&times;</span>
+            </div>
+            <form id="edit-time-entry-form">
+                <input type="hidden" id="edit-entry-id">
+                
+                <div class="form-group">
+                    <label for="edit-employee-name">Mitarbeiter:</label>
+                    <input type="text" id="edit-employee-name" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-entry-date">Datum:</label>
+                    <input type="date" id="edit-entry-date" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-clock-in-time">Einstempelzeit:</label>
+                    <input type="time" id="edit-clock-in-time" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-clock-out-time">Ausstempelzeit:</label>
+                    <input type="time" id="edit-clock-out-time">
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-pause-time">Pausenzeit (Minuten):</label>
+                    <input type="number" id="edit-pause-time" min="0" value="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-notes">Notizen:</label>
+                    <textarea id="edit-notes" rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-reason">Grund für die Änderung:</label>
+                    <textarea id="edit-reason" rows="2" placeholder="Bitte geben Sie den Grund für die Korrektur an..." required></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditTimeEntryModal()">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // JavaScript-Funktionen für die Zeiteintrags-Bearbeitung
+        
+        // Globale Variable für den aktuell zu bearbeitenden Zeiteintrag
+        let currentEditingEntry = null;
+        
+        // Modal öffnen und Daten laden
+        async function openEditTimeEntryModal(entryId) {
+            try {
+                console.log('Öffne Edit-Modal für Zeiteintrag:', entryId);
+                
+                // Zeiteintrag aus der Datenbank laden
+                const timeEntry = await DataService.getTimeEntryById(entryId);
+                if (!timeEntry) {
+                    alert('Zeiteintrag nicht gefunden!');
+                    return;
+                }
+                
+                // Mitarbeiterdaten laden
+                const employee = await DataService.getEmployeeById(timeEntry.employeeId);
+                if (!employee) {
+                    alert('Mitarbeiterdaten nicht gefunden!');
+                    return;
+                }
+                
+                // Aktuellen Eintrag speichern
+                currentEditingEntry = timeEntry;
+                
+                // Modal-Felder füllen
+                document.getElementById('edit-entry-id').value = timeEntry.id;
+                document.getElementById('edit-employee-name').value = employee.name;
+                
+                // Datum aus clockInTime extrahieren
+                const clockInDate = timeEntry.clockInTime instanceof firebase.firestore.Timestamp ? 
+                    timeEntry.clockInTime.toDate() : new Date(timeEntry.clockInTime);
+                
+                document.getElementById('edit-entry-date').value = clockInDate.toISOString().split('T')[0];
+                document.getElementById('edit-clock-in-time').value = clockInDate.toTimeString().substr(0, 5);
+                
+                // Ausstempelzeit, falls vorhanden
+                if (timeEntry.clockOutTime) {
+                    const clockOutDate = timeEntry.clockOutTime instanceof firebase.firestore.Timestamp ? 
+                        timeEntry.clockOutTime.toDate() : new Date(timeEntry.clockOutTime);
+                    document.getElementById('edit-clock-out-time').value = clockOutDate.toTimeString().substr(0, 5);
+                }
+                
+                // Pausenzeit in Minuten konvertieren
+                const pauseMinutes = timeEntry.pauseTotalTime ? Math.floor(timeEntry.pauseTotalTime / 60000) : 0;
+                document.getElementById('edit-pause-time').value = pauseMinutes;
+                
+                // Notizen
+                document.getElementById('edit-notes').value = timeEntry.notes || '';
+                
+                // Grund-Feld leeren
+                document.getElementById('edit-reason').value = '';
+                
+                // Modal anzeigen
+                document.getElementById('edit-time-entry-modal').classList.add('visible');
+                
+            } catch (error) {
+                console.error('Fehler beim Öffnen des Edit-Modals:', error);
+                alert('Fehler beim Laden der Daten: ' + error.message);
+            }
+        }
+        
+        // Modal schließen
+        function closeEditTimeEntryModal() {
+            document.getElementById('edit-time-entry-modal').classList.remove('visible');
+            currentEditingEntry = null;
+        }
+        
+        // Validierung der Eingaben
+        function validateTimeEntry() {
+            const entryDate = document.getElementById('edit-entry-date').value;
+            const clockInTime = document.getElementById('edit-clock-in-time').value;
+            const clockOutTime = document.getElementById('edit-clock-out-time').value;
+            const pauseTime = parseInt(document.getElementById('edit-pause-time').value) || 0;
+            const reason = document.getElementById('edit-reason').value.trim();
+            
+            // Validierung: Alle Pflichtfelder müssen ausgefüllt sein
+            if (!entryDate || !clockInTime || !reason) {
+                alert('Bitte alle Pflichtfelder ausfüllen!');
+                return false;
+            }
+            
+            // Validierung: Ausstempelzeit muss nach Einstempelzeit liegen
+            if (clockOutTime) {
+                const clockInDateTime = new Date(`${entryDate}T${clockInTime}`);
+                const clockOutDateTime = new Date(`${entryDate}T${clockOutTime}`);
+                
+                if (clockOutDateTime <= clockInDateTime) {
+                    alert('Die Ausstempelzeit muss nach der Einstempelzeit liegen!');
+                    return false;
+                }
+                
+                // Validierung: Pausenzeit darf nicht länger als Arbeitszeit sein
+                const workTimeMs = clockOutDateTime - clockInDateTime;
+                const pauseTimeMs = pauseTime * 60 * 1000;
+                
+                if (pauseTimeMs >= workTimeMs) {
+                    alert('Die Pausenzeit darf nicht länger oder gleich der Arbeitszeit sein!');
+                    return false;
+                }
+            }
+            
+            // Validierung: Datum darf nicht in der Zukunft liegen
+            const today = new Date();
+            today.setHours(23, 59, 59, 999); // Bis Ende des heutigen Tages erlauben
+            const entryDateTime = new Date(entryDate);
+            
+            if (entryDateTime > today) {
+                alert('Das Datum darf nicht in der Zukunft liegen!');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Formular-Submit-Handler
+        document.getElementById('edit-time-entry-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Eingaben validieren
+            if (!validateTimeEntry()) {
+                return;
+            }
+            
+            try {
+                // Formulardaten auslesen
+                const entryId = document.getElementById('edit-entry-id').value;
+                const entryDate = document.getElementById('edit-entry-date').value;
+                const clockInTime = document.getElementById('edit-clock-in-time').value;
+                const clockOutTime = document.getElementById('edit-clock-out-time').value;
+                const pauseTime = parseInt(document.getElementById('edit-pause-time').value) || 0;
+                const notes = document.getElementById('edit-notes').value;
+                const reason = document.getElementById('edit-reason').value.trim();
+                
+                // Neue Datetime-Objekte erstellen
+                const newClockInTime = new Date(`${entryDate}T${clockInTime}`);
+                const newClockOutTime = clockOutTime ? new Date(`${entryDate}T${clockOutTime}`) : null;
+                const pauseTotalTime = pauseTime * 60 * 1000; // Minuten zu Millisekunden
+                
+                // Aktuellen Benutzer für Audit-Trail ermitteln
+                const currentAdmin = DataService.getCurrentAdmin();
+                const currentUser = DataService.getCurrentUser();
+                const editorInfo = currentAdmin ? 
+                    { id: currentAdmin.uid || 'admin', name: currentAdmin.name || currentAdmin.username } :
+                    { id: currentUser?.id || 'unknown', name: currentUser?.name || 'Unknown' };
+                
+                // Update-Daten zusammenstellen
+                const updateData = {
+                    clockInTime: newClockInTime,
+                    notes: notes,
+                    pauseTotalTime: pauseTotalTime,
+                    // Audit-Trail hinzufügen
+                    lastEditedAt: new Date(),
+                    lastEditedBy: editorInfo.id,
+                    lastEditedByName: editorInfo.name,
+                    editReason: reason
+                };
+                
+                // Ausstempelzeit hinzufügen, falls vorhanden
+                if (newClockOutTime) {
+                    updateData.clockOutTime = newClockOutTime;
+                } else {
+                    // Ausstempelzeit explizit auf null setzen, falls sie entfernt wurde
+                    updateData.clockOutTime = null;
+                }
+                
+                console.log('Aktualisiere Zeiteintrag:', entryId, updateData);
+                
+                // In Firestore aktualisieren
+                await DataService.updateTimeEntry(entryId, updateData);
+                
+                // Erfolg!
+                alert('Zeiteintrag wurde erfolgreich aktualisiert!');
+                
+                // Modal schließen
+                closeEditTimeEntryModal();
+                
+                // Zeiteinträge-Tabelle neu laden
+                if (typeof loadTimeEntries === 'function') {
+                    await loadTimeEntries();
+                } else if (typeof loadProjectTimeEntries === 'function' && projectId) {
+                    // project-detail.js Funktion aufrufen
+                    await loadProjectTimeEntries(projectId);
+                } else {
+                    // Seite neu laden als Fallback
+                    location.reload();
+                }
+
+                // Report-Buttons nachladen (Re-Inject), damit der Berichts-Button nach Änderungen wieder korrekt angezeigt wird
+                setTimeout(() => {
+                    try {
+                        if (window.currentProjectId) {
+                            console.log('🔄 Re-Inject der Report-Buttons für Projekt', window.currentProjectId);
+                            if (window.processedRows && typeof window.processedRows.clear === 'function') {
+                                console.log('🧹 processedRows Set zurücksetzen');
+                                window.processedRows.clear();
+                            }
+                            if (typeof window.waitForTimeEntriesTableAndInjectButtons === 'function') {
+                                window.waitForTimeEntriesTableAndInjectButtons(window.currentProjectId, 15, 0, 300);
+                            } else if (typeof window.injectReportButtons === 'function') {
+                                window.injectReportButtons(window.currentProjectId);
+                            } else {
+                                console.warn('⚠️ Keine Report-Button Funktion gefunden (injectReportButtons / waitForTimeEntriesTableAndInjectButtons)');
+                            }
+                        } else {
+                            console.warn('⚠️ currentProjectId nicht gesetzt – kann Report-Buttons nicht re-injecten');
+                        }
+                    } catch (reinjectionError) {
+                        console.error('Fehler beim Re-Inject der Report-Buttons:', reinjectionError);
+                    }
+                }, 400); // leichte Verzögerung bis DOM aktualisiert ist
+                
+            } catch (error) {
+                console.error('Fehler beim Aktualisieren des Zeiteintrags:', error);
+                alert('Fehler beim Speichern: ' + error.message);
+            }
+        });
+        
+        // Hilfsfunktion: Aktueller Benutzer für Kompatibilität
+        function getCurrentUser() {
+            return DataService.getCurrentUser();
+        }
+
+        // Funktion zum Öffnen des Edit-Modals aus dem Report heraus (global verfügbar)
+        window.editTimeEntryFromReport = function(entryId) {
+            console.log('editTimeEntryFromReport aufgerufen mit ID:', entryId);
+            // Report-Modal schließen
+            closeModal();
+            
+            // Edit-Modal öffnen
+            setTimeout(() => {
+                openEditTimeEntryModal(entryId);
+            }, 100);
+        };
+        
+        // Modal bei Klick außerhalb schließen
+        document.getElementById('edit-time-entry-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEditTimeEntryModal();
+            }
+        });
+        
+        // ESC-Taste zum Schließen
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && document.getElementById('edit-time-entry-modal').classList.contains('visible')) {
+                closeEditTimeEntryModal();
+            }
+        });
+        
+        console.log('Edit-Modal Funktionen geladen');
+    </script>
 </body>
 </html>

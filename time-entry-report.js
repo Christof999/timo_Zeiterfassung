@@ -6,10 +6,17 @@
 // Globale Variablen für das Caching und die Zuordnung von Zeiteinträgen
 const timeEntryCache = {};
 let currentProjectId = null;
+// Set zur Nachverfolgung bereits verarbeiteter Zeilen
+const processedRows = new Set();
+// Für Re-Inject von außerhalb zugreifbar machen
+window.processedRows = processedRows;
+
 
 // Hilfsfunktion für Formatierung von Standortdaten
 function formatLocationInfo(location) {
-    if (!location) return 'Nicht verfügbar';
+    if (!location) {
+        return 'Nicht verfügbar';
+    }
     
     let formattedLocation = '';
     
@@ -61,7 +68,28 @@ function formatLocationInfo(location) {
 }
 
 // Fügt Bericht-Buttons zu den Tabellen-Zeilen hinzufügen
-function injectReportButtons(projectId) {
+async function injectReportButtons(projectId) {
+    // Sofortige Prüfung auf employee-mode CSS-Klasse
+    if (document.body.classList.contains('employee-mode')) {
+        console.log('⛔ Employee-Mode erkannt - keine Bericht-Buttons für normale Mitarbeiter');
+        return;
+    }
+    
+    // Admin-Prüfung: Nur Administratoren dürfen Berichts-Buttons sehen
+    const isAdmin = await DataService.isAdmin();
+    console.log('🔐 DataService.isAdmin() Ergebnis:', isAdmin);
+    
+    if (!isAdmin) {
+        console.log('Berichts-Buttons werden für normale Mitarbeiter ausgeblendet');
+        // Setze employee-mode falls noch nicht gesetzt
+        document.body.classList.add('employee-mode');
+        return;
+    }
+
+    // Fallback: falls keine projectId übergeben wurde, versuche global / URL
+    if (!projectId) {
+        projectId = currentProjectId || new URLSearchParams(window.location.search).get('id');
+    }
     if (!projectId) {
         console.error('Keine Projekt-ID für Zeiteinträge vorhanden.');
         return;
@@ -69,6 +97,7 @@ function injectReportButtons(projectId) {
     
     console.log('injectReportButtons aufgerufen für Projekt:', projectId);
     currentProjectId = projectId;
+    window.currentProjectId = currentProjectId; // global verfügbar
     
     // Tabelle finden
     const timeTable = document.querySelector('table.time-entries');
@@ -119,15 +148,18 @@ function injectReportButtons(projectId) {
                 return;
             }
             
-            // Nutze den Zeiteintrag direkt aus der sortierten Liste, wenn vorhanden
+            // ID aus Edit-Button extrahieren (robuster als Index-Mapping)
+            const editBtn = row.querySelector('.edit-entry-btn');
             let entryId = null;
-            if (rowIndex < timeEntries.length) {
-                entryId = timeEntries[rowIndex].id;
-                console.log(`Direkte Zuweisung: Zeiteintrag[${rowIndex}].id = ${entryId} -> Zeile ${rowIndex}`);
-                
-                // Schreibe diese ID direkt in die Zeile für spätere Verwendung
-                row.setAttribute('data-entry-id', entryId);
-                row.setAttribute('data-mapped-index', rowIndex);
+            if (editBtn) {
+                entryId = editBtn.getAttribute('data-entry-id');
+                console.log(`ID aus Edit-Button extrahiert: ${entryId} für Zeile ${rowIndex}`);
+            }
+            
+            // Fallback: Index-Mapping wenn Edit-Button keine ID hat
+            if (!entryId && rowIndex < allTimeEntries.length) {
+                entryId = allTimeEntries[rowIndex].id;
+                console.log(`Fallback Index-Mapping: Zeiteintrag[${rowIndex}].id = ${entryId}`);
             }
             
             // Wenn keine ID gefunden wurde, überspringe diese Zeile
@@ -137,18 +169,24 @@ function injectReportButtons(projectId) {
                 return;
             }
             
-            // Aktions-Zelle hinzufügen oder bestehende verwenden
-            let actionsCell;
-            if (cells.length >= 7) {
-                actionsCell = cells[6]; // Verwende existierende Zelle, falls vorhanden
-            } else {
-                actionsCell = document.createElement('td');
-                row.appendChild(actionsCell);
+            // Sicherstellen, dass Row die ID auch als Attribut hat
+            row.setAttribute('data-entry-id', entryId);
+            
+            // Neue Tabellenstruktur: Bearbeitung (erste Spalte) enthält Edit-Button
+            let actionsCell = row.querySelector('td .edit-entry-btn')?.parentElement || cells[0];
+            if (!actionsCell) {
+                console.warn('Keine Aktionszelle gefunden für Zeile', rowIndex);
+                processedRows.add(rowId);
+                return;
             }
             
-            // Wir speichern den vollen Zeiteintrag in einer Datenstruktur zur späteren Verwendung
-            // Dies stellt sicher, dass jeder Button genau die richtigen Daten hat
-            const timeEntry = timeEntries[rowIndex];
+            // Korrekten Zeiteintrag über ID finden statt Index
+            const timeEntry = allTimeEntries.find(entry => entry.id === entryId) || allTimeEntries[rowIndex];
+            if (!timeEntry) {
+                console.warn(`Zeiteintrag mit ID ${entryId} nicht in allTimeEntries gefunden`);
+                processedRows.add(rowId);
+                return;
+            }
             
             console.log(`Füge Bericht-Button für Zeiteintrag hinzu: ${entryId} (Zeile ${rowIndex})`);
             
@@ -182,9 +220,43 @@ function injectReportButtons(projectId) {
                 return false;
             });
             
-            // Button in die Zelle einfügen
-            actionsCell.innerHTML = ''; // Leere die Zelle vorher
-            actionsCell.appendChild(reportBtn);
+            // Button einfügen ohne zusätzliche überzählige Spalte zu erzeugen
+            const existingReportBtn = actionsCell.querySelector('.report-btn');
+            if (existingReportBtn) {
+                console.log('Report-Button bereits vorhanden in Zeile', rowIndex);
+                processedRows.add(rowId);
+                return;
+            }
+            const existingEditBtn = actionsCell.querySelector('.edit-entry-btn');
+            // Container herstellen
+            let container = actionsCell.querySelector('.action-btns');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'action-btns';
+                container.style.display = 'flex';
+                container.style.gap = '4px';
+                container.style.alignItems = 'center';
+                container.style.justifyContent = 'flex-start';
+                // vorhandene Inhalte sichern
+                if (existingEditBtn && existingEditBtn.parentElement === actionsCell) {
+                    actionsCell.replaceChildren(container);
+                    container.appendChild(existingEditBtn);
+                } else if (existingEditBtn && existingEditBtn.parentElement !== actionsCell) {
+                    container.appendChild(existingEditBtn);
+                    actionsCell.innerHTML = '';
+                    actionsCell.appendChild(container);
+                } else {
+                    // Inhalt leeren und Container setzen
+                    actionsCell.innerHTML = '';
+                    actionsCell.appendChild(container);
+                }
+            }
+            // Report-Button vor dem Edit-Button platzieren
+            if (existingEditBtn && existingEditBtn.previousSibling !== reportBtn) {
+                container.insertBefore(reportBtn, existingEditBtn);
+            } else if (!existingEditBtn) {
+                container.appendChild(reportBtn);
+            }
             processedRows.add(rowId);
             updatedRows++;
         });
@@ -193,8 +265,12 @@ function injectReportButtons(projectId) {
         
         // Wenn keine Buttons hinzugefügt wurden und Zeilen vorhanden sind, erneut versuchen
         if (updatedRows === 0 && rows.length > 0) {
-            console.log('Keine Bericht-Buttons hinzugefügt trotz vorhandener Zeilen - Versuche in 2 Sekunden erneut');
-            setTimeout(injectReportButtons, 2000);
+            console.log('Keine Bericht-Buttons hinzugefügt trotz vorhandener Zeilen - versuche erneuten Reset in 2s');
+            // processedRows zurücksetzen damit erneuter Versuch nicht sofort abbricht
+            setTimeout(async () => {
+                processedRows.clear();
+                await injectReportButtons(projectId);
+            }, 2000);
         }
     }).catch(err => {
         console.error('Fehler beim Laden der Zeiteinträge:', err);
@@ -356,7 +432,12 @@ async function renderTimeEntryReport(entry, projectId) {
         // Inhalte vorbereiten
         let htmlContent = `
             <div class="report">
-                <h2>Zeiteintrag-Bericht</h2>
+                <div class="report-header">
+                    <h2>Zeiteintrag-Bericht</h2>
+                    <button class="btn edit-time-entry-btn" onclick="window.editTimeEntryFromReport('${entry.id}')" title="Zeiteintrag bearbeiten">
+                        <i class="fas fa-edit"></i> Bearbeiten
+                    </button>
+                </div>
                 
                 <div class="report-section">
                     <h3>Projektinformationen</h3>
@@ -469,9 +550,57 @@ async function renderTimeEntryReport(entry, projectId) {
         }
         
         // Modal-Inhalt aktualisieren und anzeigen
+        console.log('Report HTML-Content wird eingefügt:', htmlContent.substring(0, 500) + '...');
+        console.log('Edit-Button im HTML vorhanden:', htmlContent.includes('edit-time-entry-btn'));
+        
         contentContainer.innerHTML = htmlContent;
+
+        // Fallback: Falls der Edit-Button aus irgendeinem Grund nicht gerendert wurde, dynamisch hinzufügen
+        setTimeout(() => {
+            let header = contentContainer.querySelector('.report-header');
+            if (!header) {
+                // Header erstellen wenn komplett fehlt
+                const firstSection = contentContainer.querySelector('.report-section');
+                header = document.createElement('div');
+                header.className = 'report-header';
+                header.innerHTML = '<h2>Zeiteintrag-Bericht</h2>';
+                if (firstSection) {
+                    contentContainer.insertBefore(header, firstSection);
+                } else {
+                    contentContainer.prepend(header);
+                }
+            }
+            if (!header.querySelector('.edit-time-entry-btn') && typeof entry?.id !== 'undefined') {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn edit-time-entry-btn';
+                btn.innerHTML = '<i class="fas fa-edit"></i> Bearbeiten';
+                btn.addEventListener('click', () => {
+                    if (window.editTimeEntryFromReport) {
+                        window.editTimeEntryFromReport(entry.id);
+                    } else {
+                        console.error('editTimeEntryFromReport ist nicht definiert');
+                    }
+                });
+                header.appendChild(btn);
+                console.log('🛠️ Fallback-Edit-Button dynamisch eingefügt.');
+            } else {
+                console.log('✅ Edit-Button bereits vorhanden.');
+            }
+        }, 50);
         modal.classList.add('visible');
         document.body.classList.add('modal-open');
+        
+        // Nach dem Einfügen prüfen, ob der Edit-Button sichtbar ist
+        setTimeout(() => {
+            const editBtn = contentContainer.querySelector('.edit-time-entry-btn');
+            if (editBtn) {
+                console.log('✅ Edit-Button im DOM gefunden:', editBtn);
+                console.log('Edit-Button CSS:', window.getComputedStyle(editBtn));
+            } else {
+                console.error('❌ Edit-Button nicht im DOM gefunden!');
+            }
+        }, 100);
         
     } catch (error) {
         console.error('Fehler beim Rendering des Zeiteintragsberichts:', error);
@@ -480,7 +609,7 @@ async function renderTimeEntryReport(entry, projectId) {
 }
 
 // Robuste Funktion zum Warten auf die Tabelle und Einfügen der Buttons
-function waitForTimeEntriesTableAndInjectButtons(projectId, maxAttempts = 10, currentAttempt = 0, interval = 1000) {
+async function waitForTimeEntriesTableAndInjectButtons(projectId, maxAttempts = 10, currentAttempt = 0, interval = 1000) {
     // Tabelle suchen mit korrekten Selektoren basierend auf der Tabellenstruktur in project-simple.html
     const timeTable = document.querySelector('#time-entries-table') || 
                      document.querySelector('table#time-entries-table') || 
@@ -489,7 +618,7 @@ function waitForTimeEntriesTableAndInjectButtons(projectId, maxAttempts = 10, cu
     
     if (timeTable) {
         console.log('✅ Zeiteinträge-Tabelle gefunden, füge Buttons hinzu...');
-        injectReportButtons(projectId);
+        await injectReportButtons(projectId);
         return true;
     } else {
         if (currentAttempt < maxAttempts) {

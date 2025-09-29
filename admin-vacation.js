@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
             
             // Alle Mitarbeiter laden
-            allEmployees = await DataService.getAllEmployees();
+            allEmployees = await DataService.getAllActiveEmployees();
             
             // Tab-Funktionalität initialisieren
             initTabs();
@@ -455,7 +455,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.log('Lade Teamübersicht...');
             
             // Frische Mitarbeiterdaten direkt vom Server laden
-            allEmployees = await DataService.getAllEmployees({ forceRefresh: true });
+            allEmployees = await DataService.getAllActiveEmployees({ forceRefresh: true });
             console.log('Geladene Mitarbeiter:', allEmployees.length);
             
             if (!allEmployees || allEmployees.length === 0) {

@@ -220,7 +220,7 @@ async function loadEmployees() {
         }
         
         // Mitarbeiter von Firebase laden
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         
         if (!employees || !Array.isArray(employees)) {
             console.error('Keine Mitarbeiter gefunden oder ungültiges Format');

@@ -43,7 +43,7 @@ window.showReport = async function(entryId) {
         console.log('✅ REPORT: Zeiteintrag geladen:', timeEntry);
         
         // 2. Zugehöriges Projekt laden
-        let project = { name: 'Unbekanntes Projekt', id: timeEntry.projectId || 'unknown' };
+        let project = { name: timeEntry.isVacationDay ? 'Urlaub' : 'Unbekanntes Projekt', id: timeEntry.projectId || 'unknown' };
         
         if (timeEntry.projectId) {
             try {

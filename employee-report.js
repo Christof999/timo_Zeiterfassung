@@ -63,7 +63,7 @@ async function initEmployeeSelection() {
         if (!employeeSelect) return;
         
         // Mitarbeiter laden
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         
         // Dropdown leeren und mit Mitarbeitern füllen
         employeeSelect.innerHTML = '<option value="">-- Mitarbeiter auswählen --</option>';

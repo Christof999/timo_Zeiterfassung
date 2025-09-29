@@ -939,7 +939,7 @@ function setupEntryButtons() {
         });
     });
     
-    // Bearbeiten
+    // Bearbeiten - immer verfügbar, da nur Admin an dieser Stelle
     document.querySelectorAll('.edit-entry-btn').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -948,7 +948,13 @@ function setupEntryButtons() {
             const entryId = this.dataset.entryId;
             console.log('Bearbeiten von Zeiteintrag:', entryId);
             
-            // Hier später: Edit-Funktion implementieren
+            // Edit-Modal öffnen (Funktion ist in project-simple.html definiert)
+            if (typeof openEditTimeEntryModal === 'function') {
+                openEditTimeEntryModal(entryId);
+            } else {
+                console.error('openEditTimeEntryModal Funktion nicht gefunden');
+                alert('Edit-Funktion ist nicht verfügbar. Bitte laden Sie die Seite neu.');
+            }
         });
     });
 }

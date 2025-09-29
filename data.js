@@ -269,6 +269,23 @@ const DataService = {
     }
   },
 
+  // Nur aktive Mitarbeiter abrufen (status !== 'inactive' und name !== 'Administrator')
+  async getAllActiveEmployees(options = {}) {
+    await this._authReadyPromise;
+    try {
+      const snapshot = await this.employeesCollection.get();
+      const allEmployees = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      // Filtere inaktive Mitarbeiter und Administrator aus
+      return allEmployees.filter(employee => 
+        employee.status !== 'inactive' && 
+        employee.name !== 'Administrator'
+      );
+    } catch (error) {
+      console.error("Fehler beim Abrufen der aktiven Mitarbeiter:", error);
+      return [];
+    }
+  },
+
   async getEmployeeById(id) {
     await this._authReadyPromise;
     try {
@@ -1778,7 +1795,7 @@ const DataService = {
           ...entry,
           clockInTime,
           clockOutTime,
-          projectName: project ? project.name : "Unbekanntes Projekt",
+          projectName: entry.isVacationDay ? "Urlaub" : (project ? project.name : "Unbekanntes Projekt"),
           workMinutes,
           workHours: (workMinutes / 60).toFixed(2),
         });

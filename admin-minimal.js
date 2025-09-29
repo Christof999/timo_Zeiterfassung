@@ -517,11 +517,12 @@ async function loadDashboardData() {
         const activeProjectsCount = document.getElementById('active-projects-count');
         const todayHours = document.getElementById('today-hours');
         
-        // Aktive Mitarbeiter zählen
-        const employees = await DataService.getAllEmployees();
-        const activeEmployees = employees.filter(emp => emp.status === 'active');
+        // Eingestempelte Mitarbeiter zählen
+        const currentTimeEntries = await DataService.getCurrentTimeEntries();
+        // Eindeutige employeeId's zählen (falls ein Mitarbeiter mehrfach eingestempelt ist)
+        const uniqueClockedInEmployees = new Set(currentTimeEntries.map(entry => entry.employeeId));
         if (activeEmployeesCount) {
-            activeEmployeesCount.textContent = activeEmployees.length;
+            activeEmployeesCount.textContent = uniqueClockedInEmployees.size;
         }
         
         // Aktive Projekte zählen
@@ -610,7 +611,7 @@ async function loadLiveActivities() {
         
         // Aktuelle Zeiteinträge (ohne clockOutTime) abrufen
         const currentEntries = await DataService.getCurrentTimeEntries();
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         const projects = await DataService.getAllProjects();
         
         // Mitarbeiter- und Projekt-Maps erstellen für schnellen Zugriff
@@ -708,11 +709,11 @@ async function loadEmployeesTable() {
     try {
         employeesTable.innerHTML = '';
         
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         
         if (employees.length === 0) {
             const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="5" class="text-center">Keine Mitarbeiter gefunden</td>';
+            row.innerHTML = '<td colspan="5" class="text-center">Keine aktiven Mitarbeiter gefunden</td>';
             employeesTable.appendChild(row);
             return;
         }
@@ -2003,7 +2004,7 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
                         <div class="report-info-grid">
                             <div class="report-info-item">
                                 <strong>Projekt:</strong>
-                                <span>${project ? project.name : 'Unbekanntes Projekt'}</span>
+                                <span>${timeEntry.isVacationDay ? 'Urlaub' : (project ? project.name : 'Unbekanntes Projekt')}</span>
                             </div>
                             <div class="report-info-item">
                                 <strong>Mitarbeiter:</strong>
@@ -2567,7 +2568,7 @@ async function loadReportFilters() {
             
             if (selectedType === 'employee') {
                 // Mitarbeiter laden
-                const employees = await DataService.getAllEmployees();
+                const employees = await DataService.getAllActiveEmployees();
                 
                 employees.sort((a, b) => a.name.localeCompare(b.name));
                 
@@ -3050,7 +3051,7 @@ async function showTimeEntriesDetails() {
         
         // Mitarbeiter für Filter laden
         try {
-            const employees = await DataService.getAllEmployees();
+            const employees = await DataService.getAllActiveEmployees();
             employees.sort((a, b) => a.name.localeCompare(b.name));
             
             employees.forEach(employee => {
@@ -3122,7 +3123,7 @@ async function loadTimeEntriesDetails() {
         }
 
         // Zusätzliche Daten laden
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         const projects = await DataService.getAllProjects();
 
         // Maps für schnellen Zugriff erstellen
@@ -3220,7 +3221,7 @@ async function loadProjectTimeEntries(projectId) {
 
         // Zeiteinträge für das Projekt laden
         const entries = await DataService.getProjectTimeEntries(projectId);
-        const employees = await DataService.getAllEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         const projects = await DataService.getAllProjects();
 
         // Maps für schnellen Zugriff erstellen

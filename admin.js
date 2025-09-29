@@ -520,10 +520,11 @@ function handleAdminLogout() {
 // Dashboard-Daten laden
 async function loadDashboardData() {
     try {
-        // Aktive Mitarbeiter zählen
-        const employees = await DataService.getEmployees();
-        const activeEmployees = employees.filter(employee => employee.status === 'active');
-        activeEmployeesCount.textContent = activeEmployees.length;
+        // Eingestempelte Mitarbeiter zählen
+        const currentTimeEntries = await DataService.getCurrentTimeEntries();
+        // Eindeutige employeeId's zählen (falls ein Mitarbeiter mehrfach eingestempelt ist)
+        const uniqueClockedInEmployees = new Set(currentTimeEntries.map(entry => entry.employeeId));
+        activeEmployeesCount.textContent = uniqueClockedInEmployees.size;
         
         // Aktive Projekte zählen
         const projects = await DataService.getProjects();
@@ -1244,14 +1245,14 @@ async function handleAdminClockIn(event) {
 // Mitarbeitertabelle laden
 async function loadEmployeesTable() {
     try {
-        const employees = await DataService.getEmployees();
+        const employees = await DataService.getAllActiveEmployees();
         
         // Tabelle leeren
         employeesTable.innerHTML = '';
         
         if (employees.length === 0) {
             const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="6" class="text-center">Keine Mitarbeiter vorhanden</td>';
+            row.innerHTML = '<td colspan="6" class="text-center">Keine aktiven Mitarbeiter vorhanden</td>';
             employeesTable.appendChild(row);
             return;
         }
@@ -1647,8 +1648,8 @@ async function loadReportFilters() {
         
         if (type === 'employee') {
             // Mitarbeiter für Filter laden
-            const employees = await DataService.getEmployees();
-            reportFilter.innerHTML = '<option value="all">Alle Mitarbeiter</option>';
+            const employees = await DataService.getAllActiveEmployees();
+            reportFilter.innerHTML = '<option value="all">Alle aktiven Mitarbeiter</option>';
             
             employees.forEach(employee => {
                 const option = document.createElement('option');
@@ -2035,8 +2036,8 @@ async function showProjectDetails(projectId) {
         detailDescription.textContent = project.description || 'Keine Beschreibung vorhanden';
         
         // Mitarbeiter-Dropdown für Filter füllen
-        const employees = await DataService.getEmployees();
-        const employeeOptions = '<option value="all">Alle Mitarbeiter</option>' + 
+        const employees = await DataService.getAllActiveEmployees();
+        const employeeOptions = '<option value="all">Alle aktiven Mitarbeiter</option>' + 
             employees.map(emp => `<option value="${emp.id}">${emp.name}</option>`).join('');
         
         sitePhotosEmployeeFilter.innerHTML = employeeOptions;
