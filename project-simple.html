@@ -1706,7 +1706,10 @@
                 const vehicleUsages = await DataService.getVehicleUsagesForProject(targetProjectId);
                 const vehicleData = {};
                 
-                // Stunden pro Fahrzeug zusammenfassen (aus Start-/End-Kilometern)
+                console.log('🚗 Gefundene Fahrzeugbuchungen:', vehicleUsages.length);
+                console.log('🚗 Fahrzeugbuchungen Details:', vehicleUsages);
+                
+                // Stunden pro Fahrzeug zusammenfassen (aus tatsächlichen Betriebsstunden)
                 for (const usage of vehicleUsages) {
                     if (!usage.vehicleId) continue;
                     
@@ -1731,12 +1734,15 @@
                         }
                     }
                     
-                    // Vereinfachte Annahme: 1 Eintrag = 1 Stunde Fahrzeugnutzung
-                    // Falls tatsächliche Nutzungsdauer vorhanden ist, diese verwenden
-                    const usageHours = usage.usageHours || 1;
+                    // Tatsächliche Betriebsstunden aus der Fahrzeugbuchung verwenden
+                    // Das Feld 'hours' aus der Fahrzeugbuchung enthält die tatsächlichen Stunden
+                    const usageHours = usage.hours || 0;
                     
-                    // Stunden aufaddieren
-                    vehicleData[usage.vehicleId].totalHours += usageHours;
+                    if (usageHours > 0) {
+                        // Stunden aufaddieren
+                        vehicleData[usage.vehicleId].totalHours += usageHours;
+                        console.log(`Füge ${usageHours}h für Fahrzeug ${vehicleData[usage.vehicleId].name} hinzu. Gesamt: ${vehicleData[usage.vehicleId].totalHours}h`);
+                    }
                 }
                 
                 // Kosten für jedes Fahrzeug berechnen
