@@ -69,6 +69,7 @@
     <script src="data.js"></script>
     <!-- Alle Funktionen direkt in dieser Datei, keine externen Abhängigkeiten -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="report-styles.css">
     
     <style>
         /* Verbessertes CSS für die Darstellung - an Lauffer-Design angepasst */
@@ -2580,8 +2581,20 @@
                     document.getElementById('edit-clock-out-time').value = clockOutDate.toTimeString().substr(0, 5);
                 }
                 
-                // Pausenzeit in Minuten konvertieren
-                const pauseMinutes = timeEntry.pauseTotalTime ? Math.floor(timeEntry.pauseTotalTime / 60000) : 0;
+                // Pausenzeit in Minuten konvertieren - unterstützt beide Formate
+                let pauseMinutes = 0;
+                if (timeEntry.pauseTotalTime && timeEntry.pauseTotalTime > 0) {
+                    // Neues Format: pauseTotalTime in Millisekunden
+                    pauseMinutes = Math.floor(timeEntry.pauseTotalTime / 60000);
+                } else if (timeEntry.pauseTime && timeEntry.pauseTime > 0) {
+                    // Altes Format: pauseTime in Minuten
+                    pauseMinutes = timeEntry.pauseTime;
+                }
+                console.log('📝 Edit-Modal: Pausenzeit geladen:', {
+                    pauseTotalTime: timeEntry.pauseTotalTime,
+                    pauseTime: timeEntry.pauseTime,
+                    pauseMinutes: pauseMinutes
+                });
                 document.getElementById('edit-pause-time').value = pauseMinutes;
                 
                 // Notizen
@@ -2763,8 +2776,12 @@
         // Funktion zum Öffnen des Edit-Modals aus dem Report heraus (global verfügbar)
         window.editTimeEntryFromReport = function(entryId) {
             console.log('editTimeEntryFromReport aufgerufen mit ID:', entryId);
-            // Report-Modal schließen
-            closeModal();
+            // Report-Modal schließen (falls vorhanden)
+            const reportModal = document.getElementById('time-entry-report-modal');
+            if (reportModal) {
+                reportModal.style.display = 'none';
+                reportModal.classList.remove('visible');
+            }
             
             // Edit-Modal öffnen
             setTimeout(() => {

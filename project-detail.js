@@ -629,8 +629,13 @@ async function loadProjectTimeEntries(projectId) {
             let pauseDetails = '';
             
             if (entry.clockOutTime) {
-                // Pausenzeit berücksichtigen (in Millisekunden)
-                const pauseTotalTime = entry.pauseTotalTime || 0;
+                // Pausenzeit ermitteln - unterstützt beide Formate (alt und neu)
+                let pauseTotalTime = 0;
+                if (entry.pauseTotalTime && entry.pauseTotalTime > 0) {
+                    pauseTotalTime = entry.pauseTotalTime; // Neues Format: Millisekunden
+                } else if (entry.pauseTime && entry.pauseTime > 0) {
+                    pauseTotalTime = entry.pauseTime * 60 * 1000; // Altes Format: Minuten → Millisekunden
+                }
                 const totalTimeMs = new Date(entry.clockOutTime) - new Date(entry.clockInTime);
                 const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
                 

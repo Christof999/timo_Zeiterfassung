@@ -434,9 +434,6 @@ async function renderTimeEntryReport(entry, projectId) {
             <div class="report">
                 <div class="report-header">
                     <h2>Zeiteintrag-Bericht</h2>
-                    <button class="btn edit-time-entry-btn" onclick="window.editTimeEntryFromReport('${entry.id}')" title="Zeiteintrag bearbeiten">
-                        <i class="fas fa-edit"></i> Bearbeiten
-                    </button>
                 </div>
                 
                 <div class="report-section">
@@ -484,14 +481,6 @@ async function renderTimeEntryReport(entry, projectId) {
                     <div class="report-detail">
                         <span class="report-label">Arbeitszeit:</span>
                         <span class="report-value">${workHours}</span>
-                    </div>
-                </div>
-                
-                <div class="report-section">
-                    <h3>Pausen</h3>
-                    <div class="report-detail">
-                        <span class="report-label">Pausenzeit:</span>
-                        <span class="report-value">${pauseTime}</span>
                     </div>
                 </div>
                 
@@ -555,39 +544,8 @@ async function renderTimeEntryReport(entry, projectId) {
         
         contentContainer.innerHTML = htmlContent;
 
-        // Fallback: Falls der Edit-Button aus irgendeinem Grund nicht gerendert wurde, dynamisch hinzufügen
-        setTimeout(() => {
-            let header = contentContainer.querySelector('.report-header');
-            if (!header) {
-                // Header erstellen wenn komplett fehlt
-                const firstSection = contentContainer.querySelector('.report-section');
-                header = document.createElement('div');
-                header.className = 'report-header';
-                header.innerHTML = '<h2>Zeiteintrag-Bericht</h2>';
-                if (firstSection) {
-                    contentContainer.insertBefore(header, firstSection);
-                } else {
-                    contentContainer.prepend(header);
-                }
-            }
-            if (!header.querySelector('.edit-time-entry-btn') && typeof entry?.id !== 'undefined') {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'btn edit-time-entry-btn';
-                btn.innerHTML = '<i class="fas fa-edit"></i> Bearbeiten';
-                btn.addEventListener('click', () => {
-                    if (window.editTimeEntryFromReport) {
-                        window.editTimeEntryFromReport(entry.id);
-                    } else {
-                        console.error('editTimeEntryFromReport ist nicht definiert');
-                    }
-                });
-                header.appendChild(btn);
-                console.log('🛠️ Fallback-Edit-Button dynamisch eingefügt.');
-            } else {
-                console.log('✅ Edit-Button bereits vorhanden.');
-            }
-        }, 50);
+        // Bearbeiten-Button wurde entfernt (auf Wunsch)
+        // Der Bericht zeigt nur noch Informationen an, keine Bearbeitungsoption mehr
         modal.classList.add('visible');
         document.body.classList.add('modal-open');
         

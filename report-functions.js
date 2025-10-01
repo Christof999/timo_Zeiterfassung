@@ -504,32 +504,54 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             
             const clockOutTime = clockOutDate && isValidDate(clockOutDate) ? formatTime(clockOutDate) : '--:--';
             
-            // Arbeitsstunden berechnen mit Berücksichtigung der Pausenzeiten
-            let workHours = 'NaNh';
+            // Arbeitsstunden und Gesamtzeit berechnen mit korrekter Pausenberücksichtigung
+            let workHours = '-';
+            let totalTimeDisplay = '-';
             
-            // Pausenzeit außerhalb des try-Blocks definieren, damit sie später verfügbar ist
-            const pauseTotalTime = timeEntry.pauseTotalTime || 0;
+            // Pausenzeit ermitteln - unterstützt beide Formate (alt und neu)
+            let pauseTotalTime = 0;
+            
+            // Neues Format: pauseTotalTime in Millisekunden
+            if (timeEntry.pauseTotalTime && timeEntry.pauseTotalTime > 0) {
+                pauseTotalTime = timeEntry.pauseTotalTime;
+            }
+            // Altes Format: pauseTime in Minuten
+            else if (timeEntry.pauseTime && timeEntry.pauseTime > 0) {
+                pauseTotalTime = timeEntry.pauseTime * 60 * 1000; // Minuten in Millisekunden umrechnen
+                console.log('⚠️ Altes Pausenzeit-Format erkannt (pauseTime in Minuten):', timeEntry.pauseTime);
+            }
+            
+            // Debug-Log für Zeitberechnungen
+            console.log('📊 Zeitberechnung im Bericht (report-functions.js):');
+            console.log('  Einstempelzeit:', clockInDate);
+            console.log('  Ausstempelzeit:', clockOutDate);
+            console.log('  timeEntry.pauseTotalTime (ms):', timeEntry.pauseTotalTime);
+            console.log('  timeEntry.pauseTime (min):', timeEntry.pauseTime);
+            console.log('  Verwendete pauseTotalTime (ms):', pauseTotalTime);
+            console.log('  Verwendete pauseTotalTime (min):', Math.floor(pauseTotalTime / 60000));
+            console.log('  Breaks-Array:', timeEntry.breaks);
             
             if (clockOutDate && isValidDate(clockOutDate)) {
                 try {
-                    // Arbeitsstunden berechnen
+                    // Gesamtzeit berechnen
                     const totalTimeMs = clockOutDate.getTime() - clockInDate.getTime();
+                    const totalHours = Math.floor(totalTimeMs / (1000 * 60 * 60));
+                    const totalMinutes = Math.floor((totalTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+                    totalTimeDisplay = `${totalHours}h ${totalMinutes}min`;
                     
+                    // Arbeitszeit berechnen (ohne Pause)
                     if (totalTimeMs > 0) {
                         const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
-                        const hours = actualWorkTimeMs / (1000 * 60 * 60);
-                        workHours = hours.toFixed(2) + 'h';
+                        const workHours_calc = Math.floor(actualWorkTimeMs / (1000 * 60 * 60));
+                        const workMinutes = Math.floor((actualWorkTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+                        workHours = `${workHours_calc}h ${workMinutes}min`;
+                        
+                        console.log('  Gesamtzeit (ms):', totalTimeMs);
+                        console.log('  Arbeitszeit (ms):', actualWorkTimeMs);
+                        console.log('  Arbeitszeit:', workHours);
                     }
                 } catch (error) {
                     console.error('Fehler bei der Berechnung der Arbeitsstunden:', error);
-                }
-                
-                // Wenn Pausenzeit vorhanden, diese auch anzeigen
-                if (pauseTotalTime > 0) {
-                    const pauseMinutes = Math.floor(pauseTotalTime / 60000);
-                    const pauseHours = Math.floor(pauseMinutes / 60);
-                    const remainingMinutes = pauseMinutes % 60;
-                    workHours += ` (inkl. ${pauseHours}h ${remainingMinutes}min Pause)`;
                 }
             }
             
@@ -537,10 +559,16 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
             reportDate.textContent = date;
             reportProject.textContent = project.name;
             reportEmployee.textContent = employee.name;
-            reportTimeIn.textContent = clockInTime;
-            reportTimeOut.textContent = clockOutTime;
+            reportTimeIn.textContent = clockInTime + ' Uhr';
+            reportTimeOut.textContent = clockOutTime !== '--:--' ? clockOutTime + ' Uhr' : clockOutTime;
             reportWorkHours.textContent = workHours;
-            reportNotes.textContent = timeEntry.notes || '-';
+            reportNotes.textContent = timeEntry.notes || 'Keine Notizen vorhanden';
+            
+            // Gesamtzeit anzeigen
+            const reportTotalTime = modal.querySelector('#report-total-time');
+            if (reportTotalTime) {
+                reportTotalTime.textContent = totalTimeDisplay;
+            }
             
             // Debug: Prüfen, ob die Daten korrekt gesetzt wurden
             console.log('Report Daten gesetzt:', {
@@ -553,57 +581,10 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
                 notes: timeEntry.notes || '-'
             });
             
-            // Pausendetails anzeigen, falls vorhanden
-            if (timeEntry.pauseDetails && timeEntry.pauseDetails.length > 0) {
-                let pauseDetailsHtml = '<ul class="pause-list">';
-                
-                for (const pause of timeEntry.pauseDetails) {
-                    try {
-                        // Konvertierung der Zeitstempel in Date-Objekte
-                        let startDate, endDate;
-                        
-                        if (pause.start instanceof firebase.firestore.Timestamp) {
-                            startDate = pause.start.toDate();
-                        } else if (typeof pause.start === 'string') {
-                            startDate = new Date(pause.start);
-                        } else if (pause.start && typeof pause.start === 'object') {
-                            // Für Firebase-Timestamps in verschiedenen Formaten
-                            startDate = pause.start.seconds ? 
-                                new Date(pause.start.seconds * 1000) : new Date();
-                        }
-                        
-                        if (pause.end instanceof firebase.firestore.Timestamp) {
-                            endDate = pause.end.toDate();
-                        } else if (typeof pause.end === 'string') {
-                            endDate = new Date(pause.end);
-                        } else if (pause.end && typeof pause.end === 'object') {
-                            // Für Firebase-Timestamps in verschiedenen Formaten
-                            endDate = pause.end.seconds ? 
-                                new Date(pause.end.seconds * 1000) : new Date();
-                        }
-                        
-                        if (!isValidDate(startDate) || !isValidDate(endDate)) {
-                            throw new Error('Ungültige Datumswerte');
-                        }
-                        
-                        // Formatierung der Zeiten
-                        const startTime = startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                        const endTime = endDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                        
-                        // Berechnung der Pausendauer
-                        const pauseDuration = Math.floor((endDate - startDate) / 60000);
-                        
-                        pauseDetailsHtml += `<li>Pause von ${startTime} bis ${endTime} (${pauseDuration} Min.)</li>`;
-                    } catch (e) {
-                        console.error('Fehler bei der Verarbeitung einer Pause:', e, pause);
-                        pauseDetailsHtml += '<li>Ungültige Pausenzeit</li>';
-                    }
-                }
-                
-                pauseDetailsHtml += '</ul>';
-                reportPauseDetails.innerHTML = pauseDetailsHtml;
-            } else {
-                reportPauseDetails.innerHTML = '<p>Keine Pausen eingetragen</p>';
+            // Pausendetails-Anzeige ausgeblendet (auf Wunsch entfernt)
+            const reportPauseSection = modal.querySelector('#report-pause-section');
+            if (reportPauseSection) {
+                reportPauseSection.innerHTML = ''; // Pausenzeit wird nicht mehr angezeigt
             }
         }
         
@@ -1029,72 +1010,72 @@ function createReportModal() {
     modal.innerHTML = `
         <div class="modal-content report-modal-content large-modal">
             <div class="modal-header">
-                <h3 id="report-modal-title">Zeiterfassungsbericht</h3>
+                <h3 id="report-modal-title"><i class="fas fa-clipboard-list"></i> Zeiterfassungsbericht</h3>
                 <button type="button" class="close-modal-btn" id="report-close-btn">&times;</button>
             </div>
             <div class="modal-body report-modal-body">
                 <div class="report-header">
                     <div class="report-info-grid">
                         <div class="report-info-item">
-                            <strong>Datum:</strong>
+                            <strong><i class="fas fa-calendar-day"></i> Datum</strong>
                             <span id="report-date"></span>
                         </div>
                         <div class="report-info-item">
-                            <strong>Projekt:</strong>
+                            <strong><i class="fas fa-project-diagram"></i> Projekt</strong>
                             <span id="report-project"></span>
                         </div>
                         <div class="report-info-item">
-                            <strong>Mitarbeiter:</strong>
+                            <strong><i class="fas fa-user"></i> Mitarbeiter</strong>
                             <span id="report-employee"></span>
                         </div>
                         <div class="report-info-item">
-                            <strong>Einstempelzeit:</strong>
+                            <strong><i class="fas fa-sign-in-alt"></i> Eingestempelt</strong>
                             <span id="report-time-in"></span>
                         </div>
                         <div class="report-info-item">
-                            <strong>Ausstempelzeit:</strong>
+                            <strong><i class="fas fa-sign-out-alt"></i> Ausgestempelt</strong>
                             <span id="report-time-out"></span>
                         </div>
                         <div class="report-info-item">
-                            <strong>Arbeitsstunden:</strong>
-                            <span id="report-work-hours"></span>
+                            <strong><i class="fas fa-clock"></i> Gesamtzeit</strong>
+                            <span id="report-total-time"></span>
                         </div>
                     </div>
-                    
-                    <!-- NEU: Standortinformationen für Ein- und Ausstempeln -->
-                    <div class="location-info-section">
-                        <h4 class="location-header">Standortinformationen</h4>
-                        <div class="location-info-grid">
-                            <div class="report-info-item location-item">
-                                <strong><i class="fas fa-map-marker-alt"></i> Einstempel-Standort:</strong>
-                                <div id="report-location-in" class="location-content"></div>
-                            </div>
-                            <div class="report-info-item location-item">
-                                <strong><i class="fas fa-map-marker-alt"></i> Ausstempel-Standort:</strong>
-                                <div id="report-location-out" class="location-content"></div>
-                            </div>
+                    <div class="work-hours-highlight">
+                        <i class="fas fa-business-time"></i> Arbeitszeit: <span id="report-work-hours"></span>
+                    </div>
+                </div>
+                
+                <div id="report-pause-section"></div>
+                
+                <div class="report-section">
+                    <h4><i class="fas fa-sticky-note"></i> Notizen</h4>
+                    <p id="report-notes"></p>
+                </div>
+                
+                <div class="location-info-section" style="display: none;">
+                    <h4 class="location-header"><i class="fas fa-map-marker-alt"></i> Standortinformationen</h4>
+                    <div class="location-info-grid">
+                        <div class="report-info-item location-item">
+                            <strong>Einstempel-Standort:</strong>
+                            <div id="report-location-in" class="location-content"></div>
                         </div>
-                    </div>
-                    
-                    <div class="report-info-item">
-                        <strong>Notizen:</strong>
-                        <span id="report-notes"></span>
-                    </div>
-                    <div class="report-info-item">
-                        <strong>Pausendetails:</strong>
-                        <div id="report-pause-details"></div>
+                        <div class="report-info-item location-item">
+                            <strong>Ausstempel-Standort:</strong>
+                            <div id="report-location-out" class="location-content"></div>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="report-section">
-                    <h4>Baustellenfotos</h4>
+                    <h4><i class="fas fa-camera"></i> Baustellenfotos <span id="site-photos-count"></span></h4>
                     <div class="report-gallery" id="report-site-photos">
                         <!-- Wird per JavaScript gefüllt -->
                     </div>
                 </div>
                 
                 <div class="report-section">
-                    <h4>Lieferscheine & Rechnungen</h4>
+                    <h4><i class="fas fa-file-invoice"></i> Lieferscheine & Rechnungen <span id="documents-count"></span></h4>
                     <div class="report-gallery" id="report-delivery-notes">
                         <!-- Wird per JavaScript gefüllt -->
                     </div>

@@ -408,74 +408,174 @@ details li {
     margin-bottom: 20px;
 }
 
-.table-container, .employee-table-container, .project-table-container, .activity-table-container, .report-table-container {
-    overflow-x: auto;
-    margin-bottom: 20px;
-}
-
+/* Modernes Tabellen-Design */
 table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     margin-bottom: 20px;
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 table th, table td {
-    padding: 12px 15px;
+    padding: 14px 16px;
     text-align: left;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid #e8eef3;
 }
 
 table th {
-    background-color: var(--light-color);
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: white;
     font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
-table tr:hover {
-    background-color: rgba(236, 240, 241, 0.5);
+table tbody tr {
+    transition: all 0.2s ease;
+    background-color: white;
 }
 
+table tbody tr:nth-child(even) {
+    background-color: #f8fafb;
+}
+
+table tbody tr:hover {
+    background-color: #e8f4f8;
+    transform: scale(1.01);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Verbesserte Action Buttons */
 .action-buttons {
     display: flex;
-    gap: 8px;
+    gap: 10px;
+    justify-content: flex-start;
+    align-items: center;
 }
 
 .action-btn {
-    padding: 6px 10px;
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
 }
 
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn:active {
+    transform: translateY(0);
+}
+
+.action-btn i {
+    font-size: 14px;
+}
+
+/* Edit Button - Modernes Blau */
 .edit-btn {
-    color: var(--secondary-color);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
 }
 
 .edit-btn:hover {
-    background-color: var(--secondary-color);
-    color: white;
-    border-color: var(--secondary-color);
+    background: linear-gradient(135deg, #5568d3 0%, #63408a 100%);
 }
 
+/* Delete Button - Modernes Rot */
 .delete-btn {
-    color: var(--danger-color);
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
 }
 
 .delete-btn:hover {
-    background-color: var(--danger-color);
-    color: white;
-    border-color: var(--danger-color);
+    background: linear-gradient(135deg, #d97ee3 0%, #d94356 100%);
 }
 
-.view-btn {
-    color: var(--primary-color);
+/* View/Details Button - Modernes Grün */
+.view-btn, .view-details-btn {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
 }
 
-.view-btn:hover {
-    background-color: var(--primary-color);
+.view-btn:hover, .view-details-btn:hover {
+    background: linear-gradient(135deg, #3a96e7 0%, #00d9e5 100%);
+}
+
+/* Actions Container in Tabelle */
+.actions-container {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Status Badges verbessert */
+.status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-badge.active, .status.active {
+    background: linear-gradient(135deg, #11998e, #38ef7d);
     color: white;
-    border-color: var(--primary-color);
+}
+
+.status-badge.inactive, .status.inactive {
+    background: linear-gradient(135deg, #bdc3c7, #7f8c8d);
+    color: white;
+}
+
+.status-badge.completed, .status.completed {
+    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    color: white;
+}
+
+.status-badge.planned, .status.planned {
+    background: linear-gradient(135deg, #fa709a, #fee140);
+    color: white;
+}
+
+.status-badge.archived, .status.archived {
+    background: linear-gradient(135deg, #c9c9c9, #a0a0a0);
+    color: white;
+}
+
+/* Table Container Verbesserungen */
+.table-container, .employee-table-container, .project-table-container, 
+.activity-table-container, .report-table-container, .vehicle-table-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    background: white;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .modal {
@@ -578,6 +678,41 @@ table tr:hover {
     
     .tab-header button {
         margin-top: 10px;
+    }
+    
+    /* Mobile Optimierungen für Action Buttons */
+    .action-buttons, .actions-container {
+        flex-direction: column;
+        gap: 6px;
+    }
+    
+    .action-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    /* Tabellen auf mobilen Geräten */
+    table {
+        font-size: 13px;
+    }
+    
+    table th, table td {
+        padding: 10px 8px;
+    }
+    
+    /* Table Container auf mobilen Geräten */
+    .table-container, .employee-table-container, .project-table-container, 
+    .activity-table-container, .report-table-container, .vehicle-table-container {
+        padding: 10px;
+        margin-bottom: 15px;
+    }
+    
+    /* Status Badges auf mobilen Geräten */
+    .status-badge {
+        font-size: 11px;
+        padding: 4px 10px;
     }
 }
 

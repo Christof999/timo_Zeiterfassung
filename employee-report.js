@@ -83,26 +83,35 @@ async function initEmployeeSelection() {
 }
 
 /**
- * Setzt den Datumsbereich standardmäßig auf einen Zeitraum, der die Testdaten enthält
+ * Setzt den Datumsbereich standardmäßig auf den aktuellen Monat
  */
 function setDefaultDateRange() {
-    // Da die Testdaten im Zeitraum 24.-27. Mai 2025 liegen, setzen wir einen größeren Bereich
-    // vom 20. Mai bis 30. Juni 2025, um sicherzustellen, dass alle Einträge angezeigt werden
-    const startDate = new Date(2025, 4, 20); // 20. Mai 2025 (Monat ist 0-basiert, daher 4 für Mai)
-    const endDate = new Date(2025, 5, 30);   // 30. Juni 2025
+    // Aktuelles Datum
+    const today = new Date();
+    
+    // Formatierung im YYYY-MM-DD Format für Date-Inputs
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0'); // Monat ist 0-basiert
+    const day = String(today.getDate()).padStart(2, '0');
+    
+    // Von: Erster Tag des aktuellen Monats
+    const startDateString = `${year}-${month}-01`;
+    
+    // Bis: Heutiges Datum
+    const endDateString = `${year}-${month}-${day}`;
     
     const startDateInput = document.getElementById('report-start-date');
     const endDateInput = document.getElementById('report-end-date');
     
     if (startDateInput) {
-        startDateInput.valueAsDate = startDate;
+        startDateInput.value = startDateString;
     }
     
     if (endDateInput) {
-        endDateInput.valueAsDate = endDate;
+        endDateInput.value = endDateString;
     }
     
-    console.log('Standarddatumsbereich gesetzt: ' + startDate.toLocaleDateString() + ' bis ' + endDate.toLocaleDateString());
+    console.log('Standarddatumsbereich gesetzt: Von ' + startDateString + ' bis ' + endDateString);
 }
 
 /**

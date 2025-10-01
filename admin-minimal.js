@@ -735,9 +735,13 @@ async function loadEmployeesTable() {
                 <td>${employee.username}</td>
                 <td>${hourlyRateDisplay}</td>
                 <td><span class="status-badge ${employee.status}">${employee.status === 'active' ? 'Aktiv' : 'Inaktiv'}</span></td>
-                <td>
-                    <button class="btn small-btn edit-employee-btn" data-id="${employee.id}">Bearbeiten</button>
-                    <button class="btn small-btn delete-employee-btn" data-id="${employee.id}">Löschen</button>
+                <td class="actions-container">
+                    <button class="action-btn edit-btn edit-employee-btn" data-id="${employee.id}">
+                        <i class="fas fa-edit"></i> Bearbeiten
+                    </button>
+                    <button class="action-btn delete-btn delete-employee-btn" data-id="${employee.id}">
+                        <i class="fas fa-trash-alt"></i> Löschen
+                    </button>
                 </td>
             `;
             
@@ -799,10 +803,16 @@ async function loadProjectsTable() {
                 <td>${startDate}</td>
                 <td>${endDate}</td>
                 <td><span class="status-badge ${project.status}">${project.status === 'active' ? 'Aktiv' : 'Abgeschlossen'}</span></td>
-                <td>
-                    <button class="btn small-btn edit-project-btn" data-id="${project.id}">Bearbeiten</button>
-                    <button class="btn small-btn delete-project-btn" data-id="${project.id}">Löschen</button>
-                    <button class="btn small-btn view-details-btn" data-id="${project.id}">Details</button>
+                <td class="actions-container">
+                    <button class="action-btn edit-btn edit-project-btn" data-id="${project.id}">
+                        <i class="fas fa-edit"></i> Bearbeiten
+                    </button>
+                    <button class="action-btn view-btn view-details-btn" data-id="${project.id}">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                    <button class="action-btn delete-btn delete-project-btn" data-id="${project.id}">
+                        <i class="fas fa-trash-alt"></i> Löschen
+                    </button>
                 </td>
             `;
             
@@ -889,9 +899,13 @@ async function loadVehiclesTable() {
                 <td>${escapeHTML(vehicle.licensePlate || '-')}</td>
                 <td>${hourlyRateDisplay}</td>
                 <td>${statusBadge}</td>
-                <td>
-                    <button class="btn small-btn edit-vehicle-btn" data-id="${vehicle.id}">Bearbeiten</button>
-                    <button class="btn small-btn delete-vehicle-btn" data-id="${vehicle.id}">Löschen</button>
+                <td class="actions-container">
+                    <button class="action-btn edit-btn edit-vehicle-btn" data-id="${vehicle.id}">
+                        <i class="fas fa-edit"></i> Bearbeiten
+                    </button>
+                    <button class="action-btn delete-btn delete-vehicle-btn" data-id="${vehicle.id}">
+                        <i class="fas fa-trash-alt"></i> Löschen
+                    </button>
                 </td>
             `;
             
@@ -1213,8 +1227,13 @@ async function loadProjectTimeEntries(projectId) {
             let pauseDetails = '';
             
             if (entry.clockOutTime) {
-                // Pausenzeit berücksichtigen (in Millisekunden)
-                const pauseTotalTime = entry.pauseTotalTime || 0;
+                // Pausenzeit ermitteln - unterstützt beide Formate (alt und neu)
+                let pauseTotalTime = 0;
+                if (entry.pauseTotalTime && entry.pauseTotalTime > 0) {
+                    pauseTotalTime = entry.pauseTotalTime; // Neues Format: Millisekunden
+                } else if (entry.pauseTime && entry.pauseTime > 0) {
+                    pauseTotalTime = entry.pauseTime * 60 * 1000; // Altes Format: Minuten → Millisekunden
+                }
                 const totalTimeMs = new Date(entry.clockOutTime) - new Date(entry.clockInTime);
                 const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
                 
@@ -1891,19 +1910,38 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
         const timeIn = formatTime(clockInTime);
         const timeOut = clockOutTime ? formatTime(clockOutTime) : '-';
 
-        // Arbeitszeit berechnen
+        // Arbeitszeit und Pausenzeit berechnen
         let workHoursDisplay = '-';
         let pauseDetailsHTML = '';
+        let totalTimeDisplay = '-';
 
         if (clockOutTime) {
+            // Gesamtzeit berechnen
+            const totalTimeMs = clockOutTime - clockInTime;
+            const totalHours = Math.floor(totalTimeMs / (1000 * 60 * 60));
+            const totalMinutes = Math.floor((totalTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+            totalTimeDisplay = `${totalHours}h ${totalMinutes}min`;
+            
             // Pausenzeit berücksichtigen
             const pauseTotalTime = timeEntry.pauseTotalTime || 0;
-            const totalTimeMs = clockOutTime - clockInTime;
             const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
-            const workHours = actualWorkTimeMs / (1000 * 60 * 60);
-            workHoursDisplay = workHours.toFixed(2) + 'h';
+            
+            // Debug-Log für Zeitberechnungen
+            console.log('📊 Zeitberechnung im Bericht:');
+            console.log('  Einstempelzeit:', clockInTime);
+            console.log('  Ausstempelzeit:', clockOutTime);
+            console.log('  Gesamtzeit (ms):', totalTimeMs);
+            console.log('  Pausenzeit (ms):', pauseTotalTime);
+            console.log('  Pausenzeit (min):', Math.floor(pauseTotalTime / 60000));
+            console.log('  Arbeitszeit (ms):', actualWorkTimeMs);
+            console.log('  Breaks-Array:', timeEntry.breaks);
+            
+            // Arbeitszeit in Stunden und Minuten
+            const workHours = Math.floor(actualWorkTimeMs / (1000 * 60 * 60));
+            const workMinutes = Math.floor((actualWorkTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+            workHoursDisplay = `${workHours}h ${workMinutes}min`;
 
-            // Pausendetails aufbereiten, falls vorhanden
+            // Moderne Pausendetails aufbereiten
             if (pauseTotalTime > 0) {
                 const pauseMinutes = Math.floor(pauseTotalTime / 60000);
                 const pauseHours = Math.floor(pauseMinutes / 60);
@@ -1911,36 +1949,45 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
 
                 pauseDetailsHTML = `
                     <div class="report-section">
-                        <h4>Pauseninformationen</h4>
-                        <p>Gesamtpausenzeit: ${pauseHours}h ${remainingMinutes}min</p>
+                        <h4><i class="fas fa-pause-circle"></i> Pauseninformationen</h4>
+                        <div class="pause-info-card">
+                            <h5>Gesamtpausenzeit</h5>
+                            <div class="pause-total">${pauseHours}h ${remainingMinutes}min</div>
                 `;
 
-                if (timeEntry.pauseDetails && timeEntry.pauseDetails.length > 0) {
+                // Breaks-Array statt pauseDetails verwenden
+                if (timeEntry.breaks && timeEntry.breaks.length > 0) {
                     pauseDetailsHTML += '<ul class="pause-list">';
 
-                    for (const pause of timeEntry.pauseDetails) {
+                    for (const breakItem of timeEntry.breaks) {
                         try {
-                            // Konvertierung der Zeitstempel
-                            const startDate = pause.start instanceof firebase.firestore.Timestamp ?
-                                pause.start.toDate() : new Date(pause.start);
-                            const endDate = pause.end instanceof firebase.firestore.Timestamp ?
-                                pause.end.toDate() : new Date(pause.end);
+                            if (breakItem.start && breakItem.end) {
+                                // Konvertierung der Zeitstempel
+                                const startDate = breakItem.start instanceof firebase.firestore.Timestamp ?
+                                    breakItem.start.toDate() : new Date(breakItem.start);
+                                const endDate = breakItem.end instanceof firebase.firestore.Timestamp ?
+                                    breakItem.end.toDate() : new Date(breakItem.end);
 
-                            // Formatierung
-                            const startTime = startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                            const endTime = endDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                            const pauseDuration = Math.floor((endDate - startDate) / 60000);
+                                // Formatierung
+                                const startTime = startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                                const endTime = endDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                                const pauseDuration = Math.floor((endDate - startDate) / 60000);
 
-                            pauseDetailsHTML += `<li>Pause von ${startTime} bis ${endTime} (${pauseDuration} Min.)</li>`;
+                                pauseDetailsHTML += `<li>${startTime} - ${endTime} (${pauseDuration} Min.)${breakItem.reason ? ' - ' + breakItem.reason : ''}</li>`;
+                            } else if (breakItem.duration) {
+                                // Für automatische Pausen ohne Start/End
+                                const durationMinutes = Math.floor(breakItem.duration / (1000 * 60));
+                                pauseDetailsHTML += `<li>Automatische Pause: ${durationMinutes} Min.${breakItem.reason ? ' - ' + breakItem.reason : ''}</li>`;
+                            }
                         } catch (e) {
-                            pauseDetailsHTML += '<li>Ungültige Pausenzeit</li>';
+                            console.error('Fehler beim Verarbeiten der Pause:', e);
                         }
                     }
 
                     pauseDetailsHTML += '</ul>';
                 }
 
-                pauseDetailsHTML += '</div>';
+                pauseDetailsHTML += '</div></div>';
             }
         }
 
@@ -1948,20 +1995,20 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
         const constructionSitePhotos = await DataService.getTimeEntryFiles(entryId, 'construction_site');
         const documentPhotos = await DataService.getTimeEntryFiles(entryId, 'delivery_note');
 
-        // Baustellenfotos-HTML generieren
+        // Baustellenfotos-HTML generieren mit modernem Design
         let constructionSitePhotosHTML = '';
         if (constructionSitePhotos && constructionSitePhotos.length > 0) {
             constructionSitePhotosHTML = `
                 <div class="report-section">
-                    <h4>Baustellenfotos</h4>
+                    <h4><i class="fas fa-camera"></i> Baustellenfotos (${constructionSitePhotos.length})</h4>
                     <div class="report-gallery">
             `;
 
             for (const photo of constructionSitePhotos) {
-                const comment = photo.comment ? `<p class="photo-comment">${photo.comment}</p>` : '';
+                const comment = photo.comment ? `<p class="photo-comment"><i class="fas fa-comment-dots"></i> ${photo.comment}</p>` : '';
                 constructionSitePhotosHTML += `
                     <div class="report-gallery-item">
-                        <img src="${photo.url}" alt="Baustellenfoto" class="report-image" data-url="${photo.url}">
+                        <img src="${photo.url}" alt="Baustellenfoto" class="report-image" data-url="${photo.url}" loading="lazy">
                         ${comment}
                     </div>
                 `;
@@ -1970,20 +2017,20 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
             constructionSitePhotosHTML += '</div></div>';
         }
 
-        // Lieferscheine/Rechnungen-HTML generieren
+        // Lieferscheine/Rechnungen-HTML generieren mit modernem Design
         let documentPhotosHTML = '';
         if (documentPhotos && documentPhotos.length > 0) {
             documentPhotosHTML = `
                 <div class="report-section">
-                    <h4>Lieferscheine & Rechnungen</h4>
+                    <h4><i class="fas fa-file-invoice"></i> Lieferscheine & Rechnungen (${documentPhotos.length})</h4>
                     <div class="report-gallery">
             `;
 
             for (const doc of documentPhotos) {
-                const comment = doc.comment ? `<p class="photo-comment">${doc.comment}</p>` : '';
+                const comment = doc.comment ? `<p class="photo-comment"><i class="fas fa-comment-dots"></i> ${doc.comment}</p>` : '';
                 documentPhotosHTML += `
                     <div class="report-gallery-item">
-                        <img src="${doc.url}" alt="Dokument" class="report-image" data-url="${doc.url}">
+                        <img src="${doc.url}" alt="Dokument" class="report-image" data-url="${doc.url}" loading="lazy">
                         ${comment}
                     </div>
                 `;
@@ -1992,49 +2039,53 @@ async function showTimeEntryReport(entryId, projectId, employeeId) {
             documentPhotosHTML += '</div></div>';
         }
 
-        // Modal-Inhalt zusammenstellen
+        // Modal-Inhalt zusammenstellen mit modernem Design
         reportModal.innerHTML = `
             <div class="modal-content large-modal">
                 <div class="modal-header">
-                    <h3>Detaillierter Arbeitsbericht</h3>
+                    <h3><i class="fas fa-clipboard-list"></i> Detaillierter Arbeitsbericht</h3>
                     <button type="button" class="close-modal-btn">&times;</button>
                 </div>
                 <div class="modal-body report-modal-body">
                     <div class="report-header">
                         <div class="report-info-grid">
                             <div class="report-info-item">
-                                <strong>Projekt:</strong>
-                                <span>${timeEntry.isVacationDay ? 'Urlaub' : (project ? project.name : 'Unbekanntes Projekt')}</span>
+                                <strong><i class="fas fa-project-diagram"></i> Projekt</strong>
+                                <span>${timeEntry.isVacationDay ? '🏖️ Urlaub' : (project ? project.name : 'Unbekanntes Projekt')}</span>
                             </div>
                             <div class="report-info-item">
-                                <strong>Mitarbeiter:</strong>
+                                <strong><i class="fas fa-user"></i> Mitarbeiter</strong>
                                 <span>${employee ? employee.name : 'Unbekannt'}</span>
                             </div>
                             <div class="report-info-item">
-                                <strong>Datum:</strong>
+                                <strong><i class="fas fa-calendar-day"></i> Datum</strong>
                                 <span>${date}</span>
                             </div>
                             <div class="report-info-item">
-                                <strong>Eingestempelt:</strong>
-                                <span>${timeIn}</span>
+                                <strong><i class="fas fa-sign-in-alt"></i> Eingestempelt</strong>
+                                <span>${timeIn} Uhr</span>
                             </div>
                             <div class="report-info-item">
-                                <strong>Ausgestempelt:</strong>
-                                <span>${timeOut}</span>
+                                <strong><i class="fas fa-sign-out-alt"></i> Ausgestempelt</strong>
+                                <span>${timeOut}${timeOut !== '-' ? ' Uhr' : ''}</span>
                             </div>
                             <div class="report-info-item">
-                                <strong>Arbeitszeit:</strong>
-                                <span>${workHoursDisplay}</span>
+                                <strong><i class="fas fa-clock"></i> Gesamtzeit</strong>
+                                <span>${totalTimeDisplay}</span>
                             </div>
+                        </div>
+                        <div class="work-hours-highlight">
+                            <i class="fas fa-business-time"></i> Arbeitszeit: ${workHoursDisplay}
                         </div>
                     </div>
 
+                    ${pauseDetailsHTML}
+
                     <div class="report-section">
-                        <h4>Notizen</h4>
-                        <p>${timeEntry.notes || 'Keine Notizen vorhanden'}</p>
+                        <h4><i class="fas fa-sticky-note"></i> Notizen</h4>
+                        <p>${timeEntry.notes || '<em class="empty-state">Keine Notizen vorhanden</em>'}</p>
                     </div>
 
-                    ${pauseDetailsHTML}
                     ${constructionSitePhotosHTML}
                     ${documentPhotosHTML}
                 </div>
