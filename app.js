@@ -1309,6 +1309,9 @@ function showClockedInState(project, timeEntry) {
             
         clockInTimeSpan.textContent = clockInTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         
+        // Fahrzeugbuchungen für heute laden
+        loadCurrentVehicleBookings();
+        
         // Prüfen, ob der Benutzer Dokumentationsberechtigung hat und entsprechenden Button anzeigen/ausblenden
         const currentUser = getCurrentUser();
         const extendedClockOutBtn = document.getElementById('extended-clock-out-btn');
@@ -1848,6 +1851,120 @@ function setupDualFilePreview(baseInputId, previewId) {
 // Pause-Funktion
 // Pause-Funktionen entfernt - automatische Pausenberechnung nach deutschen Gesetzen
 // wird beim Ausstempeln automatisch hinzugefügt
+
+// Fahrzeugbuchungen für den aktuellen Tag laden
+async function loadCurrentVehicleBookings() {
+    try {
+        const user = getCurrentUser();
+        const timeEntry = getCurrentTimeEntry();
+        
+        if (!user || !user.id || !timeEntry || !timeEntry.projectId) {
+            console.log('Keine aktive Zeiterfassung, überspringe Laden der Fahrzeugbuchungen');
+            return;
+        }
+        
+        console.log('Lade Fahrzeugbuchungen für Projekt:', timeEntry.projectId);
+        
+        // Heutiges Datum als String (gleich wie in der Buchung gespeichert)
+        const todayString = new Date().toISOString().split('T')[0]; // Format: "2025-10-07"
+        console.log('Suche Buchungen für Datum:', todayString);
+        
+        // ALLE Fahrzeugbuchungen für das Projekt laden
+        const allBookings = await DataService.getVehicleUsagesByProject(timeEntry.projectId);
+        console.log('Alle Buchungen für Projekt geladen:', allBookings.length);
+        
+        // Nach Mitarbeiter und heutigem Datum filtern
+        const myBookings = allBookings.filter(booking => {
+            // Datum extrahieren - kann String oder Date/Timestamp sein
+            let bookingDateString = '';
+            if (typeof booking.date === 'string') {
+                bookingDateString = booking.date;
+            } else if (booking.date instanceof Date) {
+                bookingDateString = booking.date.toISOString().split('T')[0];
+            } else if (booking.date && booking.date.toDate) {
+                // Firestore Timestamp
+                bookingDateString = booking.date.toDate().toISOString().split('T')[0];
+            }
+            
+            const isMyBooking = booking.employeeId === user.id;
+            const isToday = bookingDateString === todayString;
+            
+            console.log('Prüfe Buchung:', {
+                bookingId: booking.id,
+                employeeId: booking.employeeId,
+                isMyBooking,
+                bookingDate: bookingDateString,
+                todayDate: todayString,
+                isToday,
+                matches: isMyBooking && isToday
+            });
+            
+            return isMyBooking && isToday;
+        });
+        
+        console.log(`${myBookings.length} Fahrzeugbuchungen für heute gefunden`);
+        
+        // Anzeige aktualisieren
+        displayVehicleBookings(myBookings);
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Fahrzeugbuchungen:', error);
+    }
+}
+
+// Fahrzeugbuchungen in der UI anzeigen
+async function displayVehicleBookings(bookings) {
+    const bookingsListContainer = document.getElementById('vehicle-bookings-list');
+    
+    if (!bookingsListContainer) {
+        console.error('Container für Fahrzeugbuchungen nicht gefunden');
+        return;
+    }
+    
+    console.log('Zeige Fahrzeugbuchungen an:', bookings ? bookings.length : 0);
+    
+    // Container leeren
+    bookingsListContainer.innerHTML = '';
+    
+    if (!bookings || bookings.length === 0) {
+        console.log('Keine Buchungen vorhanden - zeige Standardtext');
+        bookingsListContainer.innerHTML = '<p class="no-bookings">Noch keine Fahrzeuge gebucht</p>';
+        return;
+    }
+    
+    // Fahrzeuge für Namen laden
+    const vehicles = await DataService.getAllVehicles();
+    const vehicleMap = {};
+    vehicles.forEach(v => {
+        vehicleMap[v.id] = v;
+    });
+    
+    // Buchungen anzeigen
+    for (const booking of bookings) {
+        const vehicle = vehicleMap[booking.vehicleId];
+        const vehicleName = vehicle ? vehicle.name : 'Unbekanntes Fahrzeug';
+        const vehicleType = vehicle ? vehicle.type : '';
+        
+        const bookingItem = document.createElement('div');
+        bookingItem.className = 'booking-item';
+        
+        let hoursText = '';
+        if (booking.hoursUsed || booking.hours) {
+            const hours = booking.hoursUsed || booking.hours;
+            hoursText = `${hours} Stunde${hours !== 1 ? 'n' : ''}`;
+        }
+        
+        bookingItem.innerHTML = `
+            <div class="booking-item-details">
+                <div class="booking-item-vehicle">${vehicleName}${vehicleType ? ` (${vehicleType})` : ''}</div>
+                ${hoursText ? `<div class="booking-item-hours">⏱️ ${hoursText}</div>` : ''}
+                ${booking.comment ? `<div class="booking-item-comment">${booking.comment}</div>` : ''}
+            </div>
+        `;
+        
+        bookingsListContainer.appendChild(bookingItem);
+    }
+}
 
 // App starten
 document.addEventListener('DOMContentLoaded', () => {

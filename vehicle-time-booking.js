@@ -216,6 +216,11 @@ async function submitVehicleTimeBooking(event) {
         if (result && result.id) {
             showNotification('Fahrzeugzeit erfolgreich gebucht!', 'success');
             closeVehicleTimeBookingModal();
+            
+            // Fahrzeugbuchungen-Liste aktualisieren
+            if (typeof loadCurrentVehicleBookings === 'function') {
+                loadCurrentVehicleBookings();
+            }
         } else {
             showNotification('Fehler beim Buchen der Fahrzeugzeit', 'error');
         }

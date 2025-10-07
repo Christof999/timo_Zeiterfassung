@@ -650,17 +650,19 @@
         body.employee-mode button[class*="report"],
         body.employee-mode button[onclick*="Report"],
         body.employee-mode button[onclick*="report"],
-        body.employee-mode button:not(.edit-entry-btn):not(.btn-primary):not(.btn-export) {
+        body.employee-mode button:not(.edit-entry-btn):not(.delete-entry-btn):not(.btn-primary):not(.btn-export) {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
         }
 
-        /* Verstecke Edit-Buttons für Nicht-Administratoren */
+        /* Verstecke Edit- und Löschen-Buttons für Nicht-Administratoren */
         body.employee-mode .edit-entry-btn,
+        body.employee-mode .delete-entry-btn,
         body.employee-mode .edit-btn,
-        body.employee-mode button[class*="edit"] {
+        body.employee-mode button[class*="edit"],
+        body.employee-mode button[class*="delete"] {
             display: none !important;
             visibility: hidden !important;
         }
@@ -680,6 +682,24 @@
         .edit-entry-btn:hover {
             background-color: #e0a800;
             border-color: #d39e00;
+            transform: translateY(-1px);
+        }
+
+        /* Delete Button Styles */
+        .delete-entry-btn {
+            background-color: #dc3545;
+            color: white;
+            border: 1px solid #dc3545;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .delete-entry-btn:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
             transform: translateY(-1px);
         }
 
@@ -715,10 +735,19 @@
         }
         
         /* Table Action Column Styles */
+        /* Erste Spalte - Bearbeitung */
+        #time-entries-table th:first-child,
+        #time-entries-table td:first-child {
+            text-align: center;
+            width: 100px;
+            white-space: nowrap;
+        }
+        
+        /* Letzte Spalte - Löschen */
         #time-entries-table th:last-child,
         #time-entries-table td:last-child {
             text-align: center;
-            width: 160px; /* Breitere Spalte für beide Buttons */
+            width: 100px;
             white-space: nowrap;
         }
         
@@ -814,6 +843,7 @@
                                 <th>Stempelzeit Ein</th>
                                 <th>Stempelzeit Aus</th>
                                 <th>Arbeitszeit</th>
+                                <th>Löschen</th>
                             </tr>
                         </thead>
                         <tbody id="time-entries-body">
@@ -1266,6 +1296,7 @@
                                 <th>Einstempelzeit</th>
                                 <th>Ausstempelzeit</th>
                                 <th>Arbeitszeit</th>
+                                <th>Löschen</th>
                             </tr>
                         </thead>
                         <tbody id="time-entries-body"></tbody>
@@ -1372,6 +1403,13 @@
                         </button>
                     `;
                     
+                    // Löschen-Button nur für Admins anzeigen (separate Spalte)
+                    const deleteButtonHtml = window.hideEditButtonsForEmployee ? '' : `
+                        <button class="btn small-btn delete-entry-btn" data-entry-id="${entry.id}" title="Zeiteintrag löschen" onclick="deleteTimeEntry('${entry.id}')">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    `;
+                    
                     row.innerHTML = `
                         <td>
                             ${editButtonHtml}
@@ -1381,6 +1419,9 @@
                         <td>${clockInTime}</td>
                         <td>${clockOutTime}</td>
                         <td>${workHours}</td>
+                        <td>
+                            ${deleteButtonHtml}
+                        </td>
                     `;
                     tableBody.appendChild(row);
                 });
@@ -1433,7 +1474,7 @@
             // Zusätzlich: alle Buttons in der Bearbeitungs-Spalte prüfen
             const editCells = document.querySelectorAll('#time-entries-table td:first-child');
             editCells.forEach(cell => {
-                const reportButtons = cell.querySelectorAll('button:not(.edit-entry-btn)');
+                const reportButtons = cell.querySelectorAll('button:not(.edit-entry-btn):not(.delete-entry-btn)');
                 reportButtons.forEach(button => {
                     if (button.textContent.toLowerCase().includes('bericht') || 
                         button.textContent.toLowerCase().includes('report')) {
@@ -2616,6 +2657,55 @@
         function closeEditTimeEntryModal() {
             document.getElementById('edit-time-entry-modal').classList.remove('visible');
             currentEditingEntry = null;
+        }
+        
+        // Zeiteintrag löschen mit Bestätigung
+        async function deleteTimeEntry(entryId) {
+            try {
+                console.log('Lösche Zeiteintrag:', entryId);
+                
+                // Zeiteintrag laden, um Details für die Bestätigung anzuzeigen
+                const timeEntry = await DataService.getTimeEntryById(entryId);
+                if (!timeEntry) {
+                    alert('Zeiteintrag nicht gefunden!');
+                    return;
+                }
+                
+                // Mitarbeiterdaten laden
+                const employee = await DataService.getEmployeeById(timeEntry.employeeId);
+                const employeeName = employee ? employee.name : 'Unbekannter Mitarbeiter';
+                
+                // Datum formatieren
+                const clockInDate = timeEntry.clockInTime instanceof firebase.firestore.Timestamp ? 
+                    timeEntry.clockInTime.toDate() : new Date(timeEntry.clockInTime);
+                const dateStr = clockInDate.toLocaleDateString('de-DE');
+                
+                // Bestätigung vom Benutzer einholen
+                const confirmMessage = `Möchten Sie diesen Zeiteintrag wirklich löschen?\n\n` +
+                    `Mitarbeiter: ${employeeName}\n` +
+                    `Datum: ${dateStr}\n\n` +
+                    `Diese Aktion kann nicht rückgängig gemacht werden!`;
+                
+                if (!confirm(confirmMessage)) {
+                    console.log('Löschen abgebrochen');
+                    return;
+                }
+                
+                // Zeiteintrag löschen
+                await DataService.deleteTimeEntry(entryId);
+                
+                // Erfolgsbenachrichtigung
+                alert('Zeiteintrag erfolgreich gelöscht!');
+                
+                // Tabelle neu laden
+                await loadTimeEntries();
+                
+                console.log('✅ Zeiteintrag erfolgreich gelöscht und Tabelle aktualisiert');
+                
+            } catch (error) {
+                console.error('Fehler beim Löschen des Zeiteintrags:', error);
+                alert('Fehler beim Löschen: ' + error.message);
+            }
         }
         
         // Validierung der Eingaben

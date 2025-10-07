@@ -563,6 +563,82 @@ input:focus, select:focus, textarea:focus {
     color: var(--primary-color);
 }
 
+/* Fahrzeugbuchungen Übersicht */
+.current-bookings-section {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.current-bookings-section h4 {
+    color: var(--primary-color);
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+}
+
+.bookings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.booking-item {
+    background-color: white;
+    padding: 10px 12px;
+    border-radius: 4px;
+    border-left: 4px solid var(--accent-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.booking-item-details {
+    flex: 1;
+}
+
+.booking-item-vehicle {
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 3px;
+}
+
+.booking-item-hours {
+    font-size: 0.9rem;
+    color: var(--dark-color);
+}
+
+.booking-item-comment {
+    font-size: 0.85rem;
+    color: var(--medium-gray);
+    margin-top: 3px;
+    font-style: italic;
+}
+
+.no-bookings {
+    color: var(--medium-gray);
+    font-style: italic;
+    text-align: center;
+    margin: 0;
+    padding: 10px;
+}
+
+/* Responsive für mobile Geräte */
+@media (max-width: 768px) {
+    .current-bookings-section {
+        padding: 12px;
+    }
+    
+    .current-bookings-section h4 {
+        font-size: 1rem;
+    }
+    
+    .booking-item {
+        padding: 8px 10px;
+    }
+}
+
 /* Button-Layout für Clock-Out-Buttons */
 .clock-out-buttons {
     display: flex;

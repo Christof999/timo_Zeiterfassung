@@ -1290,6 +1290,29 @@ const DataService = {
     }
   },
 
+  async deleteTimeEntry(timeEntryId) {
+    await this._authReadyPromise;
+    try {
+      if (!timeEntryId) {
+        throw new Error("Keine gültige Zeiteintrag-ID angegeben");
+      }
+      
+      console.log(`🗑️ Lösche Zeiteintrag mit ID: ${timeEntryId}`);
+      
+      // Zeiteintrag aus Firestore löschen
+      await this.timeEntriesCollection.doc(timeEntryId).delete();
+      
+      console.log(`✅ Zeiteintrag erfolgreich gelöscht (ID: ${timeEntryId})`);
+      return true;
+    } catch (error) {
+      console.error(
+        `❌ Fehler beim Löschen des Zeiteintrags mit ID ${timeEntryId}:`,
+        error
+      );
+      throw error;
+    }
+  },
+
   async getTimeEntriesByEmployeeId(employeeId, startDate = null, endDate = null) {
     await this._authReadyPromise;
     try {
