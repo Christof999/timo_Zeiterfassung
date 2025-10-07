@@ -111,8 +111,15 @@
                 </div>
 
                 <div id="clock-out-form" class="form-group hidden">
-                    <p>Aktives Projekt: <span id="active-project"></span></p>
-                    <p>Eingestempelt seit: <span id="clock-in-time"></span></p>
+                    <div class="active-project-info">
+                        <h3>Aktives Projekt</h3>
+                        <div class="project-details">
+                            <p class="project-name"><strong><span id="active-project"></span></strong></p>
+                            <p class="project-client">📋 Kunde: <span id="active-project-client">-</span></p>
+                            <p class="project-location">📍 Adresse: <span id="active-project-location">-</span></p>
+                        </div>
+                    </div>
+                    <p class="clock-in-info">⏱️ Eingestempelt seit: <span id="clock-in-time"></span></p>
                     <div class="clock-out-buttons">
                         <button id="simple-clock-out-btn" class="btn secondary-btn">Einfach Ausstempeln</button>
                         <button id="vehicle-time-booking-btn" class="btn info-btn">🚗 Fahrzeugzeit buchen</button>

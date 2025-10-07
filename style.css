@@ -502,6 +502,67 @@ input:focus, select:focus, textarea:focus {
     font-size: 0.9rem;
 }
 
+/* Aktives Projekt Informationsbox */
+.active-project-info {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.active-project-info h3 {
+    color: white;
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    font-size: 1.3rem;
+}
+
+.project-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.project-details p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+}
+
+.project-name {
+    font-size: 1.2rem;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.project-client,
+.project-location {
+    padding: 8px 0;
+}
+
+.project-client span,
+.project-location span {
+    margin-left: 5px;
+    font-weight: 500;
+}
+
+.clock-in-info {
+    background-color: var(--light-color);
+    padding: 12px 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+    text-align: center;
+    font-weight: 500;
+    color: var(--primary-color);
+}
+
 /* Button-Layout für Clock-Out-Buttons */
 .clock-out-buttons {
     display: flex;
@@ -521,6 +582,27 @@ input:focus, select:focus, textarea:focus {
 
 /* Responsive Layout für kleinere Bildschirme */
 @media (max-width: 768px) {
+    .active-project-info {
+        padding: 15px;
+    }
+    
+    .active-project-info h3 {
+        font-size: 1.1rem;
+    }
+    
+    .project-details p {
+        font-size: 0.95rem;
+    }
+    
+    .project-name {
+        font-size: 1.1rem;
+    }
+    
+    .clock-in-info {
+        font-size: 1rem;
+        padding: 10px 12px;
+    }
+    
     .clock-out-buttons {
         flex-direction: column;
     }

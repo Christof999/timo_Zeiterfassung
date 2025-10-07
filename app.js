@@ -1269,8 +1269,39 @@ function showClockedInState(project, timeEntry) {
         // Ausstempel-Formular anzeigen
         clockOutForm.classList.remove('hidden');
         
-        // Projektname und Einstempelzeit anzeigen
-        activeProjectSpan.textContent = project.name;
+        // Projektinformationen anzeigen
+        activeProjectSpan.textContent = project.name || 'Unbekanntes Projekt';
+        
+        // Kundenname anzeigen
+        const activeProjectClientSpan = document.getElementById('active-project-client');
+        if (activeProjectClientSpan) {
+            activeProjectClientSpan.textContent = project.client || 'Nicht angegeben';
+        }
+        
+        // Projektadresse anzeigen
+        // Die Adresse kann an mehreren Stellen gespeichert sein:
+        // 1. project.address (direkter String)
+        // 2. project.location.address (innerhalb des location-Objekts)
+        // 3. project.location (als String, Legacy)
+        const activeProjectLocationSpan = document.getElementById('active-project-location');
+        if (activeProjectLocationSpan) {
+            let locationText = 'Nicht angegeben';
+            
+            // Zuerst prüfen, ob es ein direktes address-Feld gibt
+            if (project.address && project.address.trim() !== '') {
+                locationText = project.address;
+            }
+            // Dann prüfen, ob location ein Objekt mit address ist
+            else if (project.location && typeof project.location === 'object' && project.location.address) {
+                locationText = project.location.address;
+            }
+            // Fallback: location als String (Legacy)
+            else if (project.location && typeof project.location === 'string' && project.location.trim() !== '') {
+                locationText = project.location;
+            }
+            
+            activeProjectLocationSpan.textContent = locationText;
+        }
         
         const clockInTime = timeEntry.clockInTime instanceof firebase.firestore.Timestamp 
             ? timeEntry.clockInTime.toDate() 

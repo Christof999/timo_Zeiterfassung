@@ -1525,14 +1525,17 @@ async function showEditProjectForm(id) {
         projectDescriptionInput.value = project.description || '';
         projectStatusInput.value = project.status;
         
-        // Wenn ein Standort vorhanden ist, setzen wir die Adresse und Koordinaten
-        if (project.location) {
-            document.getElementById('project-address').value = project.location.address || '';
+        // Adresse aus dem direkten address-Feld oder aus location laden
+        const addressValue = project.address || (project.location && project.location.address) || '';
+        document.getElementById('project-address').value = addressValue;
+        
+        // Wenn ein location-Objekt mit Koordinaten vorhanden ist, diese laden
+        if (project.location && project.location.latitude && project.location.longitude) {
             document.getElementById('project-latitude').value = project.location.latitude || '';
             document.getElementById('project-longitude').value = project.location.longitude || '';
             
             selectedLocation = {
-                address: project.location.address,
+                address: addressValue,
                 latitude: project.location.latitude,
                 longitude: project.location.longitude
             };
@@ -1545,7 +1548,7 @@ async function showEditProjectForm(id) {
                 projectMap.setCenter(position);
             }
         } else {
-            document.getElementById('project-address').value = '';
+            // Keine GPS-Koordinaten, nur Adresse vorhanden
             document.getElementById('project-latitude').value = '';
             document.getElementById('project-longitude').value = '';
             selectedLocation = null;
@@ -1583,6 +1586,12 @@ async function handleProjectFormSubmit(event) {
         const longitude = document.getElementById('project-longitude').value;
         const address = document.getElementById('project-address').value;
         
+        // Adresse als separates Feld speichern (auch ohne GPS-Koordinaten)
+        if (address && address.trim() !== '') {
+            projectData.address = address.trim();
+        }
+        
+        // Location-Objekt nur speichern, wenn GPS-Koordinaten vorhanden sind
         if (latitude && longitude) {
             projectData.location = {
                 address: address || '',
@@ -2020,15 +2029,21 @@ async function showProjectDetails(projectId) {
         };
         detailStatus.textContent = statusMap[project.status] || project.status;
         
-        // Standort anzeigen
+        // Standort anzeigen - prüfe verschiedene Speicherorte der Adresse
         let locationText = 'Nicht angegeben';
+        
+        // Adresse aus project.address oder project.location.address holen
+        const addressText = project.address || (project.location && project.location.address);
+        
         if (project.location && project.location.latitude && project.location.longitude) {
+            // Wenn GPS-Koordinaten vorhanden sind
             locationText = `${project.location.latitude.toFixed(6)}, ${project.location.longitude.toFixed(6)}`;
-            if (project.address) {
-                locationText = `${project.address} (${locationText})`;
+            if (addressText) {
+                locationText = `${addressText} (${locationText})`;
             }
-        } else if (project.address) {
-            locationText = project.address;
+        } else if (addressText) {
+            // Nur Adresse ohne GPS-Koordinaten
+            locationText = addressText;
         }
         detailLocation.textContent = locationText;
         
