@@ -284,6 +284,30 @@ async function generateEmployeeReport() {
                     projectName = project.name;
                 }
                 
+                // Pausenzeit ermitteln (zuerst, da wir sie für die Dauerberechnung brauchen)
+                let pauseTime = '-';
+                let pauseTimeMs = 0;
+                
+                // Pausenzeit aus verschiedenen Quellen ermitteln
+                if (entry.breaks && entry.breaks.length > 0) {
+                    const totalPauseMinutes = entry.breaks.reduce((total, breakItem) => {
+                        const start = breakItem.startTime?.toDate ? breakItem.startTime.toDate() : new Date(breakItem.startTime);
+                        const end = breakItem.endTime?.toDate ? breakItem.endTime.toDate() : new Date(breakItem.endTime);
+                        return total + (end - start) / (1000 * 60);
+                    }, 0);
+                    pauseTimeMs = totalPauseMinutes * 60 * 1000;
+                    pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
+                } else if (entry.pauseTotalTime) {
+                    // Pausenzeit in Millisekunden
+                    pauseTimeMs = entry.pauseTotalTime;
+                    const totalPauseMinutes = Math.floor(pauseTimeMs / (1000 * 60));
+                    pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
+                } else if (entry.pauseMinutes) {
+                    // Legacy: Pausenzeit in Minuten
+                    pauseTimeMs = entry.pauseMinutes * 60 * 1000;
+                    pauseTime = `${Math.floor(entry.pauseMinutes / 60)}h ${Math.round(entry.pauseMinutes % 60)}min`;
+                }
+                
                 // Dauer berechnen - Urlaubstage haben 0 Stunden
                 let duration = '-';
                 let durationHours = 0;
@@ -293,21 +317,16 @@ async function generateEmployeeReport() {
                     duration = '0.00 h (Urlaub)';
                     durationHours = 0;
                 } else if (clockOutTime) {
-                    durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
+                    // Gesamtzeit minus Pausenzeit = tatsächliche Arbeitszeit
+                    const totalTimeMs = clockOutTime - clockInTime;
+                    const actualWorkTimeMs = totalTimeMs - pauseTimeMs;
+                    durationHours = actualWorkTimeMs / (1000 * 60 * 60);
+                    
+                    // Negative Werte verhindern (falls Pause länger als Arbeitszeit)
+                    if (durationHours < 0) durationHours = 0;
+                    
                     duration = durationHours.toFixed(2) + ' h';
                     totalHours += durationHours;
-                }
-                
-                // Pausenzeit ermitteln
-                let pauseTime = '-';
-                if (entry.breaks && entry.breaks.length > 0) {
-                    const totalPauseMinutes = entry.breaks.reduce((total, breakItem) => {
-                        const start = breakItem.startTime?.toDate ? breakItem.startTime.toDate() : new Date(breakItem.startTime);
-                        const end = breakItem.endTime?.toDate ? breakItem.endTime.toDate() : new Date(breakItem.endTime);
-                        return total + (end - start) / (1000 * 60);
-                    }, 0);
-                    
-                    pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
                 }
                 
                 // Zeile mit Daten füllen (mit bearbeitbaren Zellen)
@@ -393,26 +412,44 @@ function exportEmployeeReport() {
                 const clockInTime = entry.clockInTime?.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
                 const clockOutTime = entry.clockOutTime ? (entry.clockOutTime.toDate ? entry.clockOutTime.toDate() : new Date(entry.clockOutTime)) : null;
                 
-                // Dauer berechnen - Urlaubstage haben 0 Stunden
-                let duration = '';
-                if (entry.isVacationDay) {
-                    // Urlaubstag: 0 Arbeitsstunden
-                    duration = '0.00 (Urlaub)';
-                } else if (clockOutTime) {
-                    const durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
-                    duration = durationHours.toFixed(2);
-                }
-                
-                // Pausenzeit berechnen
+                // Pausenzeit berechnen (zuerst, da wir sie für die Dauerberechnung brauchen)
                 let pauseTime = '';
+                let pauseTimeMs = 0;
+                
                 if (entry.breaks && entry.breaks.length > 0) {
                     const totalPauseMinutes = entry.breaks.reduce((total, breakItem) => {
                         const start = breakItem.startTime?.toDate ? breakItem.startTime.toDate() : new Date(breakItem.startTime);
                         const end = breakItem.endTime?.toDate ? breakItem.endTime.toDate() : new Date(breakItem.endTime);
                         return total + (end - start) / (1000 * 60);
                     }, 0);
-                    
+                    pauseTimeMs = totalPauseMinutes * 60 * 1000;
                     pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
+                } else if (entry.pauseTotalTime) {
+                    // Pausenzeit in Millisekunden
+                    pauseTimeMs = entry.pauseTotalTime;
+                    const totalPauseMinutes = Math.floor(pauseTimeMs / (1000 * 60));
+                    pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
+                } else if (entry.pauseMinutes) {
+                    // Legacy: Pausenzeit in Minuten
+                    pauseTimeMs = entry.pauseMinutes * 60 * 1000;
+                    pauseTime = `${Math.floor(entry.pauseMinutes / 60)}h ${Math.round(entry.pauseMinutes % 60)}min`;
+                }
+                
+                // Dauer berechnen - Urlaubstage haben 0 Stunden, Pausenzeit wird abgezogen
+                let duration = '';
+                if (entry.isVacationDay) {
+                    // Urlaubstag: 0 Arbeitsstunden
+                    duration = '0.00 (Urlaub)';
+                } else if (clockOutTime) {
+                    // Gesamtzeit minus Pausenzeit = tatsächliche Arbeitszeit
+                    const totalTimeMs = clockOutTime - clockInTime;
+                    const actualWorkTimeMs = totalTimeMs - pauseTimeMs;
+                    let durationHours = actualWorkTimeMs / (1000 * 60 * 60);
+                    
+                    // Negative Werte verhindern
+                    if (durationHours < 0) durationHours = 0;
+                    
+                    duration = durationHours.toFixed(2);
                 }
                 
                 // Projektname - Urlaubstage speziell behandeln
@@ -658,8 +695,8 @@ function finishEditing(cell, inputElement, field, entryId) {
         cell.appendChild(indicator);
     }
     
-    // Dauer neu berechnen wenn Zeit geändert wurde
-    if (field === 'clockInTime' || field === 'clockOutTime') {
+    // Dauer neu berechnen wenn Zeit oder Pause geändert wurde
+    if (field === 'clockInTime' || field === 'clockOutTime' || field === 'pauseTime') {
         recalculateDuration(row, entryId);
     }
     
@@ -684,10 +721,12 @@ function cancelEditing(cell, originalValue) {
 function recalculateDuration(row, entryId) {
     const clockInCell = row.querySelector('[data-field="clockInTime"]');
     const clockOutCell = row.querySelector('[data-field="clockOutTime"]');
+    const pauseCell = row.querySelector('[data-field="pauseTime"]');
     const durationCell = row.querySelector('.duration-cell');
     
     const clockInText = clockInCell.textContent.trim();
     const clockOutText = clockOutCell.textContent.trim();
+    const pauseText = pauseCell ? pauseCell.textContent.trim() : '-';
     
     if (clockInText !== '-' && clockOutText !== '-') {
         try {
@@ -695,12 +734,31 @@ function recalculateDuration(row, entryId) {
             const clockOutTime = parseTimeString(clockOutText);
             
             if (clockInTime && clockOutTime) {
-                let durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
+                let totalTimeMs = clockOutTime - clockInTime;
                 
                 // Behandlung von Tageswechseln (negative Dauer bedeutet Übernachtarbeit)
-                if (durationHours < 0) {
-                    durationHours += 24; // Füge 24 Stunden hinzu für Tageswechsel
+                if (totalTimeMs < 0) {
+                    totalTimeMs += 24 * 60 * 60 * 1000; // Füge 24 Stunden hinzu für Tageswechsel
                 }
+                
+                // Pausenzeit auslesen und abziehen
+                let pauseTimeMs = 0;
+                if (pauseText !== '-') {
+                    // Pausenzeit im Format "Xh Ymin" parsen
+                    const pauseMatch = pauseText.match(/(\d+)h\s*(\d+)min/);
+                    if (pauseMatch) {
+                        const hours = parseInt(pauseMatch[1]) || 0;
+                        const minutes = parseInt(pauseMatch[2]) || 0;
+                        pauseTimeMs = (hours * 60 + minutes) * 60 * 1000;
+                    }
+                }
+                
+                // Tatsächliche Arbeitszeit = Gesamtzeit - Pausenzeit
+                const actualWorkTimeMs = totalTimeMs - pauseTimeMs;
+                let durationHours = actualWorkTimeMs / (1000 * 60 * 60);
+                
+                // Negative Werte verhindern
+                if (durationHours < 0) durationHours = 0;
                 
                 const displayDuration = durationHours > 0 ? durationHours.toFixed(2) + ' h' : '-';
                 durationCell.textContent = displayDuration;
