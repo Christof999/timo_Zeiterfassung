@@ -1387,6 +1387,9 @@
                                     const hours = Math.floor(totalMinutes / 60);
                                     const minutes = totalMinutes % 60;
                                     workHours = `${hours}h ${minutes}min`;
+                                } else if (entry.isVacationDay) {
+                                    // Urlaubstag: 0 Stunden, aber erkennbar markieren
+                                    workHours = '0h (Urlaub)';
                                 }
                             }
                         }
@@ -1695,7 +1698,8 @@
                     
                     // Arbeitszeit berechnen
                     let workHours = 0;
-                    if (entry.clockInTime && entry.clockOutTime) {
+                    if (entry.clockInTime && entry.clockOutTime && !entry.isVacationDay) {
+                        // Urlaubstage werden übersprungen (0 Stunden)
                         const inTime = entry.clockInTime instanceof firebase.firestore.Timestamp ? 
                             entry.clockInTime.toDate() : new Date(entry.clockInTime);
                         
@@ -1703,13 +1707,18 @@
                             entry.clockOutTime.toDate() : new Date(entry.clockOutTime);
                         
                         // Berechne die Arbeitsstunden als Differenz, berücksichtige Pause
+                        // pauseTotalTime ist in Millisekunden, pauseMinutes in Minuten (Legacy)
+                        const pauseTotalTimeMs = entry.pauseTotalTime || 0;
                         const pauseMinutes = entry.pauseMinutes || 0;
+                        const pauseMs = pauseTotalTimeMs || (pauseMinutes * 60 * 1000);
+                        
                         const diffMs = outTime.getTime() - inTime.getTime();
-                        const diffHours = diffMs / (1000 * 60 * 60); // Millisekunden in Stunden
-                        workHours = diffHours - (pauseMinutes / 60); // Pause abziehen (in Stunden)
+                        const actualWorkMs = diffMs - pauseMs;
+                        workHours = actualWorkMs / (1000 * 60 * 60); // Millisekunden in Stunden
                         
                         if (workHours < 0) workHours = 0; // Negativ verhindern
                     }
+                    // Für Urlaubstage bleibt workHours = 0
                     
                     // Mitarbeiterdaten abrufen, falls nicht vorhanden
                     if (!employeeData[entry.employeeId]) {

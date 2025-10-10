@@ -3305,13 +3305,19 @@ const DataService = {
           // Prüfen, ob es sich um einen Arbeitstag handelt
           if (this.isWorkingDay(currentDate)) {
             // Zeiteintrag für den Urlaubstag erstellen
+            // Beide Zeiten auf 8:00 Uhr setzen = 0 Arbeitsstunden
+            // Der Steuerberater übernimmt die Urlaubszeit-Verwaltung
+            const vacationTime = new Date(currentDate);
+            vacationTime.setHours(8, 0, 0, 0);
+            
             const timeEntry = {
               employeeId: leaveRequest.employeeId,
               date: new Date(currentDate),
-              clockInTime: new Date(currentDate.setHours(8, 0, 0)), // 8:00 Uhr
-              clockOutTime: new Date(currentDate.setHours(16, 0, 0)), // 16:00 Uhr
+              clockInTime: new Date(vacationTime), // 8:00 Uhr
+              clockOutTime: new Date(vacationTime), // 8:00 Uhr (gleiche Zeit = 0 Stunden)
               notes: `Genehmigter Urlaub (Antrag #${id})`,
               isVacationDay: true, // Markierung als Urlaubstag
+              pauseTotalTime: 0, // Keine Pause
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             

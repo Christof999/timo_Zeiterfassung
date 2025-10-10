@@ -275,14 +275,24 @@ async function generateEmployeeReport() {
                 const clockInTime = entry.clockInTime?.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
                 const clockOutTime = entry.clockOutTime ? (entry.clockOutTime.toDate ? entry.clockOutTime.toDate() : new Date(entry.clockOutTime)) : null;
                 
-                // Projekt ermitteln
-                const project = projectMap[entry.projectId] || { name: 'Unbekannt' };
+                // Projekt ermitteln - Urlaubstage speziell behandeln
+                let projectName = 'Unbekannt';
+                if (entry.isVacationDay) {
+                    projectName = 'Urlaub';
+                } else {
+                    const project = projectMap[entry.projectId] || { name: 'Unbekannt' };
+                    projectName = project.name;
+                }
                 
-                // Dauer berechnen
+                // Dauer berechnen - Urlaubstage haben 0 Stunden
                 let duration = '-';
                 let durationHours = 0;
                 
-                if (clockOutTime) {
+                if (entry.isVacationDay) {
+                    // Urlaubstag: 0 Arbeitsstunden (Steuerberater verwaltet Urlaubszeit)
+                    duration = '0.00 h (Urlaub)';
+                    durationHours = 0;
+                } else if (clockOutTime) {
                     durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
                     duration = durationHours.toFixed(2) + ' h';
                     totalHours += durationHours;
@@ -306,7 +316,7 @@ async function generateEmployeeReport() {
                 
                 row.innerHTML = `
                     <td>${formatDate(clockInTime)}</td>
-                    <td>${project.name}</td>
+                    <td>${projectName}</td>
                     <td class="editable-cell time-cell" data-field="clockInTime" data-entry-id="${entryId}">${formatTime(clockInTime)}</td>
                     <td class="editable-cell time-cell" data-field="clockOutTime" data-entry-id="${entryId}">${clockOutTime ? formatTime(clockOutTime) : '-'}</td>
                     <td class="duration-cell">${duration}</td>
@@ -383,9 +393,12 @@ function exportEmployeeReport() {
                 const clockInTime = entry.clockInTime?.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
                 const clockOutTime = entry.clockOutTime ? (entry.clockOutTime.toDate ? entry.clockOutTime.toDate() : new Date(entry.clockOutTime)) : null;
                 
-                // Dauer berechnen
+                // Dauer berechnen - Urlaubstage haben 0 Stunden
                 let duration = '';
-                if (clockOutTime) {
+                if (entry.isVacationDay) {
+                    // Urlaubstag: 0 Arbeitsstunden
+                    duration = '0.00 (Urlaub)';
+                } else if (clockOutTime) {
                     const durationHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
                     duration = durationHours.toFixed(2);
                 }
@@ -402,12 +415,12 @@ function exportEmployeeReport() {
                     pauseTime = `${Math.floor(totalPauseMinutes / 60)}h ${Math.round(totalPauseMinutes % 60)}min`;
                 }
                 
-                // Projektname laden (asynchron, daher vorläufig die ID)
-                const projectId = entry.projectId || '';
+                // Projektname - Urlaubstage speziell behandeln
+                const projectId = entry.isVacationDay ? 'Urlaub' : (entry.projectId || '');
                 
                 return [
                     formatDate(clockInTime),
-                    projectId, // Wird später durch den Projektnamen ersetzt
+                    projectId, // Wird später durch den Projektnamen ersetzt (außer bei "Urlaub")
                     formatTime(clockInTime),
                     clockOutTime ? formatTime(clockOutTime) : '',
                     duration,
@@ -425,10 +438,12 @@ function exportEmployeeReport() {
                     if (project) projectMap[project.id] = project.name;
                 });
                 
-                // Projekt-IDs durch Namen ersetzen
+                // Projekt-IDs durch Namen ersetzen (außer "Urlaub")
                 csvData.forEach(row => {
                     const projectId = row[1];
-                    row[1] = projectMap[projectId] || 'Unbekannt';
+                    if (projectId !== 'Urlaub') {
+                        row[1] = projectMap[projectId] || 'Unbekannt';
+                    }
                 });
                 
                 // CSV-String erstellen

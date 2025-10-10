@@ -540,7 +540,11 @@ async function showTimeEntryReport(timeEntryId, projectId, employeeId) {
                     totalTimeDisplay = `${totalHours}h ${totalMinutes}min`;
                     
                     // Arbeitszeit berechnen (ohne Pause)
-                    if (totalTimeMs > 0) {
+                    if (timeEntry.isVacationDay) {
+                        // Urlaubstag: 0 Arbeitsstunden (Steuerberater verwaltet Urlaubszeit)
+                        workHours = '0h 0min (Urlaub)';
+                        console.log('  Urlaubstag erkannt - Arbeitszeit: 0h');
+                    } else if (totalTimeMs > 0) {
                         const actualWorkTimeMs = totalTimeMs - pauseTotalTime;
                         const workHours_calc = Math.floor(actualWorkTimeMs / (1000 * 60 * 60));
                         const workMinutes = Math.floor((actualWorkTimeMs % (1000 * 60 * 60)) / (1000 * 60));
