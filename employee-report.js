@@ -10,6 +10,17 @@ let currentEndDate = null;
 let currentReportEntries = [];
 let totalHours = 0;
 
+/**
+ * Konvertiert Dezimalstunden in Stunden:Minuten Format
+ * @param {number} decimalHours - Stunden als Dezimalzahl (z.B. 12.88)
+ * @returns {string} - Formatierte Zeit als "12:53 h"
+ */
+function formatHoursToHHMM(decimalHours) {
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')} h`;
+}
+
 // Bearbeitungsmodus Variablen
 let isEditModeActive = false;
 let editedEntries = new Map(); // Speichert temporäre Änderungen
@@ -325,7 +336,7 @@ async function generateEmployeeReport() {
                     // Negative Werte verhindern (falls Pause länger als Arbeitszeit)
                     if (durationHours < 0) durationHours = 0;
                     
-                    duration = durationHours.toFixed(2) + ' h';
+                    duration = formatHoursToHHMM(durationHours);
                     totalHours += durationHours;
                 }
                 
@@ -354,7 +365,7 @@ async function generateEmployeeReport() {
         
         // Zusammenfassung aktualisieren
         reportSummary.innerHTML = `
-            <p><strong>Gesamtstunden:</strong> ${totalHours.toFixed(2)} h</p>
+            <p><strong>Gesamtstunden:</strong> ${formatHoursToHHMM(totalHours)}</p>
             <p><strong>Anzahl Einträge:</strong> ${currentReportEntries.length}</p>
         `;
         
@@ -493,7 +504,7 @@ function exportEmployeeReport() {
                 csvContent += '\n';
                 csvContent += `Mitarbeiter;${employeeName}\n`;
                 csvContent += `Zeitraum;${formatDate(currentStartDate)} bis ${formatDate(currentEndDate)}\n`;
-                csvContent += `Gesamtstunden;${totalHours.toFixed(2)}\n`;
+                csvContent += `Gesamtstunden;${formatHoursToHHMM(totalHours)}\n`;
                 csvContent += `Anzahl Einträge;${currentReportEntries.length}\n`;
                 
                 // CSV-Datei herunterladen
@@ -760,7 +771,7 @@ function recalculateDuration(row, entryId) {
                 // Negative Werte verhindern
                 if (durationHours < 0) durationHours = 0;
                 
-                const displayDuration = durationHours > 0 ? durationHours.toFixed(2) + ' h' : '-';
+                const displayDuration = durationHours > 0 ? formatHoursToHHMM(durationHours) : '-';
                 durationCell.textContent = displayDuration;
             }
         } catch (error) {
@@ -781,10 +792,20 @@ function recalculateTotalHours() {
     
     durationCells.forEach(cell => {
         const text = cell.textContent.trim();
-        if (text !== '-') {
-            const hours = parseFloat(text.replace(' h', ''));
-            if (!isNaN(hours)) {
-                total += hours;
+        if (text !== '-' && !text.includes('Urlaub')) {
+            // Format kann sein: "12:53 h" oder "12.88 h" (Legacy)
+            const timeMatch = text.match(/(\d+):(\d+)\s*h/);
+            if (timeMatch) {
+                // Neues Format: "12:53 h"
+                const hours = parseInt(timeMatch[1]);
+                const minutes = parseInt(timeMatch[2]);
+                total += hours + (minutes / 60);
+            } else {
+                // Legacy Format: "12.88 h"
+                const hours = parseFloat(text.replace(' h', ''));
+                if (!isNaN(hours)) {
+                    total += hours;
+                }
             }
         }
     });
@@ -793,7 +814,7 @@ function recalculateTotalHours() {
     const reportSummary = document.getElementById('employee-report-summary');
     if (reportSummary) {
         reportSummary.innerHTML = `
-            <p><strong>Gesamtstunden:</strong> ${total.toFixed(2)} h</p>
+            <p><strong>Gesamtstunden:</strong> ${formatHoursToHHMM(total)}</p>
             <p><strong>Anzahl Einträge:</strong> ${currentReportEntries.length}</p>
             ${editedEntries.size > 0 ? `<p><strong>Bearbeitete Einträge:</strong> ${editedEntries.size}</p>` : ''}
         `;
@@ -888,4 +909,58 @@ function updateResetButton() {
     if (resetBtn) {
         resetBtn.style.display = editedEntries.size > 0 ? 'inline-block' : 'none';
     }
+}
+
+/**
+ * Druckt den Bericht mit Ladeindikator
+ */
+function printEmployeeReport() {
+    // Prüfen, ob Berichtsdaten vorhanden sind
+    if (currentReportEntries.length === 0) {
+        alert('Keine Daten zum Drucken vorhanden.');
+        return;
+    }
+    
+    // Ladeindikator erstellen
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.id = 'print-loading-indicator';
+    loadingIndicator.style.position = 'fixed';
+    loadingIndicator.style.top = '0';
+    loadingIndicator.style.left = '0';
+    loadingIndicator.style.width = '100%';
+    loadingIndicator.style.height = '100%';
+    loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    loadingIndicator.style.display = 'flex';
+    loadingIndicator.style.justifyContent = 'center';
+    loadingIndicator.style.alignItems = 'center';
+    loadingIndicator.style.zIndex = '9999';
+    loadingIndicator.innerHTML = `
+        <div style="background-color: white; padding: 30px; border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+            <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #4A7C59; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <h3 style="margin-top: 20px; color: #333;">Druckvorschau wird vorbereitet...</h3>
+            <p style="color: #666; margin-top: 10px;">Bitte warten Sie einen Moment.</p>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
+    document.body.appendChild(loadingIndicator);
+    
+    // Kurze Verzögerung, damit der Ladeindikator sichtbar wird
+    setTimeout(() => {
+        try {
+            // Druckdialog öffnen
+            window.print();
+        } finally {
+            // Ladeindikator nach kurzer Verzögerung entfernen
+            setTimeout(() => {
+                if (document.body.contains(loadingIndicator)) {
+                    document.body.removeChild(loadingIndicator);
+                }
+            }, 500);
+        }
+    }, 100);
 }
