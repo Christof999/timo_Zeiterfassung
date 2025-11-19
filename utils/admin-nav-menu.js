@@ -25,6 +25,12 @@
         // Toggle-Button Event Listener
         adminNavToggle.addEventListener('click', toggleAdminMenu);
         
+        // Schließen-Button im Menü (X-Button)
+        const closeButton = adminNavMenu.querySelector('.admin-menu-close');
+        if (closeButton) {
+            closeButton.addEventListener('click', closeAdminMenu);
+        }
+        
         // Schließen wenn außerhalb geklickt wird
         document.addEventListener('click', handleOutsideClick);
         
@@ -69,6 +75,7 @@
     function openAdminMenu() {
         adminNavToggle.classList.add('active');
         adminNavMenu.classList.add('active');
+        document.body.classList.add('admin-menu-open'); // Klasse für CSS-Selektor
         document.body.style.overflow = 'hidden'; // Verhindert Scrollen im Hintergrund
         isAdminMenuOpen = true;
     }
@@ -79,6 +86,7 @@
     function closeAdminMenu() {
         adminNavToggle.classList.remove('active');
         adminNavMenu.classList.remove('active');
+        document.body.classList.remove('admin-menu-open'); // Klasse entfernen
         document.body.style.overflow = ''; // Ermöglicht Scrollen wieder
         isAdminMenuOpen = false;
     }

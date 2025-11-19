@@ -69,17 +69,21 @@
     <script src="data.js"></script>
     <!-- Alle Funktionen direkt in dieser Datei, keine externen Abhängigkeiten -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="admin.css">
     <link rel="stylesheet" href="report-styles.css">
     
     <style>
-        /* Verbessertes CSS für die Darstellung - an Lauffer-Design angepasst */
+        /* Apple-inspiriertes Design für project-simple.html */
         body {
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f8f9fa;
-            color: #333;
-            line-height: 1.6;
+            background-color: var(--light-color);
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         
         .header-container {
@@ -87,7 +91,7 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 0.5px solid var(--border-color);
             padding-bottom: 15px;
         }
         
@@ -99,87 +103,124 @@
         
         h1, h2, h3 {
             margin-top: 0;
-            color: #446d23; /* Lauffer-Grün für Überschriften */
+            color: var(--text-color);
             font-weight: 600;
         }
         
         h1 {
             margin-bottom: 1rem;
-            color: #5e8c2f; /* Helleres Grün für H1 */
-            border-bottom: 2px solid #5e8c2f;
+            font-size: 28px;
+            border-bottom: 0.5px solid var(--border-color);
             padding-bottom: 10px;
+        }
+        
+        h2 {
+            font-size: 22px;
+            margin-bottom: 15px;
         }
         
         .container {
             max-width: 1200px;
             margin: 20px auto;
             padding: 25px;
-            background-color: white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            border-radius: 0px;
-            border-top: 5px solid #5e8c2f; /* Grüner Rand oben */
+            background-color: var(--card-background);
+            box-shadow: var(--shadow);
+            border-radius: 12px;
+            border: 0.5px solid var(--border-color);
         }
         
         .info-box {
-            background-color: #f5f9ee; /* Helles Grün für Info-Box */
-            border-left: 5px solid #5e8c2f;
+            background-color: var(--light-color);
+            border-left: 3px solid var(--primary-color);
             padding: 15px;
             margin-bottom: 20px;
-            border-radius: 0 4px 4px 0;
+            border-radius: 8px;
         }
         
         .btn {
             display: inline-block;
-            background-color: #5e8c2f; /* Grün für Buttons */
+            background-color: var(--primary-color);
             color: white;
-            padding: 8px 16px;
+            padding: 10px 20px;
             text-decoration: none;
-            border-radius: 2px;
-            font-weight: 600;
-            transition: background-color 0.3s ease;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
             border: none;
             cursor: pointer;
             margin: 5px 0;
+            font-size: 16px;
         }
         
         .btn:hover {
-            background-color: #446d23; /* Dunkleres Grün für Hover */
+            background-color: #2AB550;
+            opacity: 0.9;
+        }
+        
+        .btn:active {
+            opacity: 0.8;
+            transform: scale(0.98);
+        }
+        
+        .btn.btn-primary {
+            background-color: var(--primary-color);
+        }
+        
+        .btn.btn-secondary {
+            background-color: var(--light-color);
+            color: var(--text-color);
+            border: 0.5px solid var(--border-color);
+        }
+        
+        .btn.btn-secondary:hover {
+            background-color: #E5E5EA;
         }
         
         .btn.btn-export {
-            background-color: #8b5a2b; /* Braun für Export-Button */
+            background-color: var(--light-color);
+            color: var(--text-color);
+            border: 0.5px solid var(--border-color);
         }
         
         .btn.btn-export:hover {
-            background-color: #704820; /* Dunkleres Braun für Hover */
+            background-color: #E5E5EA;
         }
         
         table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             margin: 20px 0;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-            border: 1px solid #e0e0e0;
+            box-shadow: var(--shadow);
+            border: 0.5px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: var(--card-background);
         }
         
         th, td {
-            border: 1px solid #e0e0e0;
-            padding: 10px 12px;
+            border-bottom: 0.5px solid var(--border-color);
+            padding: 12px 16px;
             text-align: left;
         }
         
         th {
-            background-color: #5e8c2f; /* Grün für Tabellenkopf */
-            color: white;
+            background-color: var(--light-color);
+            color: var(--text-color);
             font-weight: 600;
+            font-size: 14px;
         }
         
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: var(--card-background);
         }
         
         tr:hover {
-            background-color: #f5f9ee; /* Leicht grünlicher Hover */
+            background-color: var(--light-color);
+        }
+        
+        tbody tr:last-child td {
+            border-bottom: none;
         }
         
         section {
@@ -854,11 +895,13 @@
             </section>
             
             <section>
-                <h2><i class="fas fa-car"></i> Fahrzeugbuchungen</h2>
-                <div class="admin-controls" id="admin-vehicle-usage-controls">
-                    <button id="add-vehicle-usage-btn" class="btn btn-primary" title="Neue Fahrzeugbuchung erstellen">
-                        <i class="fas fa-plus-circle"></i> Fahrzeugbuchung hinzufügen
-                    </button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2><i class="fas fa-car"></i> Fahrzeugbuchungen</h2>
+                    <div class="admin-controls" id="admin-vehicle-usage-controls">
+                        <button id="add-vehicle-booking-btn" class="btn btn-primary" title="Neue Fahrzeugbuchung erstellen">
+                            <i class="fas fa-plus"></i> Fahrzeugbuchung hinzufügen
+                        </button>
+                    </div>
                 </div>
                 <div id="vehicle-usages-container">
                     <p>Fahrzeugbuchungen werden geladen...</p>
@@ -1209,6 +1252,19 @@
                 
                 console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
                 
+                // Event-Listener für Button zum Hinzufügen von Fahrzeugbuchungen
+                const addVehicleBookingBtn = document.getElementById('add-vehicle-booking-btn');
+                if (addVehicleBookingBtn) {
+                    // Entferne eventuelle alte Event-Listener
+                    const newBtn = addVehicleBookingBtn.cloneNode(true);
+                    addVehicleBookingBtn.parentNode.replaceChild(newBtn, addVehicleBookingBtn);
+                    // Neuen Event-Listener hinzufügen
+                    newBtn.addEventListener('click', openAddVehicleBookingModal);
+                    console.log('Event-Listener für Fahrzeugbuchungs-Button hinzugefügt');
+                } else {
+                    console.warn('Button add-vehicle-booking-btn nicht gefunden');
+                }
+                
                 // Report-Button-Überwachung für normale Mitarbeiter starten
                 if (document.body.classList.contains('employee-mode')) {
                     console.log('🔒 Starte Report-Button-Überwachung für Mitarbeiter');
@@ -1550,48 +1606,77 @@
         }
         
         // Bilder laden
-        // Fahrzeugbuchungen laden
+        // Fahrzeugbuchungen laden (Stunden-basiert)
         async function loadVehicleUsages() {
             try {
                 const vehicleUsagesContainer = document.getElementById('vehicle-usages-container');
                 vehicleUsagesContainer.innerHTML = '<p>Fahrzeugbuchungen werden geladen...</p>';
                 
-                // Fahrzeugbuchungen über DataService laden
-                const vehicleUsages = await DataService.getVehicleUsagesForProject(projectId);
+                // Fahrzeugbuchungen über DataService laden - verwende getVehicleUsagesForProject wie in der Nachkalkulation
+                // und filtere dann nach direkten Buchungen
+                const allBookings = await DataService.getVehicleUsagesForProject(projectId);
+                console.log(`Alle Fahrzeugbuchungen geladen: ${allBookings.length}`);
                 
-                if (!vehicleUsages || vehicleUsages.length === 0) {
-                    console.log('Keine Fahrzeugbuchungen gefunden');
+                // Nur direkte Buchungen anzeigen (isDirectBooking === true)
+                const directBookings = allBookings.filter(booking => booking.isDirectBooking === true);
+                console.log(`Direkte Fahrzeugbuchungen: ${directBookings.length}`);
+                
+                const employees = await DataService.getAllActiveEmployees();
+                const vehicles = await DataService.getAllVehicles();
+                
+                // Maps für schnellen Zugriff
+                const employeeMap = {};
+                employees.forEach(emp => employeeMap[emp.id] = emp);
+                
+                const vehicleMap = {};
+                vehicles.forEach(veh => vehicleMap[veh.id] = veh);
+                
+                if (!directBookings || directBookings.length === 0) {
+                    console.log('Keine direkten Fahrzeugbuchungen gefunden');
                     vehicleUsagesContainer.innerHTML = '<p>Keine Fahrzeugbuchungen vorhanden.</p>';
                     return;
                 }
                 
-                console.log(`${vehicleUsages.length} Fahrzeugbuchungen gefunden`);
+                console.log(`${directBookings.length} Fahrzeugbuchungen gefunden`);
                 
                 // Nach Datum sortieren (neueste zuerst)
-                vehicleUsages.sort((a, b) => {
-                    // Sichere Konvertierung für verschiedene Timestamp-Formate
+                directBookings.sort((a, b) => {
                     const getDateFromTimestamp = (timestamp) => {
                         if (!timestamp) return new Date(0);
+                        // Firestore Timestamp
                         if (timestamp instanceof firebase.firestore.Timestamp) return timestamp.toDate();
                         if (timestamp.seconds) return new Date(timestamp.seconds * 1000);
+                        // String im Format YYYY-MM-DD
+                        if (typeof timestamp === 'string') {
+                            // Prüfe ob es ein ISO-String ist oder YYYY-MM-DD Format
+                            if (timestamp.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                return new Date(timestamp + 'T00:00:00');
+                            }
+                            return new Date(timestamp);
+                        }
+                        // Date-Objekt
+                        if (timestamp instanceof Date) return timestamp;
+                        // Fallback
                         return new Date(timestamp);
                     };
                     
                     const dateA = getDateFromTimestamp(a.date);
                     const dateB = getDateFromTimestamp(b.date);
                     
-                    return dateB - dateA; // Absteigend (neueste zuerst)
+                    return dateB.getTime() - dateA.getTime(); // Absteigend (neueste zuerst)
                 });
                 
-                // Tabelle mit Fahrzeugbuchungen erstellen (vereinfachte Version)
+                // Tabelle mit Fahrzeugbuchungen erstellen
                 vehicleUsagesContainer.innerHTML = `
-                    <table id="vehicle-usages-table">
+                    <table id="vehicle-usages-table" class="data-table">
                         <thead>
                             <tr>
-                                <th>Datum</th>
-                                <th>Mitarbeiter</th>
                                 <th>Fahrzeug</th>
-                                <th>Betriebsstunden</th>
+                                <th>Mitarbeiter</th>
+                                <th>Datum</th>
+                                <th>Stunden</th>
+                                <th>Kommentar</th>
+                                <th>Aktionen</th>
                             </tr>
                         </thead>
                         <tbody id="vehicle-usages-body"></tbody>
@@ -1600,48 +1685,269 @@
                 
                 const tableBody = document.getElementById('vehicle-usages-body');
                 
-                vehicleUsages.forEach((usage) => {
+                directBookings.forEach((booking) => {
+                    const employee = employeeMap[booking.employeeId] || { name: 'Unbekannt' };
+                    const vehicle = vehicleMap[booking.vehicleId] || { name: 'Unbekanntes Fahrzeug' };
+                    
                     // Datum formatieren
                     let dateStr = 'Unbekannt';
-                    let startKm = usage.startKm || '-';
-                    let endKm = usage.endKm || '-';
-                    let drivenKm = '-';
-                    
-                    // Datum konvertieren und formatieren
-                    if (usage.date) {
-                        const dateObj = usage.date instanceof firebase.firestore.Timestamp ? 
-                            usage.date.toDate() : new Date(usage.date);
+                    if (booking.date) {
+                        let dateObj;
+                        if (booking.date instanceof firebase.firestore.Timestamp) {
+                            dateObj = booking.date.toDate();
+                        } else if (typeof booking.date === 'string') {
+                            // String im Format YYYY-MM-DD
+                            if (booking.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                dateObj = new Date(booking.date + 'T00:00:00');
+                            } else {
+                                dateObj = new Date(booking.date);
+                            }
+                        } else if (booking.date instanceof Date) {
+                            dateObj = booking.date;
+                        } else if (booking.date.seconds) {
+                            dateObj = new Date(booking.date.seconds * 1000);
+                        } else {
+                            dateObj = new Date(booking.date);
+                        }
                         dateStr = dateObj.toLocaleDateString('de-DE');
                     }
                     
-                    // Gefahrene Kilometer berechnen, wenn Start- und Endkilometer vorhanden sind
-                    if (usage.startKm !== undefined && usage.endKm !== undefined) {
-                        drivenKm = Math.max(0, usage.endKm - usage.startKm) + ' km';
-                    }
+                    // Stunden formatieren
+                    const hours = booking.hours || booking.hoursUsed || 0;
+                    const hoursStr = typeof hours === 'number' ? hours.toFixed(2) + ' h' : hours;
+                    
+                    // Kommentar formatieren
+                    const comment = booking.comment || '-';
                     
                     // Zeile erstellen
                     const row = document.createElement('tr');
                     
-                    // Betriebsstunden aus dem hours Feld oder alternativ aus operatingHours extrahieren
-                    const operatingHours = usage.hours || usage.operatingHours || '-';
+                    // Edit-Button nur für Admins anzeigen
+                    const deleteButtonHtml = window.hideEditButtonsForEmployee ? '' : `
+                        <button class="action-btn delete-btn" onclick="deleteVehicleBookingSimple('${booking.id}')" title="Löschen">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
                     
-                    // Zellen hinzufügen (vereinfachte Version)
                     row.innerHTML = `
+                        <td>${vehicle.name}</td>
+                        <td>${employee.name}</td>
                         <td>${dateStr}</td>
-                        <td>${usage.employee?.name || 'Unbekannt'}</td>
-                        <td>${usage.vehicle?.name || 'Unbekannt'}</td>
-                        <td>${operatingHours}</td>
+                        <td>${hoursStr}</td>
+                        <td>${comment}</td>
+                        <td>${deleteButtonHtml}</td>
                     `;
                     
                     tableBody.appendChild(row);
                 });
                 
-                console.log(`${vehicleUsages.length} Fahrzeugbuchungen angezeigt`);
+                console.log(`${directBookings.length} Fahrzeugbuchungen angezeigt`);
                 
             } catch (error) {
                 console.error('Fehler beim Laden der Fahrzeugbuchungen:', error);
                 const vehicleUsagesContainer = document.getElementById('vehicle-usages-container');
-                vehicleUsagesContainer.innerHTML = '<p class="error">Fehler beim Laden der Fahrzeugbuchungen.</p>';
+                if (vehicleUsagesContainer) {
+                    vehicleUsagesContainer.innerHTML = '<p class="error">Fehler beim Laden der Fahrzeugbuchungen.</p>';
+                }
+            }
+        }
+        
+        // Fahrzeugbuchung löschen
+        async function deleteVehicleBookingSimple(bookingId) {
+            if (!confirm('Möchten Sie diese Fahrzeugbuchung wirklich löschen?')) {
+                return;
+            }
+            
+            try {
+                await DataService.vehicleUsagesCollection.doc(bookingId).delete();
+                if (typeof showNotification === 'function') {
+                    showNotification('Fahrzeugbuchung erfolgreich gelöscht', 'success');
+                } else {
+                    alert('Fahrzeugbuchung erfolgreich gelöscht');
+                }
+                await loadVehicleUsages();
+            } catch (error) {
+                console.error('Fehler beim Löschen der Fahrzeugbuchung:', error);
+                if (typeof showNotification === 'function') {
+                    showNotification('Fehler beim Löschen der Fahrzeugbuchung', 'error');
+                } else {
+                    alert('Fehler beim Löschen der Fahrzeugbuchung');
+                }
+            }
+        }
+        
+        // Modal zum Hinzufügen von Fahrzeugbuchungen öffnen
+        async function openAddVehicleBookingModal() {
+            console.log('Öffne Modal zum Hinzufügen von Fahrzeugbuchungen');
+            let modal = document.getElementById('add-vehicle-booking-modal');
+            
+            if (!modal) {
+                // Modal erstellen
+                modal = document.createElement('div');
+                modal.id = 'add-vehicle-booking-modal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Fahrzeugbuchung hinzufügen</h3>
+                            <button type="button" class="close-modal-btn">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="add-vehicle-booking-form">
+                                <div class="form-group">
+                                    <label for="vb-employee-select">Mitarbeiter:</label>
+                                    <select id="vb-employee-select" required>
+                                        <option value="">-- Mitarbeiter auswählen --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vb-vehicle-select">Fahrzeug:</label>
+                                    <select id="vb-vehicle-select" required>
+                                        <option value="">-- Fahrzeug auswählen --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vb-date">Datum:</label>
+                                    <input type="date" id="vb-date" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vb-hours">Stunden:</label>
+                                    <input type="number" id="vb-hours" min="0" step="0.25" value="1" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vb-comment">Kommentar (optional):</label>
+                                    <textarea id="vb-comment" rows="3"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn btn-secondary" onclick="closeAddVehicleBookingModal()">Abbrechen</button>
+                                    <button type="submit" class="btn btn-primary">Speichern</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                
+                // Event-Listener hinzufügen
+                modal.querySelector('.close-modal-btn').addEventListener('click', closeAddVehicleBookingModal);
+                modal.querySelector('#add-vehicle-booking-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await saveVehicleBooking();
+                });
+                
+                // Modal schließen bei Klick außerhalb
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeAddVehicleBookingModal();
+                    }
+                });
+            }
+            
+            // Mitarbeiter und Fahrzeuge laden
+            await loadVehicleBookingEmployees();
+            await loadVehicleBookingVehicles();
+            
+            // Aktuelles Datum vorausfüllen
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('vb-date').value = today;
+            
+            // Modal anzeigen
+            modal.style.display = 'block';
+        }
+        
+        // Modal schließen (global verfügbar für onclick)
+        window.closeAddVehicleBookingModal = function() {
+            const modal = document.getElementById('add-vehicle-booking-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                const form = document.getElementById('add-vehicle-booking-form');
+                if (form) form.reset();
+            }
+        }
+        
+        // Mitarbeiter für Fahrzeugbuchung laden
+        async function loadVehicleBookingEmployees() {
+            const select = document.getElementById('vb-employee-select');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">-- Mitarbeiter auswählen --</option>';
+            
+            const employees = await DataService.getAllActiveEmployees();
+            employees.sort((a, b) => a.name.localeCompare(b.name));
+            
+            employees.forEach(emp => {
+                const option = document.createElement('option');
+                option.value = emp.id;
+                option.textContent = emp.name;
+                select.appendChild(option);
+            });
+        }
+        
+        // Fahrzeuge für Fahrzeugbuchung laden
+        async function loadVehicleBookingVehicles() {
+            const select = document.getElementById('vb-vehicle-select');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">-- Fahrzeug auswählen --</option>';
+            
+            const vehicles = await DataService.getAllVehicles();
+            vehicles.sort((a, b) => a.name.localeCompare(b.name));
+            
+            vehicles.forEach(veh => {
+                const option = document.createElement('option');
+                option.value = veh.id;
+                option.textContent = veh.name;
+                select.appendChild(option);
+            });
+        }
+        
+        // Fahrzeugbuchung speichern
+        async function saveVehicleBooking() {
+            try {
+                const employeeId = document.getElementById('vb-employee-select').value;
+                const vehicleId = document.getElementById('vb-vehicle-select').value;
+                const date = document.getElementById('vb-date').value;
+                const hours = parseFloat(document.getElementById('vb-hours').value);
+                const comment = document.getElementById('vb-comment').value;
+                
+                if (!employeeId || !vehicleId || !date || !hours) {
+                    if (typeof showNotification === 'function') {
+                        showNotification('Bitte alle Pflichtfelder ausfüllen', 'error');
+                    } else {
+                        alert('Bitte alle Pflichtfelder ausfüllen');
+                    }
+                    return;
+                }
+                
+                // Fahrzeugbuchung erstellen
+                const bookingData = {
+                    vehicleId,
+                    projectId: projectId,
+                    employeeId,
+                    hours,
+                    date: new Date(date).toISOString().split('T')[0],
+                    comment: comment || '',
+                    isDirectBooking: true
+                };
+                
+                await DataService.createVehicleTimeBooking(bookingData);
+                
+                if (typeof showNotification === 'function') {
+                    showNotification('Fahrzeugbuchung erfolgreich hinzugefügt', 'success');
+                } else {
+                    alert('Fahrzeugbuchung erfolgreich hinzugefügt');
+                }
+                
+                closeAddVehicleBookingModal();
+                await loadVehicleUsages();
+                
+            } catch (error) {
+                console.error('Fehler beim Speichern der Fahrzeugbuchung:', error);
+                if (typeof showNotification === 'function') {
+                    showNotification('Fehler beim Speichern der Fahrzeugbuchung: ' + error.message, 'error');
+                } else {
+                    alert('Fehler beim Speichern der Fahrzeugbuchung: ' + error.message);
+                }
             }
         }
 

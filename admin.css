@@ -31,17 +31,7 @@
     border-radius: 2px;
 }
 
-.admin-nav-toggle.active .hamburger-line:nth-child(1) {
-    transform: rotate(45deg) translate(6px, 6px);
-}
-
-.admin-nav-toggle.active .hamburger-line:nth-child(2) {
-    opacity: 0;
-}
-
-.admin-nav-toggle.active .hamburger-line:nth-child(3) {
-    transform: rotate(-45deg) translate(6px, -6px);
-}
+/* Hamburger-Icon bleibt immer ein Hamburger-Icon, wird nicht zu X transformiert */
 
 /* Dashboard Tabs Responsive */
 .dashboard-tabs {
@@ -58,10 +48,40 @@
     gap: 8px;
 }
 
+/* Admin Menu Close Button */
+.admin-menu-close {
+    display: none;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 8px;
+    z-index: 1001;
+    transition: color 0.2s ease;
+}
+
+.admin-menu-close:hover {
+    color: var(--primary-color);
+}
+
 /* Responsive Admin Navigation */
 @media (max-width: 992px) {
     .admin-nav-toggle {
         display: flex;
+    }
+    
+    /* Hamburger-Icon verstecken wenn Menü geöffnet ist */
+    body.admin-menu-open .admin-nav-toggle {
+        display: none;
+    }
+    
+    /* X-Button nur anzeigen wenn Menü geöffnet ist */
+    .dashboard-tabs.active .admin-menu-close {
+        display: block;
     }
     
     .dashboard-tabs {
@@ -192,17 +212,22 @@ details li {
     padding: 8px 12px;
     font-size: 14px;
     white-space: nowrap;
-    background-color: #ff6b00 !important;
-    color: white !important;
-    border: none;
-    border-radius: 4px;
+    background-color: var(--light-color) !important;
+    color: var(--text-color) !important;
+    border: 0.5px solid var(--border-color);
+    border-radius: 6px;
     margin: 0 auto;
-    display: inline-block; /* Geändert von block zu inline-block */
-    font-weight: bold;
+    display: inline-block;
+    font-weight: 500;
     cursor: pointer;
     text-align: center;
     min-width: 80px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: none;
+    transition: all 0.2s ease;
+}
+
+.report-btn:hover {
+    background-color: #E5E5EA !important;
 }
 
 /* Styles für die detaillierte Berichtsansicht */
@@ -353,7 +378,7 @@ details li {
 }
 
 .tab-btn.active {
-    color: var(--secondary-color);
+    color: var(--primary-color);
 }
 
 .tab-btn.active::after {
@@ -362,8 +387,8 @@ details li {
     bottom: -1px;
     left: 0;
     width: 100%;
-    height: 3px;
-    background-color: var(--secondary-color);
+    height: 2px;
+    background-color: var(--primary-color);
 }
 
 .tab-content {
@@ -397,8 +422,8 @@ details li {
 
 .stat-card p {
     font-size: 2rem;
-    font-weight: 700;
-    color: var(--secondary-color);
+    font-weight: 600;
+    color: var(--text-color);
 }
 
 .tab-header {
@@ -406,6 +431,16 @@ details li {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.tab-header .filter-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 1;
 }
 
 /* Modernes Tabellen-Design */
@@ -427,15 +462,16 @@ table th, table td {
 }
 
 table th {
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-    color: white;
+    background: var(--light-color);
+    color: var(--text-color);
     font-weight: 600;
     font-size: 14px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
     position: sticky;
     top: 0;
     z-index: 10;
+    border-bottom: 0.5px solid var(--border-color);
 }
 
 table tbody tr {
@@ -448,9 +484,7 @@ table tbody tr:nth-child(even) {
 }
 
 table tbody tr:hover {
-    background-color: #e8f4f8;
-    transform: scale(1.01);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background-color: var(--light-color);
 }
 
 table tbody tr:last-child td {
@@ -469,58 +503,64 @@ table tbody tr:last-child td {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 14px;
+    padding: 6px 12px;
     border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
-    border: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    border: 0.5px solid var(--border-color);
+    box-shadow: none;
     white-space: nowrap;
+    background-color: var(--light-color);
+    color: var(--text-color);
 }
 
 .action-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    background-color: #E5E5EA;
 }
 
 .action-btn:active {
-    transform: translateY(0);
+    transform: scale(0.98);
+    background-color: #D1D1D6;
 }
 
 .action-btn i {
     font-size: 14px;
 }
 
-/* Edit Button - Modernes Blau */
+/* Edit Button - Neutrales Grau */
 .edit-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background-color: var(--light-color);
+    color: var(--text-color);
+    border: 0.5px solid var(--border-color);
 }
 
 .edit-btn:hover {
-    background: linear-gradient(135deg, #5568d3 0%, #63408a 100%);
+    background-color: #E5E5EA;
 }
 
-/* Delete Button - Modernes Rot */
+/* Delete Button - System Rot nur für Löschen */
 .delete-btn {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background-color: var(--danger-color);
     color: white;
+    border: none;
 }
 
 .delete-btn:hover {
-    background: linear-gradient(135deg, #d97ee3 0%, #d94356 100%);
+    background-color: #D70015;
+    opacity: 0.9;
 }
 
-/* View/Details Button - Modernes Grün */
+/* View/Details Button - Neutrales Grau */
 .view-btn, .view-details-btn {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    color: white;
+    background-color: var(--light-color);
+    color: var(--text-color);
+    border: 0.5px solid var(--border-color);
 }
 
 .view-btn:hover, .view-details-btn:hover {
-    background: linear-gradient(135deg, #3a96e7 0%, #00d9e5 100%);
+    background-color: #E5E5EA;
 }
 
 /* Actions Container in Tabelle */
@@ -530,41 +570,47 @@ table tbody tr:last-child td {
     flex-wrap: wrap;
 }
 
-/* Status Badges verbessert */
+/* Status Badges - Minimalistisch */
 .status-badge {
     display: inline-block;
-    padding: 6px 12px;
-    border-radius: 20px;
+    padding: 4px 10px;
+    border-radius: 6px;
     font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    box-shadow: none;
+    border: 0.5px solid var(--border-color);
 }
 
 .status-badge.active, .status.active {
-    background: linear-gradient(135deg, #11998e, #38ef7d);
-    color: white;
+    background-color: rgba(52, 199, 89, 0.1);
+    color: var(--accent-color);
+    border-color: rgba(52, 199, 89, 0.3);
 }
 
 .status-badge.inactive, .status.inactive {
-    background: linear-gradient(135deg, #bdc3c7, #7f8c8d);
-    color: white;
+    background-color: var(--light-color);
+    color: var(--text-secondary);
+    border-color: var(--border-color);
 }
 
 .status-badge.completed, .status.completed {
-    background: linear-gradient(135deg, #4facfe, #00f2fe);
-    color: white;
+    background-color: rgba(52, 199, 89, 0.1);
+    color: var(--primary-color);
+    border-color: rgba(52, 199, 89, 0.3);
 }
 
 .status-badge.planned, .status.planned {
-    background: linear-gradient(135deg, #fa709a, #fee140);
-    color: white;
+    background-color: rgba(255, 149, 0, 0.1);
+    color: var(--warning-color);
+    border-color: rgba(255, 149, 0, 0.3);
 }
 
 .status-badge.archived, .status.archived {
-    background: linear-gradient(135deg, #c9c9c9, #a0a0a0);
-    color: white;
+    background-color: var(--light-color);
+    color: var(--text-secondary);
+    border-color: var(--border-color);
 }
 
 /* Table Container Verbesserungen */
@@ -732,11 +778,11 @@ table tbody tr:last-child td {
 }
 
 .report .report-header .edit-time-entry-btn {
-    background-color: #ffc107 !important;
-    color: #212529 !important;
-    border: 1px solid #ffc107 !important;
+    background-color: var(--light-color) !important;
+    color: var(--text-color) !important;
+    border: 0.5px solid var(--border-color) !important;
     padding: 8px 12px !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     font-size: 13px !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
@@ -746,18 +792,16 @@ table tbody tr:last-child td {
 }
 
 .report .report-header .edit-time-entry-btn:hover {
-    background-color: #e0a800 !important;
-    border-color: #d39e00 !important;
-    transform: translateY(-1px) !important;
+    background-color: #E5E5EA !important;
 }
 
 /* Edit Time Entry Button Styles */
 .edit-entry-btn {
-    background-color: #ffc107;
-    color: #212529;
-    border: 1px solid #ffc107;
+    background-color: var(--light-color);
+    color: var(--text-color);
+    border: 0.5px solid var(--border-color);
     padding: 5px 8px;
-    border-radius: 3px;
+    border-radius: 6px;
     font-size: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -765,9 +809,7 @@ table tbody tr:last-child td {
 }
 
 .edit-entry-btn:hover {
-    background-color: #e0a800;
-    border-color: #d39e00;
-    transform: translateY(-1px);
+    background-color: #E5E5EA;
 }
 
 .edit-entry-btn i {
@@ -795,14 +837,13 @@ table tbody tr:last-child td {
 }
 
 .view-images-btn {
-    background-color: #17a2b8;
-    color: white;
-    border: 1px solid #17a2b8;
+    background-color: var(--light-color);
+    color: var(--text-color);
+    border: 0.5px solid var(--border-color);
 }
 
 .view-images-btn:hover {
-    background-color: #138496;
-    border-color: #117a8b;
+    background-color: #E5E5EA;
 }
 
 /* Edit Form Enhancements */

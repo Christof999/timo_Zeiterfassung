@@ -25,6 +25,12 @@
         // Toggle-Button Event Listener
         navToggle.addEventListener('click', toggleMenu);
         
+        // Schließen-Button im Menü (X-Button)
+        const closeButton = navMenu.querySelector('.nav-menu-close');
+        if (closeButton) {
+            closeButton.addEventListener('click', closeMenu);
+        }
+        
         // Schließen wenn außerhalb geklickt wird
         document.addEventListener('click', handleOutsideClick);
         
@@ -56,6 +62,7 @@
     function openMenu() {
         navToggle.classList.add('active');
         navMenu.classList.add('active');
+        document.body.classList.add('nav-menu-open'); // Klasse für CSS-Selektor
         document.body.style.overflow = 'hidden'; // Verhindert Scrollen im Hintergrund
         isMenuOpen = true;
     }
@@ -66,6 +73,7 @@
     function closeMenu() {
         navToggle.classList.remove('active');
         navMenu.classList.remove('active');
+        document.body.classList.remove('nav-menu-open'); // Klasse entfernen
         document.body.style.overflow = ''; // Ermöglicht Scrollen wieder
         isMenuOpen = false;
     }
