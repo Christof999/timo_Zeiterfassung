@@ -1647,6 +1647,7 @@ function createProjectDetailModal() {
                     <button class="project-tab-btn active" data-tab="construction-site">Baustellenfotos</button>
                     <button class="project-tab-btn" data-tab="documents">Lieferscheine & Rechnungen</button>
                     <button class="project-tab-btn" data-tab="timeentries">Zeiteinträge</button>
+                    <button class="project-tab-btn" data-tab="vehiclebookings">Fahrzeugbuchungen</button>
                 </div>
                 
                 <div class="project-tab-content active" id="construction-site-tab">
@@ -1676,12 +1677,17 @@ function createProjectDetailModal() {
                 </div>
                 
                 <div class="project-tab-content" id="timeentries-tab">
-                    <div class="filter-controls">
-                        <input type="date" id="time-date-filter" placeholder="Nach Datum filtern">
-                        <select id="time-employee-filter">
-                            <option value="all">Alle Mitarbeiter</option>
-                        </select>
-                        <button id="clear-time-filter" class="btn secondary-btn">Filter zurücksetzen</button>
+                    <div class="tab-header">
+                        <div class="filter-controls">
+                            <input type="date" id="time-date-filter" placeholder="Nach Datum filtern">
+                            <select id="time-employee-filter">
+                                <option value="all">Alle Mitarbeiter</option>
+                            </select>
+                            <button id="clear-time-filter" class="btn secondary-btn">Filter zurücksetzen</button>
+                        </div>
+                        <button id="add-time-entry-btn" class="btn primary-btn">
+                            <i class="fas fa-plus"></i> Zeiteintrag hinzufügen
+                        </button>
                     </div>
                     <div class="time-entries-table-container">
                         <table id="time-entries-table" class="data-table">
@@ -1693,6 +1699,38 @@ function createProjectDetailModal() {
                                     <th>Ausstempelzeit</th>
                                     <th>Arbeitsstunden</th>
                                     <th>Notizen</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Wird per JavaScript gefüllt -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="project-tab-content" id="vehiclebookings-tab">
+                    <div class="tab-header">
+                        <div class="filter-controls">
+                            <input type="date" id="vehicle-date-filter" placeholder="Nach Datum filtern">
+                            <select id="vehicle-employee-filter">
+                                <option value="all">Alle Mitarbeiter</option>
+                            </select>
+                            <button id="clear-vehicle-filter" class="btn secondary-btn">Filter zurücksetzen</button>
+                        </div>
+                        <button id="add-vehicle-booking-btn" class="btn primary-btn">
+                            <i class="fas fa-plus"></i> Fahrzeugbuchung hinzufügen
+                        </button>
+                    </div>
+                    <div class="vehicle-bookings-table-container">
+                        <table id="vehicle-bookings-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fahrzeug</th>
+                                    <th>Mitarbeiter</th>
+                                    <th>Datum</th>
+                                    <th>Stunden</th>
+                                    <th>Kommentar</th>
                                     <th>Aktionen</th>
                                 </tr>
                             </thead>
@@ -1764,6 +1802,22 @@ function setupProjectTabNavigation(modalElement) {
                 tabContent.style.display = 'block';
                 tabContent.classList.add('active');
                 console.log(`Tab-Inhalt ${tabName}-tab aktiviert`);
+                
+                // Daten laden, wenn Tab aktiviert wird
+                const projectId = document.getElementById('project-detail-title')?.dataset?.projectId;
+                if (projectId) {
+                    if (tabName === 'timeentries') {
+                        loadProjectTimeEntries(projectId);
+                    } else if (tabName === 'construction-site') {
+                        loadProjectImages(projectId, 'construction_site');
+                    } else if (tabName === 'documents') {
+                        loadProjectImages(projectId, 'document');
+                    } else if (tabName === 'vehiclebookings') {
+                        loadProjectVehicleBookings(projectId);
+                        // Mitarbeiter für Filter laden
+                        loadVehicleBookingFilterEmployees();
+                    }
+                }
             } else {
                 console.error(`Tab-Inhalt ${tabName}-tab nicht gefunden`);
             }
@@ -1860,6 +1914,61 @@ function setupProjectTabNavigation(modalElement) {
                 const projectId = document.getElementById('project-detail-title').dataset.projectId;
                 loadProjectTimeEntries(projectId);
             });
+        }
+    }
+    
+    // Filter-Event-Listener für Fahrzeugbuchungen
+    const vehicleDateFilter = document.getElementById('vehicle-date-filter');
+    const vehicleEmployeeFilter = document.getElementById('vehicle-employee-filter');
+    const clearVehicleFilterBtn = document.getElementById('clear-vehicle-filter');
+    const addVehicleBookingBtn = document.getElementById('add-vehicle-booking-btn');
+    
+    if (vehicleDateFilter && vehicleEmployeeFilter && clearVehicleFilterBtn) {
+        vehicleDateFilter.addEventListener('change', function() {
+            const projectId = document.getElementById('project-detail-title').dataset.projectId;
+            loadProjectVehicleBookings(projectId);
+        });
+
+        vehicleEmployeeFilter.addEventListener('change', function() {
+            const projectId = document.getElementById('project-detail-title').dataset.projectId;
+            loadProjectVehicleBookings(projectId);
+        });
+
+        clearVehicleFilterBtn.addEventListener('click', function() {
+            vehicleDateFilter.value = '';
+            vehicleEmployeeFilter.value = 'all';
+            const projectId = document.getElementById('project-detail-title').dataset.projectId;
+            loadProjectVehicleBookings(projectId);
+        });
+    }
+    
+    // Button zum Hinzufügen von Fahrzeugbuchungen
+    if (addVehicleBookingBtn) {
+        addVehicleBookingBtn.addEventListener('click', function() {
+            const projectId = document.getElementById('project-detail-title').dataset.projectId;
+            openAddVehicleBookingModal(projectId);
+        });
+    }
+    
+    // Mitarbeiter für Fahrzeugbuchungs-Filter laden
+    async function loadVehicleBookingFilterEmployees() {
+        const select = document.getElementById('vehicle-employee-filter');
+        if (!select) return;
+        
+        select.innerHTML = '<option value="all">Alle Mitarbeiter</option>';
+        
+        try {
+            const employees = await DataService.getAllActiveEmployees();
+            employees.sort((a, b) => a.name.localeCompare(b.name));
+            
+            employees.forEach(emp => {
+                const option = document.createElement('option');
+                option.value = emp.id;
+                option.textContent = emp.name;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Fehler beim Laden der Mitarbeiter für Filter:', error);
         }
     }
 }
@@ -3359,6 +3468,264 @@ async function loadProjectTimeEntries(projectId) {
     } catch (error) {
         console.error('Fehler beim Laden der detaillierten Zeiteinträge:', error);
         table.innerHTML = '<tr><td colspan="8" class="text-center">Fehler beim Laden der Daten</td></tr>';
+    }
+}
+
+// Fahrzeugbuchungen für ein Projekt laden
+async function loadProjectVehicleBookings(projectId) {
+    const table = document.getElementById('vehicle-bookings-table')?.querySelector('tbody');
+
+    if (!table) {
+        console.error('Fahrzeugbuchungs-Tabelle nicht gefunden');
+        return;
+    }
+
+    try {
+        console.log('Lade Fahrzeugbuchungen für Projekt:', projectId);
+
+        // Fahrzeugbuchungen für das Projekt laden
+        const bookings = await DataService.getVehicleTimeBookingsByProject(projectId);
+        const employees = await DataService.getAllActiveEmployees();
+        const vehicles = await DataService.getAllVehicles();
+
+        // Maps für schnellen Zugriff erstellen
+        const employeeMap = {};
+        employees.forEach(emp => employeeMap[emp.id] = emp);
+
+        const vehicleMap = {};
+        vehicles.forEach(veh => vehicleMap[veh.id] = veh);
+
+        // Tabelle leeren
+        table.innerHTML = '';
+
+        if (!bookings || bookings.length === 0) {
+            table.innerHTML = '<tr><td colspan="6" class="text-center">Keine Fahrzeugbuchungen vorhanden</td></tr>';
+            return;
+        }
+
+        // Buchungen nach Datum sortieren (neueste zuerst)
+        bookings.sort((a, b) => {
+            const dateA = a.date && a.date.toDate ? a.date.toDate() : new Date(a.date);
+            const dateB = b.date && b.date.toDate ? b.date.toDate() : new Date(b.date);
+            return dateB - dateA;
+        });
+
+        // Buchungen in Tabelle anzeigen
+        bookings.forEach(booking => {
+            const employee = employeeMap[booking.employeeId] || { name: 'Unbekannt' };
+            const vehicle = vehicleMap[booking.vehicleId] || { name: 'Unbekanntes Fahrzeug' };
+
+            const row = document.createElement('tr');
+
+            // Datum formatieren
+            let dateStr = '-';
+            if (booking.date) {
+                const date = booking.date && booking.date.toDate ? booking.date.toDate() : new Date(booking.date);
+                dateStr = formatDate(date);
+            }
+
+            // Stunden formatieren
+            const hours = booking.hours || booking.hoursUsed || 0;
+            const hoursStr = hours.toFixed(2) + ' h';
+
+            // Kommentar formatieren
+            const comment = booking.comment || '-';
+
+            row.innerHTML = `
+                <td>${vehicle.name}</td>
+                <td>${employee.name}</td>
+                <td>${dateStr}</td>
+                <td>${hoursStr}</td>
+                <td>${comment}</td>
+                <td>
+                    <button class="action-btn delete-btn" onclick="deleteVehicleBooking('${booking.id}', '${projectId}')" title="Löschen">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+
+            table.appendChild(row);
+        });
+
+    } catch (error) {
+        console.error('Fehler beim Laden der Fahrzeugbuchungen:', error);
+        table.innerHTML = '<tr><td colspan="6" class="text-center">Fehler beim Laden der Daten</td></tr>';
+    }
+}
+
+// Fahrzeugbuchung löschen
+async function deleteVehicleBooking(bookingId, projectId) {
+    if (!confirm('Möchten Sie diese Fahrzeugbuchung wirklich löschen?')) {
+        return;
+    }
+
+    try {
+        await DataService.vehicleUsagesCollection.doc(bookingId).delete();
+        showNotification('Fahrzeugbuchung erfolgreich gelöscht', 'success');
+        await loadProjectVehicleBookings(projectId);
+    } catch (error) {
+        console.error('Fehler beim Löschen der Fahrzeugbuchung:', error);
+        showNotification('Fehler beim Löschen der Fahrzeugbuchung', 'error');
+    }
+}
+
+// Modal zum Hinzufügen von Fahrzeugbuchungen öffnen
+async function openAddVehicleBookingModal(projectId) {
+    let modal = document.getElementById('add-vehicle-booking-modal');
+    
+    if (!modal) {
+        // Modal erstellen
+        modal = document.createElement('div');
+        modal.id = 'add-vehicle-booking-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Fahrzeugbuchung hinzufügen</h3>
+                    <button type="button" class="close-modal-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-vehicle-booking-form">
+                        <div class="form-group">
+                            <label for="vb-employee-select">Mitarbeiter:</label>
+                            <select id="vb-employee-select" required>
+                                <option value="">-- Mitarbeiter auswählen --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="vb-vehicle-select">Fahrzeug:</label>
+                            <select id="vb-vehicle-select" required>
+                                <option value="">-- Fahrzeug auswählen --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="vb-date">Datum:</label>
+                            <input type="date" id="vb-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vb-hours">Stunden:</label>
+                            <input type="number" id="vb-hours" min="0" step="0.25" value="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="vb-comment">Kommentar (optional):</label>
+                            <textarea id="vb-comment" rows="3"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn secondary-btn" onclick="closeAddVehicleBookingModal()">Abbrechen</button>
+                            <button type="submit" class="btn primary-btn">Speichern</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Event-Listener hinzufügen
+        modal.querySelector('.close-modal-btn').addEventListener('click', closeAddVehicleBookingModal);
+        modal.querySelector('#add-vehicle-booking-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveVehicleBooking(projectId);
+        });
+        
+        // Modal schließen bei Klick außerhalb
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeAddVehicleBookingModal();
+            }
+        });
+    }
+    
+    // Mitarbeiter und Fahrzeuge laden
+    await loadVehicleBookingEmployees();
+    await loadVehicleBookingVehicles();
+    
+    // Aktuelles Datum vorausfüllen
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('vb-date').value = today;
+    
+    // Modal anzeigen
+    modal.classList.add('visible');
+}
+
+// Modal schließen
+function closeAddVehicleBookingModal() {
+    const modal = document.getElementById('add-vehicle-booking-modal');
+    if (modal) {
+        modal.classList.remove('visible');
+        document.getElementById('add-vehicle-booking-form').reset();
+    }
+}
+
+// Mitarbeiter für Fahrzeugbuchung laden
+async function loadVehicleBookingEmployees() {
+    const select = document.getElementById('vb-employee-select');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- Mitarbeiter auswählen --</option>';
+    
+    const employees = await DataService.getAllActiveEmployees();
+    employees.sort((a, b) => a.name.localeCompare(b.name));
+    
+    employees.forEach(emp => {
+        const option = document.createElement('option');
+        option.value = emp.id;
+        option.textContent = emp.name;
+        select.appendChild(option);
+    });
+}
+
+// Fahrzeuge für Fahrzeugbuchung laden
+async function loadVehicleBookingVehicles() {
+    const select = document.getElementById('vb-vehicle-select');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- Fahrzeug auswählen --</option>';
+    
+    const vehicles = await DataService.getAllVehicles();
+    vehicles.sort((a, b) => a.name.localeCompare(b.name));
+    
+    vehicles.forEach(veh => {
+        const option = document.createElement('option');
+        option.value = veh.id;
+        option.textContent = veh.name;
+        select.appendChild(option);
+    });
+}
+
+// Fahrzeugbuchung speichern
+async function saveVehicleBooking(projectId) {
+    try {
+        const employeeId = document.getElementById('vb-employee-select').value;
+        const vehicleId = document.getElementById('vb-vehicle-select').value;
+        const date = document.getElementById('vb-date').value;
+        const hours = parseFloat(document.getElementById('vb-hours').value);
+        const comment = document.getElementById('vb-comment').value;
+        
+        if (!employeeId || !vehicleId || !date || !hours) {
+            showNotification('Bitte alle Pflichtfelder ausfüllen', 'error');
+            return;
+        }
+        
+        // Fahrzeugbuchung erstellen
+        const bookingData = {
+            vehicleId,
+            projectId,
+            employeeId,
+            hours,
+            date: new Date(date).toISOString().split('T')[0],
+            comment: comment || '',
+            isDirectBooking: true
+        };
+        
+        await DataService.createVehicleTimeBooking(bookingData);
+        
+        showNotification('Fahrzeugbuchung erfolgreich hinzugefügt', 'success');
+        closeAddVehicleBookingModal();
+        await loadProjectVehicleBookings(projectId);
+        
+    } catch (error) {
+        console.error('Fehler beim Speichern der Fahrzeugbuchung:', error);
+        showNotification('Fehler beim Speichern der Fahrzeugbuchung: ' + error.message, 'error');
     }
 }
 
