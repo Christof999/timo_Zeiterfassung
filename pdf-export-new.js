@@ -473,7 +473,7 @@ async function generatePDF() {
     }
 }
 
-// Funktion für den Mitarbeiter-Berichts-PDF-Export
+// Funktion für den Mitarbeiter-Berichts-PDF-Export - verwendet Druckvorschau
 async function generateEmployeeReportPDF() {
     // Prüfen, ob Berichtsdaten vorhanden sind
     if (typeof currentReportEntries === 'undefined' || !currentReportEntries || currentReportEntries.length === 0) {
@@ -482,70 +482,85 @@ async function generateEmployeeReportPDF() {
     }
     
     try {
-        // Ladeindikator erstellen
-        const loadingIndicator = document.createElement('div');
-        loadingIndicator.style.position = 'fixed';
-        loadingIndicator.style.top = '0';
-        loadingIndicator.style.left = '0';
-        loadingIndicator.style.width = '100%';
-        loadingIndicator.style.height = '100%';
-        loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.7)';
-        loadingIndicator.style.display = 'flex';
-        loadingIndicator.style.justifyContent = 'center';
-        loadingIndicator.style.alignItems = 'center';
-        loadingIndicator.style.zIndex = '9999';
-        loadingIndicator.innerHTML = '<div style="background-color: white; padding: 20px; border-radius: 5px; text-align: center;"><h3>PDF wird erstellt...</h3><p>Bitte warten Sie, die Daten werden vorbereitet...</p></div>';
-        document.body.appendChild(loadingIndicator);
+        // Mitarbeiter-Informationen laden
+        const employee = typeof currentEmployeeId !== 'undefined' && currentEmployeeId ? 
+            await DataService.getEmployeeById(currentEmployeeId) : 
+            { name: 'Mitarbeiter' };
+        
+        // Stelle sicher, dass die Tabelle in Desktop-Ansicht ist
+        const reportTable = document.getElementById('employee-report-table');
+        const reportContainer = document.getElementById('employee-report-container');
+        
+        if (!reportContainer) {
+            throw new Error('Berichtsinhalt konnte nicht gefunden werden');
+        }
+        
+        if (reportTable) {
+            // Entferne mobile Klassen
+            reportTable.classList.remove('accordion-enabled');
+            reportTable.style.display = 'table';
+            reportTable.style.width = '100%';
+        }
         
         // Ausblenden der "Kein Druck"-Elemente
         const noPrintElements = document.querySelectorAll('.no-print');
-        noPrintElements.forEach(el => el.style.display = 'none');
+        const originalDisplay = [];
+        noPrintElements.forEach((el, index) => {
+            originalDisplay[index] = el.style.display;
+            el.style.display = 'none';
+        });
+        
+        // Aktiviere Druck-Modus für CSS
+        document.body.classList.add('print-mode');
         
         try {
-            // Mitarbeiter-Informationen laden
-            const employee = typeof currentEmployeeId !== 'undefined' && currentEmployeeId ? 
-                await DataService.getEmployeeById(currentEmployeeId) : 
-                { name: 'Mitarbeiter' };
-            
-            // Hole den Container mit dem Berichtsinhalt
-            const reportContainer = document.getElementById('employee-report-container');
-            
-            if (!reportContainer) {
-                throw new Error('Berichtsinhalt konnte nicht gefunden werden');
-            }
-            
             // Dateiname generieren
-            const fileName = `Zeitbericht_${employee?.name.replace(/\s+/g, '_') || 'Mitarbeiter'}_${
-                typeof currentStartDate !== 'undefined' && currentStartDate ? 
-                formatDate(currentStartDate).replace(/\./g, '-') : 
-                new Date().toISOString().slice(0, 10)
-            }.pdf`;
+            let fileName = `Zeitbericht_${employee?.name.replace(/\s+/g, '_') || 'Mitarbeiter'}_`;
             
-            // PDF-Optionen
+            // FormatDate-Funktion verwenden, falls verfügbar
+            if (typeof formatDate !== 'undefined' && typeof currentStartDate !== 'undefined' && currentStartDate) {
+                fileName += formatDate(currentStartDate).replace(/\./g, '-');
+            } else if (typeof currentStartDate !== 'undefined' && currentStartDate) {
+                const date = new Date(currentStartDate);
+                fileName += date.toISOString().slice(0, 10);
+            } else {
+                fileName += new Date().toISOString().slice(0, 10);
+            }
+            fileName += '.pdf';
+            
+            // PDF-Optionen - optimiert für Druckvorschau
             const options = {
-                margin: 10,
+                margin: [10, 10, 10, 10],
                 filename: fileName,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    letterRendering: true,
+                    windowWidth: reportContainer.scrollWidth,
+                    windowHeight: reportContainer.scrollHeight
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'landscape',
+                    compress: true
+                },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
             };
             
-            // PDF generieren
-            await html2pdf().from(reportContainer).set(options).save();
+            // PDF generieren mit Druck-CSS
+            await html2pdf().set(options).from(reportContainer).save();
             
-            // Erfolgsmeldung
-            alert('PDF wurde erfolgreich erstellt!');
-        } catch (error) {
-            console.error('Fehler beim PDF-Export:', error);
-            alert('Fehler beim PDF-Export: ' + (error.message || 'Unbekannter Fehler'));
         } finally {
-            // "Kein Druck"-Elemente wieder anzeigen
-            noPrintElements.forEach(el => el.style.display = '');
+            // Druck-Modus entfernen
+            document.body.classList.remove('print-mode');
             
-            // Ladeindikator entfernen
-            if (document.body.contains(loadingIndicator)) {
-                document.body.removeChild(loadingIndicator);
-            }
+            // "Kein Druck"-Elemente wieder anzeigen
+            noPrintElements.forEach((el, index) => {
+                el.style.display = originalDisplay[index];
+            });
         }
     } catch (error) {
         console.error('Fehler beim PDF-Export:', error);

@@ -49,6 +49,34 @@ function setupEmployeeReportUI() {
         exportReportBtn.addEventListener('click', exportEmployeeReport);
     }
     
+    // Event-Listener für den Druck-Button (initialer Button)
+    const printBtnInitial = document.getElementById('print-employee-report-btn-initial');
+    if (printBtnInitial && !printBtnInitial.hasAttribute('data-listener-added')) {
+        printBtnInitial.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🖨️ Druck-Button geklickt (initial)');
+            printEmployeeReportDirect();
+        });
+        printBtnInitial.setAttribute('data-listener-added', 'true');
+    }
+    
+    // Event-Listener für den PDF-Export-Button (initialer Button)
+    const pdfExportBtn = document.getElementById('export-pdf-btn');
+    if (pdfExportBtn && !pdfExportBtn.hasAttribute('data-listener-added')) {
+        pdfExportBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Verwende die Funktion aus pdf-export-new.js, falls verfügbar, sonst die aus employee-reports.html
+            if (typeof generateEmployeeReportPDF === 'function') {
+                generateEmployeeReportPDF();
+            } else {
+                console.error('PDF-Export-Funktion nicht gefunden');
+                alert('PDF-Export-Funktion nicht verfügbar. Bitte laden Sie die Seite neu.');
+            }
+        });
+        pdfExportBtn.setAttribute('data-listener-added', 'true');
+    }
+    
     // Event-Listener für den Bearbeitungsmodus-Button
     const toggleEditModeBtn = document.getElementById('toggle-edit-mode-btn');
     if (toggleEditModeBtn) {
@@ -190,7 +218,7 @@ async function generateEmployeeReport() {
         </div>
         
         <div class="actions-bar no-print">
-            <button onclick="window.print()" class="btn secondary-btn">
+            <button id="print-employee-report-btn" class="btn secondary-btn">
                 <i class="fas fa-print"></i> Drucken
             </button>
             <button id="export-employee-report-btn" class="btn secondary-btn">
@@ -203,7 +231,41 @@ async function generateEmployeeReport() {
     `;
     
     // Event-Listener für Export-Buttons neu setzen
-    document.getElementById('export-employee-report-btn').addEventListener('click', exportEmployeeReport);
+    const exportBtn = document.getElementById('export-employee-report-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportEmployeeReport);
+    }
+    
+    // Event-Listener für Druck-Button (dynamisch erstellter Button)
+    const printBtn = document.getElementById('print-employee-report-btn');
+    if (printBtn) {
+        // Entferne alte Event-Listener, falls vorhanden, durch Klonen
+        const newPrintBtn = printBtn.cloneNode(true);
+        printBtn.parentNode.replaceChild(newPrintBtn, printBtn);
+        
+        newPrintBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🖨️ Druck-Button geklickt (dynamisch erstellt)');
+            // Direkt window.print() aufrufen - keine Verzögerung
+            printEmployeeReportDirect();
+        });
+    }
+    
+    // Event-Listener für PDF-Export-Button
+    const pdfExportBtn = document.getElementById('export-pdf-btn');
+    if (pdfExportBtn) {
+        pdfExportBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Verwende die Funktion aus pdf-export-new.js, falls verfügbar, sonst die aus employee-reports.html
+            if (typeof generateEmployeeReportPDF === 'function') {
+                generateEmployeeReportPDF();
+            } else {
+                console.error('PDF-Export-Funktion nicht gefunden');
+                alert('PDF-Export-Funktion nicht verfügbar. Bitte laden Sie die Seite neu.');
+            }
+        });
+    }
     
     // Aktualisierte Referenzen zu den neu erstellten Elementen
     const reportHeader = document.getElementById('employee-report-header');
@@ -912,55 +974,51 @@ function updateResetButton() {
 }
 
 /**
- * Druckt den Bericht mit Ladeindikator
+ * Direkte Druckfunktion ohne Verzögerung
  */
-function printEmployeeReport() {
+function printEmployeeReportDirect() {
     // Prüfen, ob Berichtsdaten vorhanden sind
-    if (currentReportEntries.length === 0) {
+    if (!currentReportEntries || currentReportEntries.length === 0) {
         alert('Keine Daten zum Drucken vorhanden.');
         return;
     }
     
-    // Ladeindikator erstellen
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.id = 'print-loading-indicator';
-    loadingIndicator.style.position = 'fixed';
-    loadingIndicator.style.top = '0';
-    loadingIndicator.style.left = '0';
-    loadingIndicator.style.width = '100%';
-    loadingIndicator.style.height = '100%';
-    loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    loadingIndicator.style.display = 'flex';
-    loadingIndicator.style.justifyContent = 'center';
-    loadingIndicator.style.alignItems = 'center';
-    loadingIndicator.style.zIndex = '9999';
-    loadingIndicator.innerHTML = `
-        <div style="background-color: white; padding: 30px; border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-            <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #4A7C59; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <h3 style="margin-top: 20px; color: #333;">Druckvorschau wird vorbereitet...</h3>
-            <p style="color: #666; margin-top: 10px;">Bitte warten Sie einen Moment.</p>
-        </div>
-        <style>
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        </style>
-    `;
-    document.body.appendChild(loadingIndicator);
+    // Stelle sicher, dass die Tabelle in Desktop-Ansicht ist
+    const reportTable = document.getElementById('employee-report-table');
+    if (reportTable) {
+        // Entferne mobile Klassen
+        reportTable.classList.remove('accordion-enabled');
+        // Stelle sicher, dass die Tabelle als Tabelle angezeigt wird
+        reportTable.style.display = 'table';
+        reportTable.style.width = '100%';
+        
+        // Stelle sicher, dass alle Zeilen korrekt angezeigt werden
+        const rows = reportTable.querySelectorAll('tr');
+        rows.forEach(row => {
+            row.style.display = 'table-row';
+            row.style.margin = '0';
+            row.style.padding = '0';
+        });
+        
+        const cells = reportTable.querySelectorAll('td, th');
+        cells.forEach(cell => {
+            cell.style.display = 'table-cell';
+            cell.style.position = 'static';
+        });
+    }
     
-    // Kurze Verzögerung, damit der Ladeindikator sichtbar wird
-    setTimeout(() => {
-        try {
-            // Druckdialog öffnen
-            window.print();
-        } finally {
-            // Ladeindikator nach kurzer Verzögerung entfernen
-            setTimeout(() => {
-                if (document.body.contains(loadingIndicator)) {
-                    document.body.removeChild(loadingIndicator);
-                }
-            }, 500);
-        }
-    }, 100);
+    // Direkt drucken - keine Verzögerung, keine Animation
+    window.print();
 }
+
+/**
+ * Druckt den Bericht - vereinfachte Version für Desktop-Ansicht
+ * (Kompatibilitätsfunktion für onclick-Attribute)
+ */
+function printEmployeeReport() {
+    printEmployeeReportDirect();
+}
+
+// Funktionen global verfügbar machen
+window.printEmployeeReport = printEmployeeReport;
+window.printEmployeeReportDirect = printEmployeeReportDirect;

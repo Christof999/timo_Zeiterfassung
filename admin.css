@@ -728,38 +728,184 @@ table tbody tr:last-child td {
     
     /* Mobile Optimierungen für Action Buttons */
     .action-buttons, .actions-container {
-        flex-direction: column;
-        gap: 6px;
+        flex-direction: row;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e8eef3;
     }
     
     .action-btn {
-        width: 100%;
+        flex: 1;
+        min-width: 80px;
         justify-content: center;
-        padding: 10px 12px;
+        padding: 8px 12px;
         font-size: 13px;
     }
     
-    /* Tabellen auf mobilen Geräten */
-    table {
-        font-size: 13px;
-    }
-    
-    table th, table td {
-        padding: 10px 8px;
-    }
-    
-    /* Table Container auf mobilen Geräten */
+    /* Table Container auf mobilen Geräten - Kartenansicht */
     .table-container, .employee-table-container, .project-table-container, 
     .activity-table-container, .report-table-container, .vehicle-table-container {
-        padding: 10px;
+        padding: 0;
         margin-bottom: 15px;
+        overflow: visible;
+        background: transparent;
+        box-shadow: none;
+    }
+    
+    /* Tabellen auf mobilen Geräten - Kartenansicht */
+    table {
+        display: block;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    
+    /* AUSNAHME: Berichtstabelle bleibt als Tabelle */
+    #employee-report-table {
+        display: table !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    
+    #employee-report-table thead {
+        display: table-header-group !important;
+    }
+    
+    #employee-report-table tbody {
+        display: table-row-group !important;
+    }
+    
+    #employee-report-table tr {
+        display: table-row !important;
+        margin-bottom: 0 !important;
+        background-color: transparent !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+    
+    #employee-report-table td,
+    #employee-report-table th {
+        display: table-cell !important;
+        padding: 6px 8px !important;
+        border: 1px solid #ddd !important;
+        text-align: left !important;
+        position: static !important;
+        width: auto !important;
+    }
+    
+    table thead {
+        display: none;
+    }
+    
+    table tbody {
+        display: block;
+        width: 100%;
+    }
+    
+    table tbody tr {
+        display: block;
+        width: 100%;
+        margin-bottom: 16px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e8eef3;
+        padding: 16px;
+        position: relative;
+    }
+    
+    table tbody tr:last-child {
+        margin-bottom: 0;
+    }
+    
+    table tbody td {
+        display: block;
+        width: 100%;
+        padding: 8px 0;
+        text-align: left !important;
+        border: none;
+        position: relative;
+        padding-left: 0;
+    }
+    
+    /* Erste Zelle (Name/Titel) als Header der Karte */
+    table tbody tr td:first-child {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e8eef3;
+    }
+    
+    /* Erste Zelle mit Status-Badge als Flex-Container */
+    table tbody tr td:first-child:has(.status-badge) {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    /* Status Badge in der ersten Zelle positionieren */
+    table tbody tr td:first-child .status-badge {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+    
+    /* Status Badge aus normaler Position entfernen */
+    table tbody tr td .status-badge {
+        display: inline-block;
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    /* Label für mobile Ansicht */
+    table tbody td::before {
+        content: attr(data-label);
+        display: inline-block;
+        font-weight: 600;
+        color: #666;
+        margin-right: 8px;
+        min-width: 100px;
+        font-size: 14px;
+    }
+    
+    /* Erste Zelle ohne Label */
+    table tbody td:first-child::before {
+        display: none;
+    }
+    
+    /* Actions Container Styling */
+    table tbody td.actions-container {
+        padding-top: 12px;
+        margin-top: 12px;
+        border-top: 1px solid #e8eef3;
+    }
+    
+    table tbody td.actions-container::before {
+        display: none;
     }
     
     /* Status Badges auf mobilen Geräten */
     .status-badge {
-        font-size: 11px;
-        padding: 4px 10px;
+        font-size: 12px;
+        padding: 4px 12px;
+        border-radius: 12px;
     }
+    
+    /* Spezielle Behandlung für Status-Spalte */
+    table tbody td:has(.status-badge) {
+        display: none;
+    }
+    
+    /* Status Badge in erste Zelle verschieben (wird per JavaScript gemacht) */
 }
 
 /* Report Header Styling - Override für Report Modal */

@@ -119,6 +119,71 @@
             margin-bottom: 15px;
         }
         
+        /* Zuklappbare Sections */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            padding: 10px 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .section-header:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+            border-radius: 4px;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+        
+        .section-header h2 {
+            margin-bottom: 0;
+            flex: 1;
+        }
+        
+        .collapse-toggle-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 10px;
+            color: var(--text-color);
+            font-size: 18px;
+            transition: transform 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .collapse-toggle-btn:hover {
+            color: var(--primary-color);
+        }
+        
+        .section-header.expanded .collapse-toggle-btn {
+            transform: rotate(180deg);
+        }
+        
+        .collapsible-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+            display: block;
+        }
+        
+        .collapsible-content.collapsed {
+            max-height: 0 !important;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        
+        .collapsible-content.expanded {
+            max-height: 10000px !important;
+            opacity: 1;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        
         .container {
             max-width: 1200px;
             margin: 20px auto;
@@ -867,13 +932,19 @@
             </section>
             
             <section>
-                <h2><i class="fas fa-clock"></i> Zeiteinträge</h2>
-                <div class="admin-controls" id="admin-time-entry-controls">
-                    <button id="add-time-entry-btn" class="btn btn-primary" title="Neuen Zeiteintrag für Mitarbeiter erstellen">
-                        <i class="fas fa-plus-circle"></i> Zeiteintrag hinzufügen
+                <div class="section-header collapsible-header" data-target="time-entries-section">
+                    <h2><i class="fas fa-clock"></i> Zeiteinträge</h2>
+                    <button class="collapse-toggle-btn" aria-label="Ein-/Ausklappen">
+                        <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
-                <div id="time-entries-container">
+                <div class="collapsible-content collapsed" id="time-entries-section">
+                    <div class="admin-controls" id="admin-time-entry-controls">
+                        <button id="add-time-entry-btn" class="btn btn-primary" title="Neuen Zeiteintrag für Mitarbeiter erstellen">
+                            <i class="fas fa-plus-circle"></i> Zeiteintrag hinzufügen
+                        </button>
+                    </div>
+                    <div id="time-entries-container">
                     <p>Zeiteinträge werden geladen...</p>
                     <table id="time-entries-table" class="time-entries">
                         <thead>
@@ -891,19 +962,24 @@
                             <!-- Zeiteinträge werden hier eingefügt -->
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </section>
             
             <section>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div class="section-header collapsible-header" data-target="vehicle-usages-section">
                     <h2><i class="fas fa-car"></i> Fahrzeugbuchungen</h2>
+                    <button class="collapse-toggle-btn" aria-label="Ein-/Ausklappen">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="collapsible-content collapsed" id="vehicle-usages-section">
                     <div class="admin-controls" id="admin-vehicle-usage-controls">
                         <button id="add-vehicle-booking-btn" class="btn btn-primary" title="Neue Fahrzeugbuchung erstellen">
                             <i class="fas fa-plus"></i> Fahrzeugbuchung hinzufügen
                         </button>
                     </div>
-                </div>
-                <div id="vehicle-usages-container">
+                    <div id="vehicle-usages-container">
                     <p>Fahrzeugbuchungen werden geladen...</p>
                     <table id="vehicle-usages-table">
                         <thead>
@@ -1251,6 +1327,11 @@
                 await loadProjectImages('delivery_note');
                 
                 console.log('=== ALLE DATEN ERFOLGREICH GELADEN ===');
+                
+                // Zuklappbare Sections initialisieren (falls noch nicht geschehen)
+                if (typeof initCollapsibleSections === 'function') {
+                    initCollapsibleSections();
+                }
                 
                 // Event-Listener für Button zum Hinzufügen von Fahrzeugbuchungen
                 const addVehicleBookingBtn = document.getElementById('add-vehicle-booking-btn');
@@ -3209,6 +3290,121 @@
         });
         
         console.log('Edit-Modal Funktionen geladen');
+        
+        // Funktion zum Initialisieren der zuklappbaren Sections
+        function initCollapsibleSections() {
+            console.log('🔄 Initialisiere zuklappbare Sections...');
+            const headers = document.querySelectorAll('.collapsible-header');
+            console.log('📋 Gefundene Headers:', headers.length);
+            
+            headers.forEach((header, index) => {
+                // Prüfe ob bereits initialisiert (verhindert mehrfache Event-Listener)
+                if (header.dataset.initialized === 'true') {
+                    console.log(`⏭️ Header ${index} bereits initialisiert, überspringe`);
+                    return;
+                }
+                
+                const toggleBtn = header.querySelector('.collapse-toggle-btn');
+                const targetId = header.getAttribute('data-target');
+                const content = document.getElementById(targetId);
+                
+                console.log(`Header ${index}:`, {
+                    hasToggleBtn: !!toggleBtn,
+                    targetId: targetId,
+                    hasContent: !!content
+                });
+                
+                if (!content) {
+                    console.warn(`⚠️ Content nicht gefunden für ID: ${targetId}`);
+                    return;
+                }
+                
+                // Standardmäßig eingeklappt (nur beim ersten Mal)
+                if (!content.classList.contains('expanded')) {
+                    content.classList.add('collapsed');
+                    content.classList.remove('expanded');
+                    header.classList.remove('expanded');
+                }
+                
+                // Event-Listener für Header-Klick (nur einmal hinzufügen)
+                header.addEventListener('click', function(e) {
+                    // Verhindere Toggle wenn auf Button geklickt wird (Button hat eigenen Listener)
+                    if (e.target.closest('.collapse-toggle-btn')) {
+                        return;
+                    }
+                    console.log('📌 Header geklickt:', targetId);
+                    toggleSection(header, content);
+                });
+                
+                // Event-Listener für Toggle-Button (nur einmal hinzufügen)
+                if (toggleBtn) {
+                    toggleBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        console.log('📌 Toggle-Button geklickt:', targetId);
+                        toggleSection(header, content);
+                    });
+                } else {
+                    console.warn(`⚠️ Toggle-Button nicht gefunden für Header ${index}`);
+                }
+                
+                // Markiere als initialisiert
+                header.dataset.initialized = 'true';
+            });
+            
+            console.log('✅ Zuklappbare Sections initialisiert');
+        }
+        
+        // Funktion zum Ein-/Ausklappen einer Section
+        function toggleSection(header, content) {
+            console.log('🔄 Toggle Section:', {
+                hasCollapsed: content.classList.contains('collapsed'),
+                hasExpanded: content.classList.contains('expanded'),
+                contentId: content.id
+            });
+            
+            const isCollapsed = content.classList.contains('collapsed');
+            
+            // Entferne beide Klassen zuerst, dann füge die richtige hinzu
+            content.classList.remove('collapsed', 'expanded');
+            header.classList.remove('expanded');
+            
+            if (isCollapsed) {
+                // Ausklappen
+                console.log('⬇️ Klappe aus...');
+                content.classList.add('expanded');
+                header.classList.add('expanded');
+            } else {
+                // Einklappen
+                console.log('⬆️ Klappe ein...');
+                content.classList.add('collapsed');
+            }
+            
+            // Force reflow für Animation
+            void content.offsetHeight;
+            
+            console.log('✅ Nach Toggle:', {
+                hasCollapsed: content.classList.contains('collapsed'),
+                hasExpanded: content.classList.contains('expanded'),
+                computedMaxHeight: window.getComputedStyle(content).maxHeight
+            });
+        }
+        
+        // Funktion global verfügbar machen
+        window.initCollapsibleSections = initCollapsibleSections;
+        window.toggleSection = toggleSection;
+        
+        // Initialisierung beim DOMContentLoaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('📅 DOMContentLoaded - Initialisiere Sections');
+                initCollapsibleSections();
+            });
+        } else {
+            // DOM ist bereits geladen
+            console.log('📅 DOM bereits geladen - Initialisiere Sections sofort');
+            setTimeout(() => initCollapsibleSections(), 100);
+        }
     </script>
 </body>
 </html>

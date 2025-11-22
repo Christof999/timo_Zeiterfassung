@@ -87,6 +87,93 @@
             margin-bottom: 20px;
         }
         
+        /* Stelle sicher, dass die Berichtstabelle immer als Tabelle angezeigt wird */
+        #employee-report-table {
+            display: table !important;
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        
+        #employee-report-table thead {
+            display: table-header-group !important;
+        }
+        
+        #employee-report-table tbody {
+            display: table-row-group !important;
+        }
+        
+        #employee-report-table tr {
+            display: table-row !important;
+            page-break-inside: avoid;
+        }
+        
+        #employee-report-table td,
+        #employee-report-table th {
+            display: table-cell !important;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            vertical-align: top;
+        }
+        
+        /* Mobile Ansicht - Berichtstabelle NICHT in Kartenansicht umwandeln */
+        @media screen and (max-width: 768px) {
+            /* Überschreibe mobile Tabellen-Regeln für Berichtstabelle */
+            #employee-report-table {
+                display: table !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 12px;
+            }
+            
+            #employee-report-table thead {
+                display: table-header-group !important;
+            }
+            
+            #employee-report-table tbody {
+                display: table-row-group !important;
+            }
+            
+            #employee-report-table tr {
+                display: table-row !important;
+                width: 100% !important;
+                margin-bottom: 0 !important;
+                background-color: transparent !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+            }
+            
+            #employee-report-table td,
+            #employee-report-table th {
+                display: table-cell !important;
+                padding: 6px 8px !important;
+                border: 1px solid #ddd !important;
+                text-align: left !important;
+                position: static !important;
+                padding-left: 8px !important;
+                width: auto !important;
+            }
+            
+            /* Horizontal scrollbar für mobile Ansicht */
+            .report-table-container {
+                overflow-x: auto !important;
+                overflow-y: visible !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Kompaktere Darstellung auf mobilen Geräten */
+            #employee-report-table {
+                font-size: 11px;
+            }
+            
+            #employee-report-table th,
+            #employee-report-table td {
+                padding: 4px 6px !important;
+            }
+        }
+        
         .entry-with-pause {
             background-color: #fff9e6;
         }
@@ -188,6 +275,7 @@
             display: block;
         }
         
+        /* Desktop-Ansicht für Druck und PDF erzwingen */
         @media print {
             .no-print {
                 display: none !important;
@@ -196,11 +284,46 @@
             body {
                 padding: 0;
                 background: white;
+                font-size: 12px;
             }
             
             .employee-report-container {
                 box-shadow: none;
                 padding: 0;
+                max-width: 100%;
+            }
+            
+            /* Stelle sicher, dass Tabellen als Tabellen angezeigt werden */
+            #employee-report-table {
+                display: table !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 11px;
+            }
+            
+            #employee-report-table thead {
+                display: table-header-group !important;
+            }
+            
+            #employee-report-table tbody {
+                display: table-row-group !important;
+            }
+            
+            #employee-report-table tr {
+                display: table-row !important;
+                page-break-inside: avoid;
+            }
+            
+            #employee-report-table td,
+            #employee-report-table th {
+                display: table-cell !important;
+                padding: 6px 8px !important;
+                border: 1px solid #ddd !important;
+            }
+            
+            /* Mobile-Ansicht deaktivieren */
+            .report-table-container {
+                overflow: visible !important;
             }
             
             /* Notiz/Kommentar-Spalte in der Druckansicht ausblenden */
@@ -208,6 +331,72 @@
             #employee-report-table td:nth-child(7) {
                 display: none !important;
             }
+            
+            /* Container für bessere Darstellung */
+            .container {
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 10px !important;
+            }
+        }
+        
+        /* Druck-Modus für PDF-Export - verwendet die gleichen Regeln wie @media print */
+        .print-mode {
+            padding: 0;
+            background: white;
+            font-size: 12px;
+        }
+        
+        .print-mode .no-print {
+            display: none !important;
+        }
+        
+        .print-mode .employee-report-container {
+            box-shadow: none;
+            padding: 0;
+            max-width: 100%;
+        }
+        
+        .print-mode #employee-report-table {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 11px;
+        }
+        
+        .print-mode #employee-report-table thead {
+            display: table-header-group !important;
+        }
+        
+        .print-mode #employee-report-table tbody {
+            display: table-row-group !important;
+        }
+        
+        .print-mode #employee-report-table tr {
+            display: table-row !important;
+            page-break-inside: avoid;
+        }
+        
+        .print-mode #employee-report-table td,
+        .print-mode #employee-report-table th {
+            display: table-cell !important;
+            padding: 6px 8px !important;
+            border: 1px solid #ddd !important;
+        }
+        
+        .print-mode .report-table-container {
+            overflow: visible !important;
+        }
+        
+        .print-mode #employee-report-table th:nth-child(7),
+        .print-mode #employee-report-table td:nth-child(7) {
+            display: none !important;
+        }
+        
+        .print-mode .container {
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 10px !important;
         }
     </style>
 </head>
@@ -300,7 +489,7 @@
                     </div>
                     
                     <div class="actions-bar no-print">
-                        <button onclick="printEmployeeReport()" class="btn secondary-btn">
+                        <button id="print-employee-report-btn-initial" class="btn secondary-btn">
                             <i class="fas fa-print"></i> Drucken
                         </button>
                         
@@ -308,7 +497,7 @@
                             <i class="fas fa-file-csv"></i> Als CSV exportieren
                         </button>
                         
-                        <button id="export-pdf-btn" class="btn primary-btn" onclick="generateEmployeeReportPDF()">
+                        <button id="export-pdf-btn" class="btn primary-btn">
                             <i class="fas fa-file-pdf"></i> Als PDF exportieren
                         </button>
                     </div>
@@ -327,69 +516,87 @@
     
     <!-- PDF Export für Mitarbeiterberichte -->
     <script>
-        // PDF-Export-Funktion für Mitarbeiterberichte
+        // PDF-Export-Funktion für Mitarbeiterberichte - verwendet Druckvorschau
         async function generateEmployeeReportPDF() {
             // Prüfen, ob Berichtsdaten vorhanden sind
-            if (currentReportEntries.length === 0) {
+            if (typeof currentReportEntries === 'undefined' || !currentReportEntries || currentReportEntries.length === 0) {
                 alert('Keine Daten zum Exportieren vorhanden.');
                 return;
             }
             
             try {
                 // Mitarbeiter-Informationen laden
-                const employee = await DataService.getEmployeeById(currentEmployeeId);
+                const employee = typeof currentEmployeeId !== 'undefined' && currentEmployeeId ? 
+                    await DataService.getEmployeeById(currentEmployeeId) : 
+                    { name: 'Mitarbeiter' };
                 
-                // Ladeindikator erstellen
-                const loadingIndicator = document.createElement('div');
-                loadingIndicator.style.position = 'fixed';
-                loadingIndicator.style.top = '0';
-                loadingIndicator.style.left = '0';
-                loadingIndicator.style.width = '100%';
-                loadingIndicator.style.height = '100%';
-                loadingIndicator.style.backgroundColor = 'rgba(0,0,0,0.7)';
-                loadingIndicator.style.display = 'flex';
-                loadingIndicator.style.justifyContent = 'center';
-                loadingIndicator.style.alignItems = 'center';
-                loadingIndicator.style.zIndex = '9999';
-                loadingIndicator.innerHTML = '<div style="background-color: white; padding: 20px; border-radius: 5px; text-align: center;"><h3>PDF wird erstellt...</h3><p>Bitte warten Sie, die Daten werden vorbereitet...</p></div>';
-                document.body.appendChild(loadingIndicator);
+                // Stelle sicher, dass die Tabelle in Desktop-Ansicht ist
+                const reportTable = document.getElementById('employee-report-table');
+                const reportContainer = document.getElementById('employee-report-container');
+                
+                if (!reportContainer) {
+                    throw new Error('Berichtsinhalt konnte nicht gefunden werden');
+                }
+                
+                if (reportTable) {
+                    // Entferne mobile Klassen
+                    reportTable.classList.remove('accordion-enabled');
+                    reportTable.style.display = 'table';
+                    reportTable.style.width = '100%';
+                }
                 
                 // Ausblenden der "Kein Druck"-Elemente
                 const noPrintElements = document.querySelectorAll('.no-print');
-                noPrintElements.forEach(el => el.style.display = 'none');
+                const originalDisplay = [];
+                noPrintElements.forEach((el, index) => {
+                    originalDisplay[index] = el.style.display;
+                    el.style.display = 'none';
+                });
+                
+                // Aktiviere Druck-Modus für CSS
+                document.body.classList.add('print-mode');
                 
                 try {
-                    // Hole den Container mit dem Berichtsinhalt
-                    const reportContainer = document.getElementById('employee-report-container');
-                    
                     // Dateiname generieren
-                    const fileName = `Zeitbericht_${employee?.name.replace(/\s+/g, '_') || 'Mitarbeiter'}_${formatDate(currentStartDate).replace(/\./g, '-')}.pdf`;
+                    const fileName = `Zeitbericht_${employee?.name.replace(/\s+/g, '_') || 'Mitarbeiter'}_${
+                        typeof currentStartDate !== 'undefined' && currentStartDate ? 
+                        formatDate(currentStartDate).replace(/\./g, '-') : 
+                        new Date().toISOString().slice(0, 10)
+                    }.pdf`;
                     
-                    // PDF-Optionen
+                    // PDF-Optionen - optimiert für Druckvorschau
                     const options = {
-                        margin: 10,
+                        margin: [10, 10, 10, 10],
                         filename: fileName,
                         image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true },
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                        html2canvas: { 
+                            scale: 2,
+                            useCORS: true,
+                            logging: false,
+                            letterRendering: true,
+                            windowWidth: reportContainer.scrollWidth,
+                            windowHeight: reportContainer.scrollHeight
+                        },
+                        jsPDF: { 
+                            unit: 'mm', 
+                            format: 'a4', 
+                            orientation: 'landscape',
+                            compress: true
+                        },
+                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                     };
                     
-                    // PDF generieren
-                    await html2pdf().from(reportContainer).set(options).save();
+                    // PDF generieren mit Druck-CSS
+                    await html2pdf().set(options).from(reportContainer).save();
                     
-                    // Erfolgsmeldung
-                    alert('PDF wurde erfolgreich erstellt!');
-                } catch (error) {
-                    console.error('Fehler beim PDF-Export:', error);
-                    alert('Fehler beim PDF-Export: ' + (error.message || 'Unbekannter Fehler'));
                 } finally {
-                    // "Kein Druck"-Elemente wieder anzeigen
-                    noPrintElements.forEach(el => el.style.display = '');
+                    // Druck-Modus entfernen
+                    document.body.classList.remove('print-mode');
                     
-                    // Ladeindikator entfernen
-                    if (document.body.contains(loadingIndicator)) {
-                        document.body.removeChild(loadingIndicator);
-                    }
+                    // "Kein Druck"-Elemente wieder anzeigen
+                    noPrintElements.forEach((el, index) => {
+                        el.style.display = originalDisplay[index];
+                    });
                 }
             } catch (error) {
                 console.error('Fehler beim PDF-Export:', error);
