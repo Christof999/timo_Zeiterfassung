@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+dist/
+
+# Build outputs
+*.log
+*.local
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Backup files
+*.bak
+*.old
+*-backup.*
+*-old.*
+

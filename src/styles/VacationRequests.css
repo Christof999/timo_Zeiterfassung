@@ -1,0 +1,16 @@
+.vacation-requests-container {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.vacation-requests-container header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.vacation-requests-container h1 {
+  font-size: 1.8rem;
+}
+

@@ -1,0 +1,34 @@
+{
+  "name": "zeiterfassung",
+  "version": "1.0.0",
+  "description": "",
+  "main": "admin-minimal.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Christof999/Zeiterfassung.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Christof999/Zeiterfassung/issues"
+  },
+  "homepage": "https://github.com/Christof999/Zeiterfassung#readme",
+  "dependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "firebase": "^12.6.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^7.10.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6"
+  }
+}

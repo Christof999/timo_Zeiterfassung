@@ -1,0 +1,69 @@
+.splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #4A7C59 0%, #5A8C69 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fadeOut 0.5s ease-out 2.5s forwards;
+}
+
+.splash-content {
+  text-align: center;
+  color: white;
+}
+
+.splash-logo {
+  max-width: 120px;
+  max-height: 120px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px;
+}
+
+.splash-title {
+  font-size: 2rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.splash-subtitle {
+  font-size: 1rem;
+  opacity: 0.9;
+  margin-bottom: 30px;
+}
+
+.splash-loader {
+  width: 200px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.loader-bar {
+  height: 100%;
+  width: 0%;
+  background: white;
+  animation: loading 2.5s ease-out forwards;
+}
+
+@keyframes loading {
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+

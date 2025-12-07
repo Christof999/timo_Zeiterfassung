@@ -1,0 +1,68 @@
+.admin-login-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-color);
+}
+
+.admin-login-header {
+  padding: var(--spacing-lg);
+  text-align: center;
+  background: var(--card-background);
+  border-bottom: 0.5px solid var(--border-color);
+}
+
+.admin-login-main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-lg);
+}
+
+.admin-login-section {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-md);
+  border: 0.5px solid var(--border-color);
+  width: 100%;
+  max-width: 420px;
+}
+
+.admin-login-section h2 {
+  margin-bottom: var(--spacing-xl);
+  text-align: center;
+}
+
+.admin-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.user-link {
+  margin-top: var(--spacing-lg);
+  text-align: center;
+  padding-top: var(--spacing-lg);
+  border-top: 0.5px solid var(--border-color);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--transition-base);
+  padding: 0;
+  font-family: inherit;
+}
+
+.link-btn:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+

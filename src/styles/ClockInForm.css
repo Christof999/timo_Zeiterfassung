@@ -1,0 +1,67 @@
+.clock-in-form {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow);
+  border: 0.5px solid var(--border-color);
+  animation: slideUp 0.3s ease-out;
+}
+
+.clock-in-form form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.clock-in-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.clock-in-form label {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+}
+
+.clock-in-form select {
+  padding: var(--spacing-md);
+  min-height: var(--touch-target-comfortable);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: clamp(1rem, 3vw, 1.0625rem);
+  font-family: inherit;
+  background: var(--background-color);
+  color: var(--text-color);
+  width: 100%;
+  transition: all var(--transition-base);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231C1C1E' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--spacing-md) center;
+  background-size: 12px;
+  padding-right: calc(var(--spacing-md) + 20px);
+}
+
+.clock-in-form select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.1);
+}
+
+.clock-in-form .btn {
+  width: 100%;
+  font-size: clamp(1.0625rem, 3vw, 1.125rem);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  min-height: 56px; /* Extra groß für wichtige Aktionen */
+}
+
+@media (max-width: 480px) {
+  .clock-in-form {
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-md);
+  }
+}

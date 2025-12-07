@@ -1,0 +1,165 @@
+.clock-out-form {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow);
+  border: 0.5px solid var(--border-color);
+  animation: slideUp 0.3s ease-out;
+}
+
+.active-project-info {
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-xl);
+  border-bottom: 1.5px solid var(--border-color);
+}
+
+.active-project-info h3 {
+  margin-bottom: var(--spacing-lg);
+  font-size: clamp(1.125rem, 3vw, 1.25rem);
+  color: var(--text-color);
+  font-weight: 700;
+}
+
+.project-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--light-color);
+  border-radius: var(--radius-md);
+}
+
+.project-name {
+  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
+  margin: 0;
+  color: var(--text-color);
+  font-weight: 700;
+}
+
+.project-client,
+.project-location {
+  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+  color: var(--text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.clock-in-info {
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--primary-light) 0%, transparent 100%);
+  border-radius: var(--radius-md);
+  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+  border-left: 4px solid var(--primary-color);
+  font-weight: 500;
+}
+
+.current-vehicle-bookings {
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background: var(--light-color);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-color);
+}
+
+.current-vehicle-bookings h4 {
+  margin-bottom: var(--spacing-md);
+  font-size: clamp(1rem, 2.5vw, 1.125rem);
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.vehicle-bookings-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.booking-item {
+  background: var(--card-background);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-color);
+  transition: all var(--transition-base);
+}
+
+.booking-item:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.booking-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.booking-item-vehicle {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+}
+
+.booking-item-hours {
+  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  color: var(--text-secondary);
+}
+
+.booking-item-comment {
+  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+  font-style: italic;
+}
+
+/* Button Grid für Mobile */
+.clock-out-buttons {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-md);
+}
+
+.clock-out-buttons .btn {
+  width: 100%;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  min-height: var(--touch-target-comfortable);
+  font-size: clamp(1rem, 3vw, 1.0625rem);
+  font-weight: 600;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Primary Action Button - Extra prominent */
+.clock-out-buttons .btn.primary-btn {
+  min-height: 56px;
+  font-size: clamp(1.0625rem, 3vw, 1.125rem);
+  box-shadow: 0 4px 16px rgba(52, 199, 89, 0.3);
+}
+
+@media (min-width: 480px) {
+  .clock-out-buttons {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .clock-out-buttons .btn.primary-btn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .clock-out-form {
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-md);
+  }
+  
+  .project-details {
+    padding: var(--spacing-md);
+  }
+  
+  .clock-out-buttons .btn {
+    font-size: clamp(0.9375rem, 2.5vw, 1rem);
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+}
