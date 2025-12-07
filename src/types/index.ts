@@ -101,3 +101,20 @@ export interface FileUpload {
   mimeType?: string
 }
 
+export interface LeaveRequest {
+  id?: string
+  employeeId: string
+  employeeName?: string
+  startDate: Date | any
+  endDate: Date | any
+  type: 'vacation' | 'sick' | 'special' | 'unpaid'
+  reason?: string
+  workingDays: number
+  status: 'pending' | 'approved' | 'rejected'
+  createdAt?: Date | any
+  updatedAt?: Date | any
+  approvedBy?: string
+  approvedAt?: Date | any
+  rejectionReason?: string
+}
+

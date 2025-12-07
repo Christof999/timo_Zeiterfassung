@@ -548,3 +548,232 @@
   }
 }
 
+/* Urlaubsanträge Admin Tab */
+.vacation-tab .tab-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.pending-badge {
+  background: #ff9500;
+  color: white;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1.5px solid var(--border-color);
+  background: var(--card-background);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  color: var(--text-secondary);
+}
+
+.filter-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.filter-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.leave-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.leave-request-card {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  border: 0.5px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.leave-request-card.status-pending {
+  border-left-color: #ff9500;
+}
+
+.leave-request-card.status-approved {
+  border-left-color: var(--success-color);
+}
+
+.leave-request-card.status-rejected {
+  border-left-color: var(--danger-color);
+}
+
+.request-main {
+  flex: 1;
+}
+
+.request-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.request-employee {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text-color);
+}
+
+.request-type-badge {
+  background: var(--light-color);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.request-period {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.period-dates {
+  font-size: 0.95rem;
+  color: var(--text-color);
+}
+
+.period-days {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: var(--light-color);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.leave-request-card .request-reason {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  padding: var(--spacing-sm);
+  background: var(--light-color);
+  border-radius: var(--radius-sm);
+  margin: 0;
+}
+
+.leave-request-card .request-rejection {
+  font-size: 0.9rem;
+  color: var(--danger-color);
+  padding: var(--spacing-sm);
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.request-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.request-actions .action-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.approve-btn {
+  background: var(--success-color) !important;
+  color: white !important;
+  font-size: 0.85rem !important;
+  padding: var(--spacing-sm) var(--spacing-md) !important;
+}
+
+.reject-btn {
+  background: var(--danger-color) !important;
+  color: white !important;
+  font-size: 0.85rem !important;
+  padding: var(--spacing-sm) var(--spacing-md) !important;
+}
+
+.danger-btn {
+  background: var(--danger-color) !important;
+  color: white !important;
+}
+
+.danger-btn:hover {
+  background: #e03e32 !important;
+}
+
+/* Status Badges */
+.vacation-tab .status-badge {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.vacation-tab .status-badge.pending {
+  background: rgba(255, 149, 0, 0.15);
+  color: #cc7700;
+}
+
+.vacation-tab .status-badge.approved {
+  background: rgba(52, 199, 89, 0.15);
+  color: var(--success-color);
+}
+
+.vacation-tab .status-badge.rejected {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--danger-color);
+}
+
+@media (max-width: 600px) {
+  .leave-request-card {
+    padding: var(--spacing-md);
+  }
+  
+  .request-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+  
+  .request-period {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+  
+  .request-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .request-actions .action-buttons {
+    width: 100%;
+  }
+  
+  .request-actions .action-buttons .btn {
+    flex: 1;
+  }
+}
+

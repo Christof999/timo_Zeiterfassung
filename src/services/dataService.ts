@@ -4,7 +4,8 @@ import {
   getDoc, 
   getDocs, 
   addDoc, 
-  updateDoc, 
+  updateDoc,
+  deleteDoc, 
   query, 
   where, 
   limit,
@@ -13,7 +14,7 @@ import {
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
-import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload } from '../types'
+import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
 
 class DataServiceClass {
   private authReadyPromise: Promise<void>
@@ -740,6 +741,122 @@ class DataServiceClass {
       console.error(`Fehler beim Löschen des Projekts ${id}:`, error)
       throw error
     }
+  }
+
+  // Leave Request Management
+  async getLeaveRequestsByEmployee(employeeId: string): Promise<LeaveRequest[]> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestsRef = collection(db, 'leaveRequests')
+      const q = query(leaveRequestsRef, where('employeeId', '==', employeeId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LeaveRequest))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Urlaubsanträge:', error)
+      return []
+    }
+  }
+
+  async getAllLeaveRequests(): Promise<LeaveRequest[]> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestsRef = collection(db, 'leaveRequests')
+      const snapshot = await getDocs(leaveRequestsRef)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LeaveRequest))
+    } catch (error) {
+      console.error('Fehler beim Abrufen aller Urlaubsanträge:', error)
+      return []
+    }
+  }
+
+  async createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestsRef = collection(db, 'leaveRequests')
+      const docRef = await addDoc(leaveRequestsRef, {
+        ...requestData,
+        status: 'pending',
+        createdAt: new Date()
+      })
+      return docRef.id
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Urlaubsantrags:', error)
+      throw error
+    }
+  }
+
+  async updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestRef = doc(db, 'leaveRequests', id)
+      await updateDoc(leaveRequestRef, {
+        ...requestData,
+        updatedAt: new Date()
+      })
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren des Urlaubsantrags:', error)
+      throw error
+    }
+  }
+
+  async approveLeaveRequest(id: string, approvedBy: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestRef = doc(db, 'leaveRequests', id)
+      await updateDoc(leaveRequestRef, {
+        status: 'approved',
+        approvedBy,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+      })
+    } catch (error) {
+      console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
+      throw error
+    }
+  }
+
+  async rejectLeaveRequest(id: string, rejectionReason: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestRef = doc(db, 'leaveRequests', id)
+      await updateDoc(leaveRequestRef, {
+        status: 'rejected',
+        rejectionReason,
+        updatedAt: new Date()
+      })
+    } catch (error) {
+      console.error('Fehler beim Ablehnen des Urlaubsantrags:', error)
+      throw error
+    }
+  }
+
+  async deleteLeaveRequest(id: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const leaveRequestRef = doc(db, 'leaveRequests', id)
+      await deleteDoc(leaveRequestRef)
+    } catch (error) {
+      console.error('Fehler beim Löschen des Urlaubsantrags:', error)
+      throw error
+    }
+  }
+
+  // Hilfsfunktion: Arbeitstage berechnen (ohne Wochenenden)
+  calculateWorkingDays(startDate: Date, endDate: Date): number {
+    let count = 0
+    const current = new Date(startDate)
+    const end = new Date(endDate)
+    
+    while (current <= end) {
+      const dayOfWeek = current.getDay()
+      // 0 = Sonntag, 6 = Samstag
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        count++
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    
+    return count
   }
 
   // Admin: Dashboard-Daten
