@@ -3,13 +3,15 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getAuth } from 'firebase/auth'
 
+// Firebase-Konfiguration aus Umgebungsvariablen
+// Erstelle eine .env Datei mit den VITE_FIREBASE_* Variablen
 const firebaseConfig = {
-  apiKey: "REMOVED_API_KEY",
-  authDomain: "lauffer-zeiterfassung.firebaseapp.com",
-  projectId: "lauffer-zeiterfassung",
-  storageBucket: "lauffer-zeiterfassung.appspot.com",
-  messagingSenderId: "REMOVED_SENDER_ID",
-  appId: "1:REMOVED_SENDER_ID:web:c177aeac4f8c126ab41f0b"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 }
 
 const app = initializeApp(firebaseConfig)
