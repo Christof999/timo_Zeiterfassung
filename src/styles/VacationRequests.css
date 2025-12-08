@@ -37,11 +37,12 @@
 
 /* Urlaubskonto Card */
 .vacation-account {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%) !important;
+  color: white !important;
   padding: var(--spacing-xl);
   border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-lg);
+  border: none !important;
 }
 
 .vacation-account h3 {
@@ -49,6 +50,7 @@
   font-size: 1rem;
   opacity: 0.9;
   font-weight: 500;
+  color: white;
 }
 
 .vacation-stats {
@@ -66,11 +68,13 @@
   font-size: clamp(2rem, 6vw, 2.5rem);
   font-weight: 700;
   line-height: 1.2;
+  color: white;
 }
 
 .vacation-stats .stat-label {
-  font-size: 0.85rem;
-  opacity: 0.85;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 500;
 }
 
 .vacation-progress {
