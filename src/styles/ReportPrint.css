@@ -423,8 +423,431 @@
   }
 }
 
+/* ==================== REPORT TYPE TABS ==================== */
+.report-type-tabs {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-xs);
+  background: var(--light-color);
+  border-radius: var(--radius-lg);
+}
+
+.report-type-btn {
+  flex: 1;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.report-type-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--text-color);
+}
+
+.report-type-btn.active {
+  background: white;
+  color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.checkbox-row {
+  margin-bottom: var(--spacing-md);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary-color);
+}
+
+/* ==================== PROJEKT-BERICHT ==================== */
+.project-report .project-info-section {
+  background: linear-gradient(135deg, #f8faf9 0%, #e8f5e9 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+  border: 1px solid var(--border-color);
+}
+
+.project-info-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-color);
+}
+
+.project-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.info-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.project-description {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.project-description p {
+  margin: var(--spacing-xs) 0 0 0;
+  white-space: pre-wrap;
+  color: var(--text-color);
+  line-height: 1.6;
+}
+
+/* Kosten-Tabellen */
+.cost-section {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+}
+
+.cost-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cost-table th,
+.cost-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cost-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.cost-table .number-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-table .subtotal-row {
+  background: var(--light-color);
+}
+
+.cost-table .subtotal-row td {
+  border-top: 2px solid var(--border-color);
+  padding-top: var(--spacing-md);
+}
+
+/* Gesamtkosten */
+.total-cost-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.total-cost-box {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  color: white;
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-cost-box .total-label {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.total-cost-box .total-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+/* Medien-Sektionen */
+.media-section {
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+}
+
+.media-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.photo-card {
+  background: var(--light-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.photo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.photo-thumbnail {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
+.photo-placeholder {
+  width: 100%;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: var(--border-color);
+}
+
+.photo-info {
+  padding: var(--spacing-sm);
+}
+
+.photo-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.photo-desc {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-color);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dokumente Liste */
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.document-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm);
+  background: var(--light-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.document-card:hover {
+  background: var(--border-color);
+}
+
+.document-thumbnail {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.document-placeholder {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.document-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.document-name {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-date {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.document-desc {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lightbox für Bilder */
+.lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+}
+
+.lightbox-content {
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lightbox-close {
+  position: fixed;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  background: white;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 10001;
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.lightbox-info {
+  background: white;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+  max-width: 600px;
+  text-align: center;
+}
+
+.lightbox-filename {
+  font-weight: 600;
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.lightbox-description {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* ==================== DRUCK-STYLES PROJEKT ==================== */
+@media print {
+  .report-type-tabs {
+    display: none !important;
+  }
+  
+  .project-report .project-info-section {
+    background: #f5f5f5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    page-break-inside: avoid;
+  }
+  
+  .cost-section {
+    page-break-inside: avoid;
+  }
+  
+  .total-cost-box {
+    background: #333 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .photo-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  
+  .photo-thumbnail {
+    height: 100px;
+  }
+  
+  .photo-card {
+    page-break-inside: avoid;
+  }
+  
+  .media-section {
+    page-break-inside: avoid;
+  }
+  
+  .lightbox-overlay {
+    display: none !important;
+  }
+}
+
 /* Mobile Anpassungen */
 @media (max-width: 768px) {
+  .report-type-tabs {
+    flex-direction: column;
+  }
+  
   .report-actions {
     flex-direction: column;
   }
@@ -453,6 +876,16 @@
   
   .pause-input {
     width: 55px;
+  }
+  
+  .photo-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .total-cost-box {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--spacing-sm);
   }
 }
 
