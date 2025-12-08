@@ -10,10 +10,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      input: './index-react.html'
-    }
+    sourcemap: true
   },
   root: '.',
   publicDir: 'public',
