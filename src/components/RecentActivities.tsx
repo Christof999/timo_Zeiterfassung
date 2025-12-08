@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry } from '../types'
+import type { TimeEntry, Project } from '../types'
 import { Timestamp } from 'firebase/firestore'
 import '../styles/RecentActivities.css'
 
@@ -10,12 +10,19 @@ interface RecentActivitiesProps {
 
 const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
   const [activities, setActivities] = useState<TimeEntry[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const loadActivities = async () => {
       try {
-        const entries = await DataService.getTimeEntriesByEmployeeId(employeeId)
+        // Lade Einträge und Projekte parallel
+        const [entries, allProjects] = await Promise.all([
+          DataService.getTimeEntriesByEmployeeId(employeeId),
+          DataService.getAllProjects()
+        ])
+        
+        setProjects(allProjects)
         
         // Sortiere nach Datum (neueste zuerst)
         entries.sort((a, b) => {
@@ -43,6 +50,11 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
 
     loadActivities()
   }, [employeeId])
+
+  const getProjectName = (projectId: string): string => {
+    const project = projects.find(p => p.id === projectId)
+    return project?.name || 'Unbekanntes Projekt'
+  }
 
   const formatDate = (date: Date | Timestamp | any) => {
     const d = date instanceof Timestamp
@@ -96,7 +108,7 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
       ) : (
         <ul className="activities-list">
           {activities.map((entry) => {
-            const projectName = entry.isVacationDay ? 'Urlaub' : 'Projekt'
+            const projectName = entry.isVacationDay ? 'Urlaub' : getProjectName(entry.projectId)
             const workHours = calculateWorkHours(entry)
 
             return (
