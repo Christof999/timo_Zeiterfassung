@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project } from '../../../types'
 import { toast } from '../../ToastContainer'
@@ -9,11 +9,13 @@ interface ReportEntry {
   id: string
   originalEntry: TimeEntry
   date: string
+  dateRaw: Date | null
   projectId: string
   projectName: string
   clockIn: string
   clockOut: string
-  pauseMinutes: number
+  pauseMinutes: number  // In Minuten für die Anzeige
+  pauseMs: number       // Original in Millisekunden
   workHours: string
   isEdited: boolean
 }
@@ -28,8 +30,6 @@ const ReportsTab: React.FC = () => {
   const [reportEntries, setReportEntries] = useState<ReportEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
-  
-  const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadInitialData()
@@ -93,13 +93,20 @@ const ReportsTab: React.FC = () => {
     const [inH, inM] = clockIn.split(':').map(Number)
     const [outH, outM] = clockOut.split(':').map(Number)
     
+    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return '-'
+    
     let totalMinutes = (outH * 60 + outM) - (inH * 60 + inM) - pauseMinutes
     if (totalMinutes < 0) totalMinutes += 24 * 60 // Über Mitternacht
     
     const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
+    const minutes = Math.abs(totalMinutes % 60)
     
     return `${hours}:${minutes.toString().padStart(2, '0')}`
+  }
+
+  // Millisekunden zu Minuten umrechnen
+  const msToMinutes = (ms: number): number => {
+    return Math.round(ms / (1000 * 60))
   }
 
   const handleSearch = async () => {
@@ -144,17 +151,21 @@ const ReportsTab: React.FC = () => {
         const clockOutDate = convertToDate(entry.clockOutTime)
         const clockIn = formatTimeForInput(clockInDate)
         const clockOut = formatTimeForInput(clockOutDate)
-        const pauseMinutes = entry.pauseTotalTime || 0
+        // pauseTotalTime ist in Millisekunden gespeichert!
+        const pauseMs = entry.pauseTotalTime || 0
+        const pauseMinutes = msToMinutes(pauseMs)
 
         return {
           id: entry.id,
           originalEntry: entry,
           date: clockInDate ? formatDateForDisplay(clockInDate) : '-',
+          dateRaw: clockInDate,
           projectId: entry.projectId,
           projectName: getProjectName(entry.projectId),
           clockIn,
           clockOut,
           pauseMinutes,
+          pauseMs,
           workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
           isEdited: false
         }
@@ -208,7 +219,8 @@ const ReportsTab: React.FC = () => {
       const clockOutDate = convertToDate(original.clockOutTime)
       const clockIn = formatTimeForInput(clockInDate)
       const clockOut = formatTimeForInput(clockOutDate)
-      const pauseMinutes = original.pauseTotalTime || 0
+      const pauseMs = original.pauseTotalTime || 0
+      const pauseMinutes = msToMinutes(pauseMs)
 
       updated[index] = {
         ...updated[index],
@@ -216,6 +228,7 @@ const ReportsTab: React.FC = () => {
         clockIn,
         clockOut,
         pauseMinutes,
+        pauseMs,
         workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
         isEdited: false
       }
@@ -246,7 +259,10 @@ const ReportsTab: React.FC = () => {
 
   // Druckfunktion
   const handlePrint = () => {
-    window.print()
+    // Kurze Verzögerung damit CSS geladen ist
+    setTimeout(() => {
+      window.print()
+    }, 100)
   }
 
   // Formatierung für Zeitraum
@@ -311,7 +327,7 @@ const ReportsTab: React.FC = () => {
 
       {/* Druckbarer Bericht */}
       {hasSearched && (
-        <div className="report-content" ref={printRef}>
+        <div className="report-content">
           {/* Druck-Header */}
           <div className="print-header print-only">
             <h2>Arbeitszeitnachweis</h2>
