@@ -1,3 +1,113 @@
+/* Filter-Bereich Styles */
+.reports-tab .report-filters {
+  background: linear-gradient(135deg, var(--card-background) 0%, #f8faf9 100%);
+  border-radius: var(--radius-xl, 20px);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.reports-tab .report-filters h3 {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: 1.25rem;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.reports-tab .report-filters h3::before {
+  content: '📊';
+  font-size: 1.5rem;
+}
+
+.reports-tab .filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.reports-tab .filter-row:first-of-type {
+  grid-template-columns: 1fr;
+}
+
+.reports-tab .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.reports-tab .filter-group label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.reports-tab .filter-group select,
+.reports-tab .filter-group input[type="date"] {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg, 12px);
+  font-size: 1rem;
+  font-weight: 500;
+  background: white;
+  color: var(--text-color);
+  min-height: 52px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.reports-tab .filter-group select:hover,
+.reports-tab .filter-group input[type="date"]:hover {
+  border-color: var(--primary-color);
+  background: #fafffe;
+}
+
+.reports-tab .filter-group select:focus,
+.reports-tab .filter-group input[type="date"]:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(74, 124, 89, 0.15);
+}
+
+.reports-tab .search-btn {
+  width: 100%;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: var(--radius-lg, 12px);
+  margin-top: var(--spacing-sm);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  transition: all 0.2s ease;
+}
+
+.reports-tab .search-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(74, 124, 89, 0.3);
+}
+
+.reports-tab .search-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 500px) {
+  .reports-tab .filter-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .reports-tab .report-filters {
+    padding: var(--spacing-lg);
+  }
+}
+
 /* Report Tabelle Styles */
 .report-content {
   background: var(--card-background);
