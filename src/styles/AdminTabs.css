@@ -64,6 +64,17 @@
   padding: var(--spacing-md);
   background: var(--light-color);
   border-radius: var(--radius-md);
+}
+
+.activity-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.activity-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
@@ -78,6 +89,35 @@
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.clock-out-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff3b30 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.clock-out-btn:hover {
+  background: #d63029 !important;
+  transform: scale(1.05);
+}
+
+.clock-out-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .activity-details {
