@@ -47,7 +47,15 @@ const ReportsTab: React.FC = () => {
         DataService.getAllEmployees(),
         DataService.getAllProjects()
       ])
-      setEmployees(allEmployees.filter(e => e.status !== 'inactive'))
+      // Admins und inaktive Mitarbeiter ausfiltern
+      const filteredEmployees = allEmployees.filter(e => {
+        if (e.status === 'inactive') return false
+        if (e.isAdmin) return false
+        const name = (e.name || `${e.firstName} ${e.lastName}`).toLowerCase()
+        if (name.includes('administrator') || name.includes('admin')) return false
+        return true
+      })
+      setEmployees(filteredEmployees)
       setProjects(allProjects)
     } catch (error) {
       console.error('Fehler beim Laden:', error)
