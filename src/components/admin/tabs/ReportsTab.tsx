@@ -259,10 +259,7 @@ const ReportsTab: React.FC = () => {
 
   // Druckfunktion
   const handlePrint = () => {
-    // Kurze Verzögerung damit CSS geladen ist
-    setTimeout(() => {
-      window.print()
-    }, 100)
+    window.print()
   }
 
   // Formatierung für Zeitraum
