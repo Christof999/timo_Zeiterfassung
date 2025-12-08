@@ -887,5 +887,98 @@
     text-align: center;
     gap: var(--spacing-sm);
   }
+  
+  /* Kosten-Tabellen als Cards auf Mobile */
+  .cost-table {
+    display: block;
+  }
+  
+  .cost-table thead {
+    display: none;
+  }
+  
+  .cost-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .cost-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    background: var(--light-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    border: none;
+  }
+  
+  .cost-table tbody td {
+    border: none;
+    padding: 2px 0;
+  }
+  
+  .cost-table tbody td:first-child {
+    width: 100%;
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .cost-table tbody td:not(:first-child) {
+    width: 33.33%;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+  
+  .cost-table tbody td:not(:first-child)::before {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+  
+  .cost-table tbody td:nth-child(2)::before {
+    content: 'Stunden';
+  }
+  
+  .cost-table tbody td:nth-child(3)::before {
+    content: 'Satz';
+  }
+  
+  .cost-table tbody td:nth-child(4)::before {
+    content: 'Kosten';
+  }
+  
+  .cost-table tbody td:nth-child(4) {
+    font-weight: 600;
+    color: var(--primary-color);
+  }
+  
+  .cost-table tfoot {
+    display: block;
+    margin-top: var(--spacing-md);
+  }
+  
+  .cost-table tfoot tr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--light-color);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+  }
+  
+  .cost-table tfoot td {
+    border: none;
+    padding: 0;
+  }
+  
+  .cost-table tfoot td:first-child {
+    flex: 1;
+  }
+  
+  .cost-table tfoot td:last-child {
+    font-size: 1.1rem;
+  }
 }
 
