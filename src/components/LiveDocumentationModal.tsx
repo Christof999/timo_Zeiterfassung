@@ -64,8 +64,8 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
         documents: documentPhotoObjects,
         photoCount: sitePhotoObjects.length,
         documentCount: documentPhotoObjects.length,
-        addedBy: currentUser!.id,
-        addedByName: `${currentUser!.firstName} ${currentUser!.lastName}`
+        addedBy: currentUser!.id || '',
+        addedByName: `${currentUser!.firstName || ''} ${currentUser!.lastName || ''}`
       })
 
       toast.success('Live-Dokumentation erfolgreich gespeichert!')

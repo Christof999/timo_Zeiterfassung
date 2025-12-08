@@ -196,12 +196,12 @@ const TimeTracking: React.FC = () => {
             onSimpleClockOut={handleSimpleClockOut}
             onUpdate={() => {
               // Reload time entry
-              DataService.getCurrentTimeEntry(currentUser.id).then(setCurrentTimeEntry)
+              DataService.getCurrentTimeEntry(currentUser.id!).then(setCurrentTimeEntry)
             }}
           />
         )}
 
-        <RecentActivities employeeId={currentUser.id} />
+        <RecentActivities employeeId={currentUser.id!} />
       </main>
     </div>
   )

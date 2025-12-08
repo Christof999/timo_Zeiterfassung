@@ -285,6 +285,17 @@ class DataServiceClass {
     }
   }
 
+  async deleteTimeEntry(timeEntryId: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
+      await deleteDoc(timeEntryRef)
+    } catch (error) {
+      console.error('Fehler beim Löschen des Zeiteintrags:', error)
+      throw error
+    }
+  }
+
   async getTimeEntryById(timeEntryId: string): Promise<TimeEntry | null> {
     await this.authReadyPromise
     try {

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { LeaveRequest, Employee } from '../../../types'
+import type { LeaveRequest } from '../../../types'
 import { toast } from '../../ToastContainer'
 import '../../../styles/AdminTabs.css'
 
 const VacationTab: React.FC = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>([])
-  const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
@@ -43,7 +42,6 @@ const VacationTab: React.FC = () => {
       })
       
       setRequests(requestsWithNames)
-      setEmployees(allEmployees)
     } catch (error) {
       console.error('Fehler beim Laden:', error)
       toast.error('Fehler beim Laden der Urlaubsanträge')

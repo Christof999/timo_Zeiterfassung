@@ -47,12 +47,19 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
 
   useEffect(() => {
     if (project) {
+      // Status normalisieren
+      let normalizedStatus: 'active' | 'planned' | 'completed' | 'archived' = 'active'
+      if (project.status === 'active' || project.status === 'aktiv') normalizedStatus = 'active'
+      else if (project.status === 'planned') normalizedStatus = 'planned'
+      else if (project.status === 'completed') normalizedStatus = 'completed'
+      else if (project.status === 'archived' || project.status === 'inactive') normalizedStatus = 'archived'
+      
       setFormData({
         name: project.name || '',
         client: project.client || '',
         description: project.description || '',
         address: (project as any).address || (project as any).location || '',
-        status: project.status || 'active',
+        status: normalizedStatus,
         startDate: convertToDateString(project.startDate),
         endDate: convertToDateString(project.endDate)
       })

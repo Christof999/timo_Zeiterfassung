@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Project, FileUpload, TimeEntry, Employee } from '../../types'
+import type { Project, FileUpload, TimeEntry } from '../../types'
 import { Timestamp } from 'firebase/firestore'
 import '../../styles/Modal.css'
 
