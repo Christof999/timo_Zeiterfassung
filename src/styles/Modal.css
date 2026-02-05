@@ -5,8 +5,9 @@
   width: 100%;
   height: 100%;
   height: 100dvh;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -14,13 +15,13 @@
   padding: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  animation: fadeIn 0.2s ease-out;
+  animation: modalFadeIn 0.25s var(--transition-base);
   /* Safe Area Support */
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-@keyframes fadeIn {
+@keyframes modalFadeIn {
   from {
     opacity: 0;
   }
@@ -31,18 +32,20 @@
 
 .modal-content {
   background: var(--card-background);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
-  width: calc(100% - var(--spacing-lg) * 2);
-  max-width: 600px;
-  max-height: 90vh;
-  max-height: 90dvh;
-  margin: 0 var(--spacing-lg);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  box-shadow: var(--shadow-xl);
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  max-height: 92dvh;
+  margin: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: slideUpModal 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: modalSlideUp 0.35s var(--transition-spring);
   -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-light);
+  border-bottom: none;
 }
 
 .modal-content.project-detail-modal {
@@ -75,18 +78,20 @@
   overflow-x: hidden;
 }
 
-@keyframes slideUpModal {
+@keyframes modalSlideUp {
   from {
+    opacity: 0;
     transform: translateY(100%);
   }
   to {
+    opacity: 1;
     transform: translateY(0);
   }
 }
 
 .modal-header {
   padding: var(--spacing-lg) var(--spacing-xl);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -98,24 +103,38 @@
   padding-top: max(var(--spacing-lg), env(safe-area-inset-top));
 }
 
+/* Drag Handle für Mobile */
+.modal-header::before {
+  content: '';
+  position: absolute;
+  top: var(--spacing-sm);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+}
+
 .modal-header h2,
 .modal-header h3 {
   margin: 0;
-  font-size: clamp(1.25rem, 3.5vw, 1.5rem);
+  font-size: clamp(1.125rem, 3.5vw, 1.375rem);
   font-weight: 700;
   color: var(--text-color);
   flex: 1;
+  letter-spacing: -0.02em;
 }
 
 .close-modal-btn {
   background: var(--light-color);
-  border: none;
+  border: 2px solid var(--border-color);
   color: var(--text-secondary);
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
-  padding: var(--spacing-sm);
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
+  padding: 0;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   border-radius: var(--radius-full);
   transition: all var(--transition-base);
   line-height: 1;
@@ -126,8 +145,9 @@
 }
 
 .close-modal-btn:hover {
-  background-color: var(--border-color);
-  color: var(--text-color);
+  background-color: var(--danger-light);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
 }
 
 .close-modal-btn:active {
@@ -142,7 +162,7 @@
 }
 
 .modal-body .form-group {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
 }
 
 .modal-body label {
@@ -150,17 +170,17 @@
   margin-bottom: var(--spacing-sm);
   font-weight: 600;
   color: var(--text-color);
-  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
 }
 
 .modal-body input,
 .modal-body select,
 .modal-body textarea {
   width: 100%;
-  padding: var(--spacing-md);
-  min-height: var(--touch-target-min);
-  border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  min-height: var(--touch-target-comfortable);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
   font-size: clamp(1rem, 3vw, 1.0625rem);
   font-family: inherit;
   background: var(--background-color);
@@ -170,12 +190,18 @@
   appearance: none;
 }
 
+.modal-body input:hover,
+.modal-body select:hover,
+.modal-body textarea:hover {
+  border-color: var(--medium-gray);
+}
+
 .modal-body input:focus,
 .modal-body select:focus,
 .modal-body textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.1);
+  box-shadow: 0 0 0 4px var(--primary-light);
 }
 
 .modal-body textarea {
