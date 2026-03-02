@@ -10,7 +10,8 @@ import {
   where, 
   limit,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
@@ -228,7 +229,7 @@ class DataServiceClass {
       }
 
       const timeEntry = timeEntryDoc.data() as TimeEntry
-      if (timeEntry.clockOutTime !== null) {
+      if (timeEntry.clockOutTime != null) {
         throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
       }
 
@@ -244,14 +245,14 @@ class DataServiceClass {
       let pauseTotalTime = 0
       let automaticBreak = undefined
 
-      if (workDurationHours > 6) {
-        // Bei mehr als 6 Stunden: 30 Minuten Pause
-        pauseTotalTime = 30 * 60 * 1000
-        automaticBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
-      } else if (workDurationHours > 9) {
+      if (workDurationHours > 9) {
         // Bei mehr als 9 Stunden: 45 Minuten Pause
         pauseTotalTime = 45 * 60 * 1000
         automaticBreak = { duration: 45, reason: 'Arbeitszeit über 9 Stunden' }
+      } else if (workDurationHours > 6) {
+        // Bei mehr als 6 Stunden: 30 Minuten Pause
+        pauseTotalTime = 30 * 60 * 1000
+        automaticBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
       }
 
       const updateData: any = {
@@ -434,14 +435,15 @@ class DataServiceClass {
         throw new Error('Zeiteintrag nicht gefunden')
       }
 
-      const existingLiveDoc = timeEntryDoc.data().liveDocumentation || []
       const newDocumentation = {
         ...documentationData,
-        timestamp: serverTimestamp()
+        timestamp: Timestamp.now()
       }
 
       await updateDoc(timeEntryRef, {
-        liveDocumentation: [...existingLiveDoc, newDocumentation]
+        liveDocumentation: arrayUnion(newDocumentation),
+        hasDocumentation: true,
+        lastLiveDocumentationAt: serverTimestamp()
       })
     } catch (error) {
       console.error('Fehler beim Hinzufügen der Live-Dokumentation:', error)
@@ -509,7 +511,21 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const docRef = await addDoc(vehicleUsagesRef, usageData)
+      const normalizedUsageData: Partial<VehicleUsage> = { ...usageData }
+
+      if (!normalizedUsageData.vehicleName && normalizedUsageData.vehicleId) {
+        const vehicleRef = doc(db, 'vehicles', normalizedUsageData.vehicleId)
+        const vehicleDoc = await getDoc(vehicleRef)
+        if (vehicleDoc.exists()) {
+          const vehicleData = vehicleDoc.data() as Vehicle
+          normalizedUsageData.vehicleName = vehicleData.name
+        }
+      }
+
+      const docRef = await addDoc(vehicleUsagesRef, {
+        ...normalizedUsageData,
+        createdAt: serverTimestamp()
+      })
       const usageDoc = await getDoc(docRef)
       
       return { id: docRef.id, ...usageDoc.data() } as VehicleUsage

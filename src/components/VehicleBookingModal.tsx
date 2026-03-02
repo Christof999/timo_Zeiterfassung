@@ -39,9 +39,11 @@ const VehicleBookingModal: React.FC<VehicleBookingModalProps> = ({ timeEntry, on
     try {
       const currentUser = await DataService.getCurrentUser()
       const today = new Date().toISOString().split('T')[0]
+      const selectedVehicle = vehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId))
 
       await DataService.addVehicleUsage({
         vehicleId: selectedVehicleId,
+        vehicleName: selectedVehicle?.name,
         employeeId: currentUser!.id,
         projectId: timeEntry.projectId,
         date: today,

@@ -8,13 +8,13 @@ import '../styles/Modal.css'
 interface ExtendedClockOutModalProps {
   timeEntry: TimeEntry
   onClose: () => void
-  onClockOut: () => void
+  onClockOutSuccess: () => void
 }
 
 const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   timeEntry,
   onClose,
-  onClockOut
+  onClockOutSuccess
 }) => {
   const [notes, setNotes] = useState('')
   const [sitePhotos, setSitePhotos] = useState<File[]>([])
@@ -83,7 +83,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
       }
 
-      onClockOut()
+      onClockOutSuccess()
       onClose()
     } catch (error: any) {
       toast.error('Fehler beim Ausstempeln: ' + error.message)
