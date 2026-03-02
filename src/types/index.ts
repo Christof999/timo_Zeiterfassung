@@ -79,6 +79,7 @@ export interface Vehicle {
 export interface VehicleUsage {
   id: string
   vehicleId: string
+  vehicleName?: string
   employeeId: string
   projectId: string
   date: string | Date | any

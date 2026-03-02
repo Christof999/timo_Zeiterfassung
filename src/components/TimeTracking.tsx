@@ -101,10 +101,7 @@ const TimeTracking: React.FC = () => {
         location
       )
 
-      setCurrentTimeEntry(null)
-      setCurrentProject(null)
-      setClockInTime(null)
-      setElapsedTime('00:00:00')
+      resetClockOutState()
 
       if (result.automaticBreak) {
         toast.success(`Erfolgreich ausgestempelt! Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten (${result.automaticBreak.reason})`, 6000)
@@ -114,6 +111,13 @@ const TimeTracking: React.FC = () => {
     } catch (error: any) {
       toast.error('Fehler beim Ausstempeln: ' + error.message)
     }
+  }
+
+  const resetClockOutState = () => {
+    setCurrentTimeEntry(null)
+    setCurrentProject(null)
+    setClockInTime(null)
+    setElapsedTime('00:00:00')
   }
 
   const handleLogout = () => {
@@ -194,9 +198,25 @@ const TimeTracking: React.FC = () => {
             project={currentProject}
             clockInTime={clockInTime}
             onSimpleClockOut={handleSimpleClockOut}
+            onExtendedClockOutSuccess={resetClockOutState}
             onUpdate={() => {
-              // Reload time entry
-              DataService.getCurrentTimeEntry(currentUser.id!).then(setCurrentTimeEntry)
+              // Reload time entry inkl. Anzeigezustand
+              DataService.getCurrentTimeEntry(currentUser.id!).then(async (entry) => {
+                setCurrentTimeEntry(entry)
+
+                if (!entry) {
+                  resetClockOutState()
+                  return
+                }
+
+                const project = await DataService.getProjectById(entry.projectId)
+                setCurrentProject(project)
+
+                const clockIn = entry.clockInTime instanceof Date
+                  ? entry.clockInTime
+                  : entry.clockInTime?.toDate?.() || new Date(entry.clockInTime)
+                setClockInTime(clockIn)
+              })
             }}
           />
         )}
