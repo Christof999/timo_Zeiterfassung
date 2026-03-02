@@ -67,12 +67,19 @@ const ReportsTab: React.FC = () => {
   const [useTimeFilter, setUseTimeFilter] = useState(false)
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
   const printResetTimeoutRef = useRef<number | null>(null)
+  const isPrintInProgressRef = useRef(false)
 
   const clearPrintResetTimeout = () => {
     if (printResetTimeoutRef.current !== null) {
       window.clearTimeout(printResetTimeoutRef.current)
       printResetTimeoutRef.current = null
     }
+  }
+
+  const resetPrintPreparation = () => {
+    clearPrintResetTimeout()
+    isPrintInProgressRef.current = false
+    setIsPreparingPrint(false)
   }
 
   useEffect(() => {
@@ -85,14 +92,20 @@ const ReportsTab: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    const handleAfterPrint = () => {
-      clearPrintResetTimeout()
-      setIsPreparingPrint(false)
+    const handleBeforePrint = () => {
+      isPrintInProgressRef.current = true
+      setIsPreparingPrint(true)
     }
 
+    const handleAfterPrint = () => {
+      resetPrintPreparation()
+    }
+
+    window.addEventListener('beforeprint', handleBeforePrint)
     window.addEventListener('afterprint', handleAfterPrint)
 
     return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint)
       window.removeEventListener('afterprint', handleAfterPrint)
       clearPrintResetTimeout()
     }
@@ -463,34 +476,28 @@ const ReportsTab: React.FC = () => {
     return ''
   }
 
-  const handlePrint = async () => {
-    if (isPreparingPrint) {
+  const handlePrint = () => {
+    if (isPrintInProgressRef.current) {
       return
     }
 
+    isPrintInProgressRef.current = true
     setIsPreparingPrint(true)
     clearPrintResetTimeout()
 
-    // Zwei Frames warten, damit das Lade-Overlay sicher gerendert ist.
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve())
-      })
-    })
-
     // Fallback, falls ein Browser kein afterprint-Event liefert.
     printResetTimeoutRef.current = window.setTimeout(() => {
-      setIsPreparingPrint(false)
-      printResetTimeoutRef.current = null
-    }, 20000)
+      resetPrintPreparation()
+    }, 30000)
 
-    window.print()
-
-    // Einige Browser feuern afterprint unzuverlässig.
-    window.setTimeout(() => {
-      clearPrintResetTimeout()
-      setIsPreparingPrint(false)
-    }, 300)
+    try {
+      // Direkt auf Benutzer-Klick ausführen, damit Browser den Dialog stabil öffnet.
+      window.print()
+    } catch (error) {
+      console.error('Fehler beim Öffnen der Druckvorschau:', error)
+      resetPrintPreparation()
+      toast.error('Druckvorschau konnte nicht geöffnet werden')
+    }
   }
 
   const formatPeriod = (): string => {
