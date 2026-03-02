@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload } from '../../../types'
 import { toast } from '../../ToastContainer'
@@ -65,6 +65,15 @@ const ReportsTab: React.FC = () => {
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [useTimeFilter, setUseTimeFilter] = useState(false)
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false)
+  const printResetTimeoutRef = useRef<number | null>(null)
+
+  const clearPrintResetTimeout = () => {
+    if (printResetTimeoutRef.current !== null) {
+      window.clearTimeout(printResetTimeoutRef.current)
+      printResetTimeoutRef.current = null
+    }
+  }
 
   useEffect(() => {
     loadInitialData()
@@ -73,6 +82,20 @@ const ReportsTab: React.FC = () => {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     setStartDate(firstDay.toISOString().split('T')[0])
     setEndDate(lastDay.toISOString().split('T')[0])
+  }, [])
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      clearPrintResetTimeout()
+      setIsPreparingPrint(false)
+    }
+
+    window.addEventListener('afterprint', handleAfterPrint)
+
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+      clearPrintResetTimeout()
+    }
   }, [])
 
   // Reset wenn Berichtstyp wechselt
@@ -440,7 +463,35 @@ const ReportsTab: React.FC = () => {
     return ''
   }
 
-  const handlePrint = () => window.print()
+  const handlePrint = async () => {
+    if (isPreparingPrint) {
+      return
+    }
+
+    setIsPreparingPrint(true)
+    clearPrintResetTimeout()
+
+    // Zwei Frames warten, damit das Lade-Overlay sicher gerendert ist.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve())
+      })
+    })
+
+    // Fallback, falls ein Browser kein afterprint-Event liefert.
+    printResetTimeoutRef.current = window.setTimeout(() => {
+      setIsPreparingPrint(false)
+      printResetTimeoutRef.current = null
+    }, 20000)
+
+    window.print()
+
+    // Einige Browser feuern afterprint unzuverlässig.
+    window.setTimeout(() => {
+      clearPrintResetTimeout()
+      setIsPreparingPrint(false)
+    }, 300)
+  }
 
   const formatPeriod = (): string => {
     const start = new Date(startDate)
@@ -452,6 +503,16 @@ const ReportsTab: React.FC = () => {
 
   return (
     <div className="reports-tab">
+      {isPreparingPrint && (
+        <div className="print-loading-overlay no-print" role="status" aria-live="polite">
+          <div className="print-loading-card">
+            <div className="print-loading-spinner" />
+            <h4>Druckvorschau wird vorbereitet…</h4>
+            <p>Bitte kurz warten. Bei vielen Fotos kann das einige Sekunden dauern.</p>
+          </div>
+        </div>
+      )}
+
       {/* Tab-Auswahl */}
       <div className="report-type-tabs no-print">
         <button
@@ -519,7 +580,9 @@ const ReportsTab: React.FC = () => {
                 </div>
                 <div className="actions-right">
                   {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">↩️ Zurücksetzen</button>}
-                  <button onClick={handlePrint} className="btn primary-btn">🖨️ Drucken</button>
+                  <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
+                    {isPreparingPrint ? 'Vorbereitung…' : '🖨️ Drucken'}
+                  </button>
                 </div>
               </div>
 
@@ -633,7 +696,9 @@ const ReportsTab: React.FC = () => {
                   <h4>Kalkulation: {selectedProject.name}</h4>
                 </div>
                 <div className="actions-right">
-                  <button onClick={handlePrint} className="btn primary-btn">🖨️ Drucken</button>
+                  <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
+                    {isPreparingPrint ? 'Vorbereitung…' : '🖨️ Drucken'}
+                  </button>
                 </div>
               </div>
 
