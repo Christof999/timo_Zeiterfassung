@@ -39,8 +39,28 @@ interface VehicleSummary {
   totalCost: number
 }
 
-const ReportsTab: React.FC = () => {
-  const [reportType, setReportType] = useState<ReportType>('employee')
+interface ReportsTabProps {
+  defaultReportType?: ReportType
+  allowedReportTypes?: ReportType[]
+}
+
+const ReportsTab: React.FC<ReportsTabProps> = ({
+  defaultReportType = 'employee',
+  allowedReportTypes
+}) => {
+  const availableReportTypes: ReportType[] =
+    allowedReportTypes && allowedReportTypes.length > 0
+      ? allowedReportTypes
+      : ['employee', 'project']
+
+  const getInitialReportType = (): ReportType => {
+    if (availableReportTypes.includes(defaultReportType)) {
+      return defaultReportType
+    }
+    return availableReportTypes[0] || 'employee'
+  }
+
+  const [reportType, setReportType] = useState<ReportType>(getInitialReportType)
   
   // Gemeinsame States
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -685,27 +705,32 @@ const ReportsTab: React.FC = () => {
   }
 
   const hasEdits = reportEntries.some(e => e.isEdited)
+  const isEmployeeReportEnabled = availableReportTypes.includes('employee')
+  const isProjectReportEnabled = availableReportTypes.includes('project')
+  const showReportTypeTabs = isEmployeeReportEnabled && isProjectReportEnabled
 
   return (
     <div className="reports-tab">
       {/* Tab-Auswahl */}
-      <div className="report-type-tabs no-print">
-        <button
-          className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
-          onClick={() => setReportType('employee')}
-        >
-          Mitarbeiter-Zeitauswertung
-        </button>
-        <button
-          className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
-          onClick={() => setReportType('project')}
-        >
-          Projekt-Nachkalkulation
-        </button>
-      </div>
+      {showReportTypeTabs && (
+        <div className="report-type-tabs no-print">
+          <button
+            className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
+            onClick={() => setReportType('employee')}
+          >
+            Mitarbeiter-Zeitauswertung
+          </button>
+          <button
+            className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
+            onClick={() => setReportType('project')}
+          >
+            Projekt-Nachkalkulation
+          </button>
+        </div>
+      )}
 
       {/* ==================== MITARBEITER-BERICHT ==================== */}
-      {reportType === 'employee' && (
+      {isEmployeeReportEnabled && reportType === 'employee' && (
         <>
           <div className="report-filters no-print">
             <h3>Zeitauswertung erstellen</h3>
@@ -817,7 +842,7 @@ const ReportsTab: React.FC = () => {
       )}
 
       {/* ==================== PROJEKT-BERICHT ==================== */}
-      {reportType === 'project' && (
+      {isProjectReportEnabled && reportType === 'project' && (
         <>
           <div className="report-filters no-print">
             <h3>Projekt-Nachkalkulation</h3>
