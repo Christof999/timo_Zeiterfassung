@@ -142,15 +142,47 @@ const VacationRequests: React.FC = () => {
     }
   }
 
+  const toDate = (value: any): Date | null => {
+    if (!value) return null
+    const d = value?.toDate?.() || new Date(value)
+    return isNaN(d.getTime()) ? null : d
+  }
+
   const formatDate = (date: any) => {
-    if (!date) return '-'
-    const d = date?.toDate?.() || new Date(date)
+    const d = toDate(date)
+    if (!d) return '-'
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Urlaubskonto berechnen
-  const vacationAccount = currentUser?.vacationDays || { total: 30, used: 0, year: new Date().getFullYear() }
-  const remaining = (vacationAccount.total || 30) - (vacationAccount.used || 0)
+  // Urlaubskonto berechnen: genehmigte Urlaubstage zählen immer im aktuellen Jahr
+  const currentYear = new Date().getFullYear()
+  const totalVacationDays = currentUser?.vacationDays?.total || 30
+
+  const approvedVacationDays = leaveRequests.reduce((sum, request) => {
+    if (request.type !== 'vacation' || request.status !== 'approved') {
+      return sum
+    }
+
+    const startDate = toDate(request.startDate)
+    const endDate = toDate(request.endDate)
+    if (!startDate || !endDate) {
+      return sum
+    }
+
+    const yearStart = new Date(currentYear, 0, 1)
+    const yearEnd = new Date(currentYear, 11, 31)
+
+    const rangeStart = startDate > yearStart ? startDate : yearStart
+    const rangeEnd = endDate < yearEnd ? endDate : yearEnd
+
+    if (rangeEnd < rangeStart) {
+      return sum
+    }
+
+    return sum + DataService.calculateWorkingDays(rangeStart, rangeEnd)
+  }, 0)
+
+  const remaining = Math.max(0, totalVacationDays - approvedVacationDays)
 
   // Min-Datum für Datumseingaben (heute)
   const today = getTodayLocalDateString()
@@ -174,25 +206,25 @@ const VacationRequests: React.FC = () => {
 
       {/* Urlaubskonto */}
       <div className="vacation-account card">
-        <h3>Ihr Urlaubskonto {vacationAccount.year || new Date().getFullYear()}</h3>
+        <h3>Ihr Urlaubskonto {currentYear}</h3>
         <div className="vacation-stats">
           <div className="stat">
             <span className="stat-value">{remaining}</span>
             <span className="stat-label">Verfügbar</span>
           </div>
           <div className="stat">
-            <span className="stat-value">{vacationAccount.used || 0}</span>
+            <span className="stat-value">{approvedVacationDays}</span>
             <span className="stat-label">Genutzt</span>
           </div>
           <div className="stat">
-            <span className="stat-value">{vacationAccount.total || 30}</span>
+            <span className="stat-value">{totalVacationDays}</span>
             <span className="stat-label">Gesamt</span>
           </div>
         </div>
         <div className="vacation-progress">
           <div 
             className="vacation-progress-bar" 
-            style={{ width: `${((vacationAccount.used || 0) / (vacationAccount.total || 30)) * 100}%` }}
+            style={{ width: `${totalVacationDays > 0 ? Math.min(100, (approvedVacationDays / totalVacationDays) * 100) : 0}%` }}
           />
         </div>
       </div>
