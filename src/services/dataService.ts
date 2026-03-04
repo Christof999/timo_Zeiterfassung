@@ -286,6 +286,17 @@ class DataServiceClass {
           throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
         }
 
+        let employeeRef: any = null
+        let shouldClearActiveEntry = false
+        if (timeEntry.employeeId) {
+          employeeRef = doc(db, 'employees', timeEntry.employeeId)
+          const employeeDoc = await transaction.get(employeeRef)
+          if (employeeDoc.exists()) {
+            const employeeData = employeeDoc.data() as any
+            shouldClearActiveEntry = employeeData.activeTimeEntryId === timeEntryId
+          }
+        }
+
         const clockOutTime = Timestamp.now()
         const clockInTime = timeEntry.clockInTime instanceof Timestamp
           ? timeEntry.clockInTime.toDate()
@@ -321,19 +332,12 @@ class DataServiceClass {
 
         transaction.update(timeEntryRef, updateData)
 
-        if (timeEntry.employeeId) {
-          const employeeRef = doc(db, 'employees', timeEntry.employeeId)
-          const employeeDoc = await transaction.get(employeeRef)
-          if (employeeDoc.exists()) {
-            const employeeData = employeeDoc.data() as any
-            if (employeeData.activeTimeEntryId === timeEntryId) {
-              transaction.update(employeeRef, {
-                activeTimeEntryId: null,
-                activeClockInAt: null,
-                updatedAt: new Date()
-              })
-            }
-          }
+        if (employeeRef && shouldClearActiveEntry) {
+          transaction.update(employeeRef, {
+            activeTimeEntryId: null,
+            activeClockInAt: null,
+            updatedAt: new Date()
+          })
         }
 
         return calculatedBreak
@@ -560,6 +564,42 @@ class DataServiceClass {
       })
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Fahrzeugs:', error)
+      throw error
+    }
+  }
+
+  async deleteVehicle(id: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const vehicleRef = doc(db, 'vehicles', id)
+      const vehicleDoc = await getDoc(vehicleRef)
+      if (!vehicleDoc.exists()) {
+        return
+      }
+
+      const vehicle = vehicleDoc.data() as Vehicle
+      const vehicleName = vehicle.name || ''
+
+      if (vehicleName) {
+        const vehicleUsagesRef = collection(db, 'vehicleUsages')
+        const usageQuery = query(vehicleUsagesRef, where('vehicleId', '==', id))
+        const usageSnapshot = await getDocs(usageQuery)
+
+        const updatePromises = usageSnapshot.docs
+          .filter((usageDoc) => {
+            const usage = usageDoc.data() as VehicleUsage
+            return !usage.vehicleName
+          })
+          .map((usageDoc) => updateDoc(usageDoc.ref, { vehicleName }))
+
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises)
+        }
+      }
+
+      await deleteDoc(vehicleRef)
+    } catch (error) {
+      console.error(`Fehler beim Löschen des Fahrzeugs ${id}:`, error)
       throw error
     }
   }
@@ -912,15 +952,10 @@ class DataServiceClass {
           return
         }
 
-        transaction.update(leaveRequestRef, {
-          status: 'approved',
-          approvedBy,
-          approvedAt: new Date(),
-          updatedAt: new Date()
-        })
-
+        let employeeRef: any = null
+        let updatedVacationDays: Employee['vacationDays'] | null = null
         if (leaveRequest.type === 'vacation' && leaveRequest.employeeId) {
-          const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
+          employeeRef = doc(db, 'employees', leaveRequest.employeeId)
           const employeeDoc = await transaction.get(employeeRef)
           if (employeeDoc.exists()) {
             const employee = employeeDoc.data() as Employee
@@ -930,14 +965,24 @@ class DataServiceClass {
               year: new Date().getFullYear()
             }
             const usedDays = Number(leaveRequest.workingDays || 0)
-
-            transaction.update(employeeRef, {
-              vacationDays: {
-                ...currentVacation,
-                used: (currentVacation.used || 0) + Math.max(0, usedDays)
-              }
-            })
+            updatedVacationDays = {
+              ...currentVacation,
+              used: (currentVacation.used || 0) + Math.max(0, usedDays)
+            }
           }
+        }
+
+        transaction.update(leaveRequestRef, {
+          status: 'approved',
+          approvedBy,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        })
+
+        if (employeeRef && updatedVacationDays) {
+          transaction.update(employeeRef, {
+            vacationDays: updatedVacationDays
+          })
         }
       })
     } catch (error) {

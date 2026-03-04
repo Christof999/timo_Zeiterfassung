@@ -406,7 +406,7 @@ const ReportsTab: React.FC = () => {
         const hours = usage.hours || usage.hoursUsed || 0
         const vehicle = vehicles.find(v => v.id === usage.vehicleId)
         const hourlyRate = vehicle?.hourlyRate || 0
-        const vehicleName = vehicle?.name || usage.vehicleId
+        const vehicleName = vehicle?.name || usage.vehicleName || usage.vehicleId
         
         const existing = vehicleMap.get(usage.vehicleId)
         if (existing) {
