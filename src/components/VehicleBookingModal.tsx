@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
 import type { TimeEntry, Vehicle } from '../types'
 import { toast } from './ToastContainer'
+import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/Modal.css'
 
 interface VehicleBookingModalProps {
@@ -38,7 +39,7 @@ const VehicleBookingModal: React.FC<VehicleBookingModalProps> = ({ timeEntry, on
     setIsLoading(true)
     try {
       const currentUser = await DataService.getCurrentUser()
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayLocalDateString()
       const selectedVehicle = vehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId))
 
       await DataService.addVehicleUsage({

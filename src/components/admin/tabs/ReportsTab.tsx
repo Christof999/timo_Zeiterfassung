@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload } from '../../../types'
 import { toast } from '../../ToastContainer'
+import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
 
@@ -87,8 +88,8 @@ const ReportsTab: React.FC = () => {
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    setStartDate(firstDay.toISOString().split('T')[0])
-    setEndDate(lastDay.toISOString().split('T')[0])
+    setStartDate(formatDateForInputLocal(firstDay))
+    setEndDate(formatDateForInputLocal(lastDay))
   }, [])
 
   useEffect(() => {
@@ -428,7 +429,7 @@ const ReportsTab: React.FC = () => {
       // Fotos und Dokumente laden
       try {
         const [photos, docs] = await Promise.all([
-          DataService.getProjectFiles(selectedProjectId, 'photo'),
+          DataService.getProjectFiles(selectedProjectId, 'construction_site'),
           DataService.getProjectFiles(selectedProjectId, 'document')
         ])
         
