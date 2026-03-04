@@ -9,7 +9,9 @@
 
 .tab-header h3 {
   margin: 0;
-  font-size: clamp(1.5rem, 4vw, 1.75rem);
+  font-size: clamp(var(--font-size-xl), 3.2vw, var(--font-size-2xl));
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
 }
 
 .dashboard-stats {
@@ -23,16 +25,16 @@
   background: var(--card-background);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow);
-  border: 0.5px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
   text-align: center;
 }
 
 .stat-card h4 {
   margin: 0 0 var(--spacing-sm) 0;
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .stat-value {
@@ -46,8 +48,8 @@
   background: var(--card-background);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow);
-  border: 0.5px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
 }
 
 .live-activity-section h4 {
@@ -63,6 +65,7 @@
 .activity-item {
   padding: var(--spacing-md);
   background: var(--light-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 }
 
@@ -81,14 +84,14 @@
 }
 
 .activity-employee {
-  font-weight: 500;
-  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
 }
 
 .activity-project {
   color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
 }
 
 .clock-out-btn {
@@ -143,13 +146,14 @@
   overflow-x: auto;
   background: var(--card-background);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  border: 0.5px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 720px;
 }
 
 .data-table thead {
@@ -157,21 +161,31 @@
 }
 
 .data-table th {
-  padding: var(--spacing-md);
+  padding: 12px var(--spacing-md);
   text-align: left;
-  font-weight: 500;
-  font-size: 0.875rem;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: var(--spacing-md);
-  border-bottom: 0.5px solid var(--border-color);
+  padding: 12px var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  vertical-align: middle;
 }
 
 .data-table tbody tr:hover {
   background: var(--light-color);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: rgba(15, 23, 42, 0.015);
 }
 
 .action-buttons {
@@ -184,9 +198,10 @@
   background: var(--light-color);
   border: 1px solid var(--border-color);
   cursor: pointer;
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 7px 10px;
+  min-height: 32px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
   border-radius: var(--radius-sm);
   transition: all var(--transition-base);
@@ -200,10 +215,11 @@
 
 .status-badge {
   display: inline-block;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
 }
 
 .status-badge.active {
@@ -248,7 +264,7 @@
 
 .project-detail-info {
   padding: var(--spacing-md);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -279,7 +295,7 @@
   display: flex;
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   overflow-x: auto;
   flex-shrink: 0;
   background: var(--card-background);
@@ -293,7 +309,7 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   transition: var(--transition-base);
   white-space: nowrap;
@@ -361,14 +377,14 @@
 }
 
 .photo-filename {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--text-color);
   font-weight: 500;
   margin: var(--spacing-xs) 0 0 0;
 }
 
 .photo-comment {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   margin: 0;
   font-style: italic;
@@ -438,7 +454,7 @@
 }
 
 .document-item .notes {
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin: 0;
 }
@@ -545,7 +561,7 @@
 }
 
 .document-notes {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   margin: var(--spacing-xs) 0 0 0;
   display: -webkit-box;
@@ -613,14 +629,20 @@
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-lg);
   flex-wrap: wrap;
+  padding: var(--spacing-xs);
+  background: var(--light-color);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
 }
 
 .filter-btn {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 8px 12px;
+  min-height: 36px;
   border: 1.5px solid var(--border-color);
   background: var(--card-background);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: all var(--transition-base);
   color: var(--text-secondary);
@@ -647,7 +669,7 @@
   background: var(--card-background);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  border: 0.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   border-left: 4px solid var(--border-color);
   display: flex;
@@ -680,7 +702,7 @@
 
 .request-employee {
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: var(--font-size-base);
   color: var(--text-color);
 }
 
@@ -688,7 +710,7 @@
   background: var(--light-color);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 
@@ -700,12 +722,12 @@
 }
 
 .period-dates {
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   color: var(--text-color);
 }
 
 .period-days {
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   background: var(--light-color);
   padding: 2px 8px;
@@ -713,7 +735,7 @@
 }
 
 .leave-request-card .request-reason {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: var(--spacing-sm);
   background: var(--light-color);
@@ -722,7 +744,7 @@
 }
 
 .leave-request-card .request-rejection {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   color: var(--danger-color);
   padding: var(--spacing-sm);
   background: rgba(255, 59, 48, 0.1);
@@ -771,8 +793,8 @@
 .vacation-tab .status-badge {
   padding: 4px 10px;
   border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .vacation-tab .status-badge.pending {

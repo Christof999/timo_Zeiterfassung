@@ -60,14 +60,14 @@
 /* Main Content */
 .time-tracking-main {
   flex: 1;
-  padding: var(--spacing-lg);
-  max-width: 540px;
+  padding: var(--spacing-lg) var(--spacing-md);
+  max-width: 640px;
   margin: 0 auto;
   width: 100%;
   padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 /* User Info Section - Kompakt und elegant */
@@ -77,7 +77,7 @@
   align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--card-background);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-light);
   gap: var(--spacing-md);
@@ -100,8 +100,8 @@
 /* Time Status Card */
 .time-status-section {
   background: var(--card-background);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-2xl) var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl) var(--spacing-lg);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-light);
   text-align: center;
@@ -178,7 +178,7 @@
 }
 
 .clock {
-  font-size: clamp(3rem, 14vw, 4.5rem);
+  font-size: clamp(2.5rem, 12vw, 4rem);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text-color);
@@ -196,7 +196,7 @@
 /* Responsive Design */
 @media (max-width: 480px) {
   .time-tracking-main {
-    padding: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-sm);
     gap: var(--spacing-md);
   }
 
