@@ -1,17 +1,17 @@
 .recent-activities {
   background: var(--card-background);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-xl);
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-light);
   animation: slideUp 0.5s var(--transition-base) 0.3s backwards;
 }
 
 .recent-activities h3 {
   margin-bottom: var(--spacing-lg);
-  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   display: flex;
@@ -29,7 +29,7 @@
 
 .recent-activities > p {
   color: var(--text-muted);
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  font-size: var(--font-size-sm);
   text-align: center;
   padding: var(--spacing-xl) 0;
   margin: 0;
@@ -49,8 +49,8 @@
   background: var(--light-color);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
-  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
-  line-height: 1.6;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
   transition: all var(--transition-base);
   position: relative;
   overflow: hidden;
@@ -79,8 +79,8 @@
 
 .recent-activity-title {
   color: var(--text-color);
-  font-size: clamp(0.9375rem, 2.5vw, 1rem);
-  font-weight: 700;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   display: block;
   margin-bottom: var(--spacing-sm);
 }
@@ -88,8 +88,8 @@
 .recent-activity-item p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
-  line-height: 1.5;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
 }
 
 /* Status "Noch eingestempelt" */
@@ -99,8 +99,8 @@
   gap: var(--spacing-xs);
   color: var(--success-color);
   font-style: normal;
-  font-weight: 600;
-  font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
   background: var(--success-light);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
@@ -123,7 +123,7 @@
 
   .recent-activity-item {
     padding: var(--spacing-md);
-    font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
+    font-size: var(--font-size-xs);
   }
 
   .recent-activities-list {

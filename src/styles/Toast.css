@@ -24,7 +24,7 @@
   gap: var(--spacing-md);
   pointer-events: all;
   animation: toastSlideIn 0.4s var(--transition-spring);
-  min-height: var(--touch-target-min);
+  min-height: var(--btn-height);
   position: relative;
   overflow: hidden;
 }
@@ -74,11 +74,11 @@
 }
 
 .toast-message {
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  font-size: var(--font-size-sm);
   color: var(--text-color);
-  line-height: 1.4;
+  line-height: var(--line-height-normal);
   word-wrap: break-word;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .toast-close {

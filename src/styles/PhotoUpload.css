@@ -5,9 +5,9 @@
 .photo-upload label {
   display: block;
   margin-bottom: var(--spacing-md);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
-  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+  font-size: var(--font-size-sm);
 }
 
 .file-upload-container {
@@ -31,15 +31,15 @@
   justify-content: center;
   background-color: var(--card-background);
   color: var(--text-color);
-  padding: var(--spacing-md) var(--spacing-lg);
-  min-height: var(--touch-target-comfortable);
+  padding: 10px var(--spacing-md);
+  min-height: var(--btn-height);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-base);
-  border: 1.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   text-align: center;
-  font-size: clamp(0.9375rem, 2.5vw, 1rem);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   gap: var(--spacing-sm);
   -webkit-tap-highlight-color: transparent;
 }
@@ -67,7 +67,7 @@
   padding-top: 100%;
   overflow: hidden;
   border-radius: var(--radius-md);
-  border: 1.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   background: var(--light-color);
   transition: all var(--transition-base);
 }

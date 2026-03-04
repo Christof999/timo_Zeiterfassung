@@ -148,12 +148,13 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color);
+  scrollbar-gutter: stable both-edges;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
+  min-width: 640px;
 }
 
 .data-table thead {
@@ -192,6 +193,7 @@
   display: flex;
   gap: var(--spacing-sm);
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .action-btn {
@@ -598,9 +600,26 @@
     font-size: 0.875rem;
   }
 
+  .data-table {
+    min-width: 560px;
+  }
+
   .data-table th,
   .data-table td {
     padding: var(--spacing-sm);
+  }
+
+  .data-table th {
+    font-size: var(--font-size-xs);
+  }
+
+  .action-buttons {
+    gap: var(--spacing-xs);
+  }
+
+  .action-btn {
+    padding: 6px 8px;
+    min-height: 30px;
   }
   
   .documents-gallery {
