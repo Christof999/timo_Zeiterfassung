@@ -96,22 +96,10 @@ const ReportsTab: React.FC = () => {
       resetPrintPreparation()
     }
 
-    const handleWindowFocus = () => {
-      if (!isPrintInProgressRef.current) {
-        return
-      }
-
-      window.setTimeout(() => {
-        resetPrintPreparation()
-      }, 250)
-    }
-
     window.addEventListener('afterprint', handleAfterPrint)
-    window.addEventListener('focus', handleWindowFocus)
 
     return () => {
       window.removeEventListener('afterprint', handleAfterPrint)
-      window.removeEventListener('focus', handleWindowFocus)
       clearPrintResetTimeout()
     }
   }, [])
@@ -486,6 +474,11 @@ const ReportsTab: React.FC = () => {
       return
     }
 
+    if (reportType === 'employee') {
+      handleEmployeeTablePrint()
+      return
+    }
+
     if (!hasSearched) {
       toast.error('Kein Bericht zum Drucken vorhanden')
       return
@@ -514,6 +507,180 @@ const ReportsTab: React.FC = () => {
     const start = new Date(startDate)
     const end = new Date(endDate)
     return `${start.toLocaleDateString('de-DE')} - ${end.toLocaleDateString('de-DE')}`
+  }
+
+  const escapeHtml = (value: string): string => {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  }
+
+  const buildEmployeePrintHtml = (): string => {
+    const rowsHtml = reportEntries
+      .map((entry) => {
+        return `<tr>
+  <td>${escapeHtml(entry.date)}</td>
+  <td>${escapeHtml(entry.projectName)}</td>
+  <td>${escapeHtml(entry.clockIn)}</td>
+  <td>${escapeHtml(entry.clockOut)}</td>
+  <td>${entry.pauseMinutes}</td>
+  <td>${escapeHtml(entry.workHours)}</td>
+</tr>`
+      })
+      .join('')
+
+    return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arbeitszeitnachweis</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #222;
+      background: #fff;
+    }
+    .meta {
+      margin-bottom: 16px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .meta strong {
+      display: inline-block;
+      min-width: 110px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #d6d6d6;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background: #f4f4f4;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    tfoot td {
+      font-weight: 700;
+      background: #fafafa;
+    }
+    .right {
+      text-align: right;
+    }
+    @page {
+      margin: 12mm;
+      size: A4 portrait;
+    }
+  </style>
+</head>
+<body>
+  <div class="meta">
+    <div><strong>Mitarbeiter:</strong> ${escapeHtml(selectedEmployeeName || '-')}</div>
+    <div><strong>Zeitraum:</strong> ${escapeHtml(formatPeriod())}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tag</th>
+        <th>Projekt</th>
+        <th>Kommen</th>
+        <th>Gehen</th>
+        <th>Pause</th>
+        <th>Arbeitszeit</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Gesamt:</td>
+        <td class="right">${escapeHtml(calculateTotalHours())}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`
+  }
+
+  const handleEmployeeTablePrint = () => {
+    if (reportEntries.length === 0) {
+      toast.error('Keine Zeiteinträge zum Drucken vorhanden')
+      return
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Popup blockiert. Bitte Popups für diese Seite erlauben.')
+      return
+    }
+
+    isPrintInProgressRef.current = true
+    setIsPreparingPrint(true)
+    clearPrintResetTimeout()
+    toast.info('Druckansicht wird vorbereitet ...')
+
+    let hasCleanedUp = false
+    let hasTriggeredPrint = false
+
+    const cleanup = () => {
+      if (hasCleanedUp) return
+      hasCleanedUp = true
+      resetPrintPreparation()
+      window.setTimeout(() => {
+        try {
+          printWindow.close()
+        } catch {
+          // no-op
+        }
+      }, 200)
+    }
+
+    printResetTimeoutRef.current = window.setTimeout(() => {
+      cleanup()
+    }, 20000)
+
+    const triggerPrint = () => {
+      if (hasTriggeredPrint) return
+      hasTriggeredPrint = true
+      try {
+        printWindow.focus()
+        printWindow.print()
+      } catch (error) {
+        console.error('Fehler beim Öffnen der Druckvorschau:', error)
+        toast.error('Druckvorschau konnte nicht geöffnet werden')
+        cleanup()
+      }
+    }
+
+    try {
+      printWindow.document.open()
+      printWindow.document.write(buildEmployeePrintHtml())
+      printWindow.document.close()
+
+      printWindow.addEventListener('afterprint', cleanup, { once: true })
+      printWindow.onload = () => {
+        window.setTimeout(() => triggerPrint(), 80)
+      }
+
+      // Fallback, falls onload/afterprint auf einzelnen Browsern nicht zuverlässig feuert.
+      window.setTimeout(() => triggerPrint(), 350)
+    } catch (error) {
+      console.error('Fehler beim Vorbereiten des Druckdokuments:', error)
+      cleanup()
+      toast.error('Druckdokument konnte nicht erstellt werden')
+    }
   }
 
   const hasEdits = reportEntries.some(e => e.isEdited)
