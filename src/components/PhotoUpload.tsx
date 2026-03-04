@@ -17,32 +17,36 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileSelect = (files: FileList | null) => {
+  const readAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (event) => resolve((event.target?.result as string) || '')
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleFileSelect = async (files: FileList | null) => {
     if (!files) return
 
-    const newFiles: File[] = []
-    const newPreviews: string[] = []
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
+    const availableSlots = Math.max(0, maxPhotos - photos.length)
+    const filesToAdd = imageFiles.slice(0, availableSlots)
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      if (file.type.startsWith('image/')) {
-        if (photos.length + newFiles.length >= maxPhotos) {
-          // Toast wird von der aufrufenden Komponente angezeigt
-          break
-        }
-        newFiles.push(file)
-        
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          newPreviews.push(e.target?.result as string)
-          if (newPreviews.length === newFiles.length) {
-            setPreviews([...previews, ...newPreviews])
-            setPhotos([...photos, ...newFiles])
-            onPhotosChange([...photos, ...newFiles])
-          }
-        }
-        reader.readAsDataURL(file)
-      }
+    if (filesToAdd.length === 0) {
+      return
+    }
+
+    try {
+      const previewUrls = await Promise.all(filesToAdd.map((file) => readAsDataUrl(file)))
+      setPreviews((prev) => [...prev, ...previewUrls])
+      setPhotos((prev) => {
+        const updatedPhotos = [...prev, ...filesToAdd]
+        onPhotosChange(updatedPhotos)
+        return updatedPhotos
+      })
+    } catch (error) {
+      console.error('Fehler beim Lesen der Bilder:', error)
     }
   }
 
