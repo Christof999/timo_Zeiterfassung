@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, LeaveRequest } from '../types'
 import { toast } from './ToastContainer'
+import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 
 const VacationRequests: React.FC = () => {
@@ -152,7 +153,7 @@ const VacationRequests: React.FC = () => {
   const remaining = (vacationAccount.total || 30) - (vacationAccount.used || 0)
 
   // Min-Datum für Datumseingaben (heute)
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayLocalDateString()
 
   if (isLoading) {
     return (
