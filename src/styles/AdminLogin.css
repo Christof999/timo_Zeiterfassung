@@ -74,7 +74,7 @@
   margin-top: var(--spacing-lg);
   text-align: center;
   padding-top: var(--spacing-lg);
-  border-top: 0.5px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
 }
 
 .link-btn {
@@ -82,8 +82,8 @@
   border: none;
   color: var(--primary-color);
   text-decoration: none;
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: color var(--transition-base);
   padding: 0;

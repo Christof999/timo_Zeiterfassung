@@ -240,6 +240,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-md);
 }
 
 .modal-form .form-group {
@@ -288,10 +289,14 @@
 .modal-actions {
   display: flex;
   gap: var(--spacing-md);
-  margin-top: auto;
-  padding-top: var(--spacing-lg);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color);
   align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: var(--card-background);
 }
 
 .modal-actions .btn {
@@ -396,6 +401,10 @@
     max-width: 600px;
     margin: 0;
     animation: scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .modal-header::before {
+    display: none;
   }
   
   .modal-form {

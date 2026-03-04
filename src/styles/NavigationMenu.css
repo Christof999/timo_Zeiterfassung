@@ -2,7 +2,7 @@
 .nav-toggle {
   display: none;
   background: var(--card-background);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   flex-direction: column;
   cursor: pointer;
   padding: var(--spacing-sm);
@@ -50,7 +50,7 @@
   top: var(--spacing-lg);
   right: var(--spacing-lg);
   background: var(--light-color);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   font-size: 20px;
   color: var(--text-color);
   cursor: pointer;
@@ -78,11 +78,13 @@
 
 .nav-item {
   white-space: nowrap;
-  min-height: var(--touch-target-min);
+  min-height: var(--btn-height);
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
 }
 
 .nav-overlay {
@@ -150,25 +152,25 @@
   }
 
   .nav-item.btn {
-    min-height: var(--touch-target-comfortable);
+    min-height: var(--btn-height-lg);
   }
 
   .nav-item.btn.primary-btn {
-    background: var(--primary-gradient);
+    background: var(--primary-color);
     color: white;
     border: none;
-    box-shadow: var(--shadow-colored);
+    box-shadow: var(--shadow-sm);
   }
 
   .nav-item.btn.primary-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 10px 20px -8px rgba(16, 185, 129, 0.4);
+    box-shadow: var(--shadow);
   }
 
   .nav-item.btn.secondary-btn {
     background: var(--light-color);
     color: var(--text-color);
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--border-color);
   }
 
   .nav-item.btn.secondary-btn:hover {

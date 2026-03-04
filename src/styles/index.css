@@ -66,6 +66,13 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
+  /* Buttons */
+  --btn-height: 44px;
+  --btn-height-lg: 48px;
+  --btn-padding-x: 14px;
+  --btn-padding-y: 10px;
+  --btn-font-size: var(--font-size-sm);
+
   /* Touch-Targets - Minimum 44x44px für Mobile */
   --touch-target-min: 44px;
   --touch-target-comfortable: 48px;

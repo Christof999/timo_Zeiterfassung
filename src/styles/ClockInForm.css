@@ -1,8 +1,8 @@
 .clock-in-form {
   background: var(--card-background);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-light);
   animation: slideUp 0.5s var(--transition-base) 0.2s backwards;
 }
@@ -10,7 +10,7 @@
 .clock-in-form form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-lg);
 }
 
 .clock-in-form .form-group {
@@ -20,9 +20,9 @@
 }
 
 .clock-in-form label {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  font-size: var(--font-size-sm);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -37,11 +37,11 @@
 }
 
 .clock-in-form select {
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 12px var(--spacing-md);
   min-height: var(--touch-target-comfortable);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  font-size: clamp(1rem, 3vw, 1.0625rem);
+  font-size: var(--font-size-base);
   font-family: inherit;
   background: var(--background-color);
   color: var(--text-color);
@@ -64,33 +64,28 @@
 .clock-in-form select:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-/* Primary Clock-In Button - Extra prominent */
 .clock-in-form .btn {
   width: 100%;
-  font-size: clamp(1.0625rem, 3vw, 1.125rem);
-  padding: var(--spacing-lg) var(--spacing-xl);
-  min-height: 56px;
-  border-radius: var(--radius-lg);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  position: relative;
-  overflow: hidden;
-  transition: all var(--transition-base);
+  font-size: var(--font-size-base);
+  padding: 12px var(--spacing-md);
+  min-height: var(--btn-height-lg);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .clock-in-form .btn.primary-btn {
-  background: var(--primary-gradient);
+  background: var(--primary-color);
   color: white;
   border: none;
-  box-shadow: var(--shadow-colored), var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .clock-in-form .btn.primary-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 30px -8px rgba(16, 185, 129, 0.4), var(--shadow-md);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .clock-in-form .btn.primary-btn:active:not(:disabled) {
@@ -104,25 +99,6 @@
   transform: none;
 }
 
-/* Ripple Effect */
-.clock-in-form .btn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.5s, height 0.5s;
-}
-
-.clock-in-form .btn:active::after {
-  width: 300px;
-  height: 300px;
-}
-
 @media (max-width: 480px) {
   .clock-in-form {
     padding: var(--spacing-lg);
@@ -134,6 +110,6 @@
   }
 
   .clock-in-form .btn {
-    min-height: 52px;
+    min-height: var(--btn-height);
   }
 }

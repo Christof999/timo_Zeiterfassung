@@ -28,15 +28,15 @@
 
 .back-btn {
   background: var(--card-background);
-  border: 2px solid var(--border-color);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-lg);
-  font-size: 0.9375rem;
+  border: 1px solid var(--border-color);
+  padding: 10px var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
   cursor: pointer;
   color: var(--text-color);
-  min-height: var(--touch-target-min);
+  min-height: var(--btn-height);
   transition: all var(--transition-base);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -300,21 +300,21 @@
 }
 
 .vacation-form .form-actions .btn.primary-btn {
-  background: var(--primary-gradient);
+  background: var(--primary-color);
   color: white;
   border: none;
-  box-shadow: var(--shadow-colored);
+  box-shadow: var(--shadow-sm);
 }
 
 .vacation-form .form-actions .btn.primary-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 20px -8px rgba(16, 185, 129, 0.4);
+  box-shadow: var(--shadow);
 }
 
 .vacation-form .form-actions .btn.secondary-btn {
   background: var(--card-background);
   color: var(--text-color);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
 }
 
 .vacation-form .form-actions .btn.secondary-btn:hover {
@@ -452,6 +452,8 @@
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-light);
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .request-date {
@@ -461,10 +463,12 @@
 
 .delete-btn {
   background: var(--light-color);
-  border: 2px solid transparent;
-  font-size: 1rem;
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  padding: var(--spacing-sm);
+  padding: 6px 10px;
+  min-height: 30px;
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
   color: var(--text-secondary);
