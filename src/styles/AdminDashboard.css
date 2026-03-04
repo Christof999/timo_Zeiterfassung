@@ -6,9 +6,9 @@
 }
 
 .admin-dashboard-header {
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 12px var(--spacing-lg);
   background: var(--card-background);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -84,7 +84,8 @@
 }
 
 .admin-name {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
   color: var(--text-color);
 }
 
@@ -95,14 +96,14 @@
 }
 
 .dashboard-tabs {
-  width: 250px;
+  width: 260px;
   background: var(--card-background);
-  border-right: 0.5px solid var(--border-color);
-  padding: var(--spacing-lg);
+  border-right: 1px solid var(--border-color);
+  padding: var(--spacing-md);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .admin-menu-close {
@@ -120,14 +121,16 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md);
+  padding: 10px 12px;
+  min-height: 40px;
   background: none;
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition-base);
   text-align: left;
-  font-size: 1rem;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--text-color);
   font-family: inherit;
 }
@@ -148,8 +151,13 @@
 
 .dashboard-content {
   flex: 1;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
   overflow-y: auto;
+}
+
+.dashboard-content > * {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 @media (max-width: 768px) {

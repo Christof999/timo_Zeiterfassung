@@ -51,6 +51,21 @@
   --spacing-2xl: 48px;
   --spacing-3xl: 64px;
 
+  /* Typografie */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.65;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
   /* Touch-Targets - Minimum 44x44px für Mobile */
   --touch-target-min: 44px;
   --touch-target-comfortable: 48px;
@@ -89,7 +104,8 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  line-height: 1.6;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
   color: var(--text-color);
   background-color: var(--light-color);
   -webkit-font-smoothing: antialiased;
@@ -119,26 +135,32 @@ html, body {
 
 /* Typography - Mobile optimiert */
 h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  line-height: 1.2;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
   margin-bottom: var(--spacing-md);
 }
 
 h1 {
-  font-size: clamp(1.75rem, 5vw, 2rem);
+  font-size: clamp(var(--font-size-2xl), 4.8vw, var(--font-size-3xl));
 }
 
 h2 {
-  font-size: clamp(1.5rem, 4vw, 1.75rem);
+  font-size: clamp(var(--font-size-xl), 4vw, var(--font-size-2xl));
 }
 
 h3 {
-  font-size: clamp(1.25rem, 3.5vw, 1.5rem);
+  font-size: clamp(var(--font-size-lg), 3.2vw, var(--font-size-xl));
+}
+
+h4 {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
 }
 
 p {
   margin-bottom: var(--spacing-md);
-  font-size: clamp(0.9375rem, 2.5vw, 1rem);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
 }
 
 /* Loading States - Modern Spinner */

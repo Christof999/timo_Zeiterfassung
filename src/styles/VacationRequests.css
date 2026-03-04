@@ -2,7 +2,7 @@
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--light-color);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
   padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
 }
@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
@@ -58,7 +58,7 @@
   background: var(--card-background) !important;
   color: var(--text-color) !important;
   padding: var(--spacing-xl);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-lg);
   border: 1px solid var(--border-light) !important;
   box-shadow: var(--shadow-sm);
@@ -159,7 +159,7 @@
 /* Antragsformular */
 .vacation-form {
   background: var(--card-background);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
   border: 1px solid var(--border-light);
@@ -229,10 +229,10 @@
 .vacation-form select,
 .vacation-form textarea {
   width: 100%;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border: 2px solid var(--border-color);
+  padding: 12px var(--spacing-md);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   font-family: inherit;
   background: var(--background-color);
   color: var(--text-color);
@@ -251,7 +251,7 @@
 .vacation-form textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .vacation-form textarea {
@@ -341,7 +341,7 @@
 
 .request-card {
   background: var(--card-background);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-md);
   border: 1px solid var(--border-light);

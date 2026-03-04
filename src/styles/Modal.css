@@ -33,7 +33,7 @@
 .modal-content {
   background: var(--card-background);
   border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 560px;
   max-height: 92vh;
@@ -119,8 +119,8 @@
 .modal-header h2,
 .modal-header h3 {
   margin: 0;
-  font-size: clamp(1.125rem, 3.5vw, 1.375rem);
-  font-weight: 700;
+  font-size: clamp(var(--font-size-lg), 3.5vw, var(--font-size-xl));
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
   flex: 1;
   letter-spacing: -0.02em;
@@ -168,20 +168,20 @@
 .modal-body label {
   display: block;
   margin-bottom: var(--spacing-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  font-size: var(--font-size-sm);
 }
 
 .modal-body input,
 .modal-body select,
 .modal-body textarea {
   width: 100%;
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 12px var(--spacing-md);
   min-height: var(--touch-target-comfortable);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  font-size: clamp(1rem, 3vw, 1.0625rem);
+  font-size: var(--font-size-base);
   font-family: inherit;
   background: var(--background-color);
   color: var(--text-color);
@@ -201,7 +201,7 @@
 .modal-body textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .modal-body textarea {
@@ -239,29 +239,30 @@
   padding: var(--spacing-lg) var(--spacing-xl);
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-sm);
 }
 
 .modal-form .form-group {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
 }
 
 .modal-form label {
   display: block;
   margin-bottom: var(--spacing-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
 }
 
 .modal-form input,
 .modal-form select,
 .modal-form textarea {
   width: 100%;
-  padding: var(--spacing-md);
+  padding: 12px var(--spacing-md);
   min-height: var(--touch-target-min);
-  border: 1.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   font-family: inherit;
   background: var(--background-color);
   color: var(--text-color);
@@ -276,7 +277,7 @@
 .modal-form textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.15);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .modal-form textarea {
@@ -290,11 +291,68 @@
   margin-top: auto;
   padding-top: var(--spacing-lg);
   border-top: 1px solid var(--border-color);
+  align-items: center;
 }
 
 .modal-actions .btn {
   flex: 1;
   min-height: var(--touch-target-min);
+}
+
+/* Formular-Abschnitte für Admin-Editoren */
+.modal-form .form-section {
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--light-color);
+}
+
+.modal-form .form-section h4 {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.modal-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.modal-form .form-hint {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.duration-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--light-color);
+}
+
+.preview-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.preview-value {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color);
+}
+
+.action-spacer {
+  width: var(--spacing-xs);
 }
 
 /* Modal Close Button */
@@ -384,6 +442,14 @@
   
   .modal-form {
     padding: var(--spacing-lg);
+  }
+
+  .modal-form .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .action-spacer {
+    display: none;
   }
 }
 

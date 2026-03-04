@@ -18,12 +18,12 @@
 
 .login-header {
   background: var(--card-background);
-  padding: var(--spacing-2xl) var(--spacing-md);
+  padding: var(--spacing-xl) var(--spacing-md);
   text-align: center;
   border-bottom: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
   /* Safe Area Support */
-  padding-top: max(var(--spacing-2xl), env(safe-area-inset-top));
+  padding-top: max(var(--spacing-xl), env(safe-area-inset-top));
   position: relative;
   z-index: 1;
 }
@@ -70,7 +70,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: var(--spacing-xl) var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-md);
   padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
   position: relative;
   z-index: 1;
@@ -79,16 +79,16 @@
 .login-section {
   background: var(--card-background);
   border-radius: var(--radius-xl);
-  padding: var(--spacing-2xl);
+  padding: var(--spacing-xl);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-light);
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   animation: scaleIn 0.4s var(--transition-base);
 }
 
 .login-section h2 {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   font-size: clamp(1.375rem, 4vw, 1.625rem);
   text-align: center;
   color: var(--text-color);
@@ -99,7 +99,7 @@
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 .form-group {
@@ -120,9 +120,9 @@
 .form-group input,
 .form-group select,
 .form-group textarea {
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 12px var(--spacing-md);
   min-height: var(--touch-target-comfortable);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   font-size: clamp(1rem, 3vw, 1.0625rem);
   font-family: inherit;
@@ -146,7 +146,7 @@
 .form-group textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .form-group input:disabled,
