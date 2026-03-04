@@ -47,22 +47,22 @@ const AdminDashboard: React.FC = () => {
   }
 
   const tabs = [
-    { id: 'overview' as TabType, label: 'Übersicht', icon: '📊' },
-    { id: 'employees' as TabType, label: 'Mitarbeiter', icon: '👥' },
-    { id: 'projects' as TabType, label: 'Projekte', icon: '📁' },
-    { id: 'vehicles' as TabType, label: 'Fahrzeuge', icon: '🚗' },
-    { id: 'vacation' as TabType, label: 'Urlaub', icon: '📅' },
-    { id: 'reports' as TabType, label: 'Berichte', icon: '📈' }
+    { id: 'overview' as TabType, label: 'Übersicht' },
+    { id: 'employees' as TabType, label: 'Mitarbeiter' },
+    { id: 'projects' as TabType, label: 'Projekte' },
+    { id: 'vehicles' as TabType, label: 'Fahrzeuge' },
+    { id: 'vacation' as TabType, label: 'Urlaub' },
+    { id: 'reports' as TabType, label: 'Berichte' }
   ]
 
   return (
     <div className="admin-dashboard-container">
       <header className="admin-dashboard-header">
-        <div className="logo">
+        <div className="admin-logo">
           <img 
             src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
             alt="Lauffer Logo" 
-            className="logo-image"
+            className="admin-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
           <p>Admin Panel</p>
@@ -73,14 +73,14 @@ const AdminDashboard: React.FC = () => {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             aria-label="Navigation umschalten"
           >
-            <span className="hamburger-line"></span>
-            <span className="hamburger-line"></span>
-            <span className="hamburger-line"></span>
+            <span className="admin-hamburger-line"></span>
+            <span className="admin-hamburger-line"></span>
+            <span className="admin-hamburger-line"></span>
           </button>
           <div className="admin-controls">
             <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
             <button onClick={handleLogout} className="btn secondary-btn">
-              🚪 Abmelden
+              Abmelden
             </button>
           </div>
         </div>
@@ -104,7 +104,6 @@ const AdminDashboard: React.FC = () => {
                 setIsMenuOpen(false)
               }}
             >
-              <span className="tab-icon">{tab.icon}</span>
               <span className="tab-label">{tab.label}</span>
             </button>
           ))}

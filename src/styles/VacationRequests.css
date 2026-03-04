@@ -1,7 +1,7 @@
 .vacation-container {
   min-height: 100vh;
   min-height: 100dvh;
-  background: linear-gradient(180deg, var(--light-color) 0%, #EEF2FF 100%);
+  background: var(--light-color);
   padding: var(--spacing-lg);
   padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
   padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
@@ -53,15 +53,15 @@
   transform: scale(0.98);
 }
 
-/* Urlaubskonto Card - Premium Design */
+/* Urlaubskonto */
 .vacation-account {
-  background: var(--primary-gradient) !important;
-  color: white !important;
+  background: var(--card-background) !important;
+  color: var(--text-color) !important;
   padding: var(--spacing-xl);
   border-radius: var(--radius-xl);
   margin-bottom: var(--spacing-lg);
-  border: none !important;
-  box-shadow: var(--shadow-colored), var(--shadow-lg);
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--shadow-sm);
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
@@ -72,12 +72,11 @@
 .vacation-account::before {
   content: '';
   position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 200px;
-  height: 200px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary-color);
   pointer-events: none;
 }
 
@@ -85,7 +84,7 @@
   margin: 0 0 var(--spacing-lg);
   font-size: 0.875rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -105,25 +104,25 @@
   font-size: clamp(2rem, 7vw, 2.75rem);
   font-weight: 700;
   line-height: 1.1;
-  color: white;
+  color: var(--text-color);
 }
 
 .vacation-stats .stat-label {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .vacation-progress {
   height: 8px;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--border-light);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
 
 .vacation-progress-bar {
   height: 100%;
-  background: white;
+  background: var(--primary-color);
   border-radius: var(--radius-full);
   transition: width 0.5s var(--transition-spring);
 }
@@ -138,19 +137,19 @@
   margin-left: auto;
   margin-right: auto;
   display: block;
-  background: var(--primary-gradient);
+  background: var(--primary-color);
   color: white;
   border: none;
   border-radius: var(--radius-lg);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-base);
-  box-shadow: var(--shadow-colored);
+  box-shadow: var(--shadow-sm);
 }
 
 .new-request-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 30px -8px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .new-request-btn:active {
@@ -353,7 +352,6 @@
 
 .request-card:hover {
   box-shadow: var(--shadow);
-  transform: translateY(-2px);
 }
 
 .request-card.status-pending {
@@ -381,7 +379,7 @@
   color: var(--text-color);
 }
 
-.status-badge {
+.vacation-status-badge {
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
   font-size: 0.75rem;
@@ -390,17 +388,17 @@
   letter-spacing: 0.02em;
 }
 
-.status-badge.pending {
+.vacation-status-badge.pending {
   background: var(--warning-light);
   color: #B45309;
 }
 
-.status-badge.approved {
+.vacation-status-badge.approved {
   background: var(--success-light);
   color: var(--success-color);
 }
 
-.status-badge.rejected {
+.vacation-status-badge.rejected {
   background: var(--danger-light);
   color: var(--danger-color);
 }
@@ -534,6 +532,6 @@
 /* Dark Mode */
 @media (prefers-color-scheme: dark) {
   .vacation-container {
-    background: linear-gradient(180deg, var(--light-color) 0%, #1E1B4B 100%);
+    background: var(--light-color);
   }
 }

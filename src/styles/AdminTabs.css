@@ -92,26 +92,25 @@
 }
 
 .clock-out-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  padding: 0;
-  font-size: 1.25rem;
+  min-width: auto;
+  height: auto;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ff3b30 !important;
-  color: white !important;
-  border: none !important;
-  border-radius: var(--radius-md) !important;
+  background: var(--danger-light) !important;
+  color: var(--danger-color) !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  border-radius: var(--radius-sm) !important;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
 }
 
 .clock-out-btn:hover {
-  background: #d63029 !important;
-  transform: scale(1.05);
+  background: rgba(239, 68, 68, 0.18) !important;
 }
 
 .clock-out-btn:disabled {
@@ -178,20 +177,25 @@
 .action-buttons {
   display: flex;
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .action-btn {
-  background: none;
-  border: none;
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
   cursor: pointer;
-  padding: var(--spacing-xs);
-  font-size: 1.2rem;
-  transition: transform var(--transition-base);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-color);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
   -webkit-tap-highlight-color: transparent;
 }
 
-.action-btn:active {
-  transform: scale(0.9);
+.action-btn:hover {
+  background: var(--card-background);
+  border-color: var(--medium-gray);
 }
 
 .status-badge {

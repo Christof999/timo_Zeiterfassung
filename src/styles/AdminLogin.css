@@ -12,6 +12,33 @@
   border-bottom: 0.5px solid var(--border-color);
 }
 
+.admin-login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.admin-login-logo-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  background: var(--card-background);
+}
+
+.admin-login-logo h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.admin-login-logo p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 .admin-login-main {
   flex: 1;
   display: flex;

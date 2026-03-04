@@ -164,11 +164,11 @@ const TimeTracking: React.FC = () => {
   return (
     <div className="time-tracking-container">
       <header className="time-tracking-header">
-        <div className="logo">
+        <div className="time-tracking-logo">
           <img 
             src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
             alt="Lauffer Logo" 
-            className="logo-image"
+            className="time-tracking-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
           <p>Gartenbau • Erdbau • Natursteinhandel</p>

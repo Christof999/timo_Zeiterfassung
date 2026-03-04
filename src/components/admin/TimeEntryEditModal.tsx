@@ -259,7 +259,7 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
               className="btn danger-btn"
               disabled={isLoading}
             >
-              🗑️ Löschen
+              Löschen
             </button>
             <div className="action-spacer" />
             <button 
@@ -275,7 +275,7 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
               className="btn primary-btn"
               disabled={isLoading}
             >
-              {isLoading ? 'Speichere...' : '💾 Speichern'}
+              {isLoading ? 'Speichere...' : 'Speichern'}
             </button>
           </div>
         </form>

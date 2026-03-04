@@ -8,7 +8,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     registrations.forEach((registration) => {
       registration.unregister();
-      console.log('✅ Service Worker deaktiviert für React-Version');
+      console.log('Service Worker deaktiviert für React-Version');
     });
   });
 }

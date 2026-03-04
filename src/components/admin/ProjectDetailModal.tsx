@@ -57,10 +57,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       
       // Debug: Zeige die ersten 2 Fotos komplett mit ALLEN Feldern
       if (allPhotos.length > 0) {
-        console.log('🖼️ ERSTES FOTO KOMPLETT:', JSON.stringify(allPhotos[0], null, 2))
-        console.log('🖼️ ALLE FELDER DES ERSTEN FOTOS:', Object.keys(allPhotos[0]))
+        console.log('ERSTES FOTO KOMPLETT:', JSON.stringify(allPhotos[0], null, 2))
+        console.log('ALLE FELDER DES ERSTEN FOTOS:', Object.keys(allPhotos[0]))
         if (allPhotos.length > 1) {
-          console.log('🖼️ ZWEITES FOTO KOMPLETT:', JSON.stringify(allPhotos[1], null, 2))
+          console.log('ZWEITES FOTO KOMPLETT:', JSON.stringify(allPhotos[1], null, 2))
         }
       }
       
@@ -239,7 +239,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       />
                     ) : (
                       <div className="photo-placeholder">
-                        <span>📷</span>
+                        <span>Bild</span>
                         <p>Keine Bilddaten vorhanden</p>
                         <p className="photo-filename">{photo.fileName}</p>
                       </div>
@@ -301,14 +301,14 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                             if (parent) {
                               const placeholder = document.createElement('div')
                               placeholder.className = 'photo-placeholder'
-                              placeholder.innerHTML = '<span>📄</span>'
+                              placeholder.innerHTML = '<span>Dok.</span>'
                               parent.insertBefore(placeholder, e.currentTarget)
                             }
                           }}
                         />
                       ) : (
                         <div className="photo-placeholder document-placeholder">
-                          <span>📄</span>
+                          <span>Dok.</span>
                         </div>
                       )}
                       <p className="photo-filename">{doc.fileName}</p>
@@ -320,7 +320,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                           className="document-download-btn"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          ⬇ Download
+                          Download
                         </a>
                       )}
                     </div>

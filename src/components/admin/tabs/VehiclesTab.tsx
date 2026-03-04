@@ -72,7 +72,7 @@ const VehiclesTab: React.FC = () => {
       <div className="tab-header">
         <h3>Fahrzeuge</h3>
         <button onClick={handleAdd} className="btn primary-btn">
-          ➕ Fahrzeug hinzufügen
+          Fahrzeug hinzufügen
         </button>
       </div>
 
@@ -107,7 +107,7 @@ const VehiclesTab: React.FC = () => {
                       className="action-btn edit-btn"
                       aria-label="Bearbeiten"
                     >
-                      ✏️
+                      Bearbeiten
                     </button>
                     <button
                       onClick={() => handleDelete(vehicle)}
@@ -116,7 +116,7 @@ const VehiclesTab: React.FC = () => {
                       disabled={deletingVehicleId === vehicle.id}
                       title="Fahrzeug löschen"
                     >
-                      {deletingVehicleId === vehicle.id ? '…' : '🗑️'}
+                      {deletingVehicleId === vehicle.id ? 'Löscht...' : 'Löschen'}
                     </button>
                   </td>
                 </tr>

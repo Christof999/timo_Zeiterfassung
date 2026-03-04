@@ -1,11 +1,11 @@
 /* Filter-Bereich Styles */
 .reports-tab .report-filters {
-  background: linear-gradient(135deg, var(--card-background) 0%, #f8faf9 100%);
+  background: var(--card-background);
   border-radius: var(--radius-xl, 20px);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-xl);
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .reports-tab .report-filters h3 {
@@ -18,8 +18,11 @@
 }
 
 .reports-tab .report-filters h3::before {
-  content: '📊';
-  font-size: 1.5rem;
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--primary-color);
 }
 
 .reports-tab .filter-row {
@@ -90,8 +93,8 @@
 }
 
 .reports-tab .search-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(74, 124, 89, 0.3);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .reports-tab .search-btn:active {
@@ -202,8 +205,8 @@
 }
 
 .edit-notice {
-  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-  border: 1px solid #90caf9;
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
@@ -212,7 +215,7 @@
 
 .edit-notice p {
   margin: 0;
-  color: #1565c0;
+  color: var(--text-secondary);
 }
 
 .report-table-container {
@@ -441,7 +444,7 @@
 
 /* ==================== PROJEKT-BERICHT ==================== */
 .project-report .project-info-section {
-  background: linear-gradient(135deg, #f8faf9 0%, #e8f5e9 100%);
+  background: var(--card-background);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
@@ -542,8 +545,9 @@
 }
 
 .total-cost-box {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-  color: white;
+  background: var(--card-background);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   display: flex;
@@ -605,7 +609,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 600;
   background: var(--border-color);
 }
 
@@ -664,7 +670,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
   background: var(--border-color);
   border-radius: var(--radius-sm);
 }

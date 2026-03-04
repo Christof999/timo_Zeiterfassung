@@ -41,9 +41,9 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
         aria-label="Navigation umschalten"
         aria-expanded={isOpen}
       >
-        <span className="hamburger-line"></span>
-        <span className="hamburger-line"></span>
-        <span className="hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
       </button>
 
       <nav className={`nav-menu ${isOpen ? 'active' : ''}`} aria-hidden={!isOpen}>
@@ -59,7 +59,7 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
           className="nav-item btn primary-btn" 
           onClick={() => setIsOpen(false)}
         >
-          📅 Urlaubsanträge
+          Urlaubsanträge
         </Link>
         <button 
           onClick={() => {
@@ -68,7 +68,7 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
           }} 
           className="nav-item btn secondary-btn"
         >
-          🚪 Abmelden
+          Abmelden
         </button>
       </nav>
 

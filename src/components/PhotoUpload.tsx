@@ -72,7 +72,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
           onChange={(e) => handleFileSelect(e.target.files)}
         />
         <label htmlFor={`camera-${label}`} className="file-label">
-          📷 Kamera öffnen
+          Kamera öffnen
         </label>
 
         <input
@@ -85,7 +85,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
           onChange={(e) => handleFileSelect(e.target.files)}
         />
         <label htmlFor={`gallery-${label}`} className="file-label">
-          🖼️ Galerie öffnen
+          Galerie öffnen
         </label>
 
         {previews.length > 0 && (

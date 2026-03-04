@@ -694,13 +694,13 @@ const ReportsTab: React.FC = () => {
           className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
           onClick={() => setReportType('employee')}
         >
-          👤 Mitarbeiter-Zeitauswertung
+          Mitarbeiter-Zeitauswertung
         </button>
         <button
           className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
           onClick={() => setReportType('project')}
         >
-          📁 Projekt-Nachkalkulation
+          Projekt-Nachkalkulation
         </button>
       </div>
 
@@ -733,7 +733,7 @@ const ReportsTab: React.FC = () => {
               </div>
             </div>
             <button onClick={handleEmployeeSearch} className="btn primary-btn search-btn" disabled={isLoading}>
-              {isLoading ? 'Lädt...' : '🔍 Auswertung laden'}
+              {isLoading ? 'Lädt...' : 'Auswertung laden'}
             </button>
           </div>
 
@@ -751,18 +751,18 @@ const ReportsTab: React.FC = () => {
               <div className="report-actions no-print">
                 <div className="actions-left">
                   <h4>Bericht für {selectedEmployeeName} <span className="date-range">({formatPeriod()})</span></h4>
-                  {hasEdits && <span className="edit-hint">⚠️ Es gibt temporäre Änderungen (nur für Druck)</span>}
+                  {hasEdits && <span className="edit-hint">Es gibt temporäre Änderungen (nur für Druck)</span>}
                 </div>
                 <div className="actions-right">
-                  {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">↩️ Zurücksetzen</button>}
+                  {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">Zurücksetzen</button>}
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
-                    {isPreparingPrint ? 'Vorbereitung…' : '🖨️ Drucken'}
+                    {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
                   </button>
                 </div>
               </div>
 
               <div className="edit-notice no-print">
-                <p>💡 <strong>Tipp:</strong> Änderungen sind nur temporär für den Druck.</p>
+                <p><strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck.</p>
               </div>
 
               {reportEntries.length === 0 ? (
@@ -790,7 +790,7 @@ const ReportsTab: React.FC = () => {
                           <td><input type="time" value={entry.clockOut} onChange={(e) => handleFieldChange(index, 'clockOut', e.target.value)} className="inline-edit time-input" /></td>
                           <td><input type="number" min="0" value={entry.pauseMinutes} onChange={(e) => handleFieldChange(index, 'pauseMinutes', e.target.value)} className="inline-edit pause-input" /></td>
                           <td className="hours-cell">{entry.workHours}</td>
-                          <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">↩️</button>}</td>
+                          <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">Zurück</button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -854,7 +854,7 @@ const ReportsTab: React.FC = () => {
             )}
 
             <button onClick={handleProjectSearch} className="btn primary-btn search-btn" disabled={isLoading}>
-              {isLoading ? 'Lädt...' : '🔍 Kalkulation erstellen'}
+              {isLoading ? 'Lädt...' : 'Kalkulation erstellen'}
             </button>
           </div>
 
@@ -872,14 +872,14 @@ const ReportsTab: React.FC = () => {
                 </div>
                 <div className="actions-right">
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
-                    {isPreparingPrint ? 'Vorbereitung…' : '🖨️ Drucken'}
+                    {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
                   </button>
                 </div>
               </div>
 
               {/* Projektinfo */}
               <div className="project-info-section">
-                <h4>📋 Projektinformationen</h4>
+                <h4>Projektinformationen</h4>
                 <div className="project-info-grid">
                   <div className="info-item">
                     <span className="info-label">Projekt:</span>
@@ -914,7 +914,7 @@ const ReportsTab: React.FC = () => {
 
               {/* Personalkosten */}
               <div className="cost-section">
-                <h4>👥 Personalkosten</h4>
+                <h4>Personalkosten</h4>
                 {employeeSummaries.length === 0 ? (
                   <p className="no-data">Keine Zeiteinträge vorhanden</p>
                 ) : (
@@ -949,7 +949,7 @@ const ReportsTab: React.FC = () => {
 
               {/* Fahrzeugkosten */}
               <div className="cost-section">
-                <h4>🚗 Fahrzeugkosten</h4>
+                <h4>Fahrzeugkosten</h4>
                 {vehicleSummaries.length === 0 ? (
                   <p className="no-data">Keine Fahrzeugbuchungen vorhanden</p>
                 ) : (
@@ -993,7 +993,7 @@ const ReportsTab: React.FC = () => {
               {/* Baustellenfotos */}
               {projectPhotos.length > 0 && (
                 <div className="media-section">
-                  <h4>📷 Baustellenfotos ({projectPhotos.length})</h4>
+                  <h4>Baustellenfotos ({projectPhotos.length})</h4>
                   <div className="photo-grid">
                     {projectPhotos.map((photo, idx) => {
                       const imgSrc = getImageSrc(photo)
@@ -1003,7 +1003,7 @@ const ReportsTab: React.FC = () => {
                           {imgSrc ? (
                             <img src={imgSrc} alt={photo.fileName || 'Foto'} className="photo-thumbnail" />
                           ) : (
-                            <div className="photo-placeholder">📷</div>
+                            <div className="photo-placeholder">Kein Bild</div>
                           )}
                           <div className="photo-info">
                             {uploadDate && <span className="photo-date">{uploadDate.toLocaleDateString('de-DE')}</span>}
@@ -1021,7 +1021,7 @@ const ReportsTab: React.FC = () => {
               {/* Dokumente */}
               {projectDocuments.length > 0 && (
                 <div className="media-section">
-                  <h4>📄 Dokumente ({projectDocuments.length})</h4>
+                  <h4>Dokumente ({projectDocuments.length})</h4>
                   <div className="document-list">
                     {projectDocuments.map((doc, idx) => {
                       const imgSrc = getImageSrc(doc)
@@ -1031,7 +1031,7 @@ const ReportsTab: React.FC = () => {
                           {imgSrc ? (
                             <img src={imgSrc} alt={doc.fileName || 'Dokument'} className="document-thumbnail" />
                           ) : (
-                            <div className="document-placeholder">📄</div>
+                            <div className="document-placeholder">Dok.</div>
                           )}
                           <div className="document-info">
                             <span className="document-name">{doc.fileName || 'Dokument'}</span>
