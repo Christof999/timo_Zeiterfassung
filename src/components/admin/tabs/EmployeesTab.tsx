@@ -66,7 +66,7 @@ const EmployeesTab: React.FC = () => {
       <div className="tab-header">
         <h3>Mitarbeiter</h3>
         <button onClick={handleAdd} className="btn primary-btn">
-          ➕ Mitarbeiter hinzufügen
+          Mitarbeiter hinzufügen
         </button>
       </div>
 
@@ -101,14 +101,14 @@ const EmployeesTab: React.FC = () => {
                       className="action-btn edit-btn"
                       aria-label="Bearbeiten"
                     >
-                      ✏️
+                      Bearbeiten
                     </button>
                     <button 
                       onClick={() => handleDelete(employee.id!)} 
                       className="action-btn delete-btn"
                       aria-label="Löschen"
                     >
-                      🗑️
+                      Löschen
                     </button>
                   </td>
                 </tr>

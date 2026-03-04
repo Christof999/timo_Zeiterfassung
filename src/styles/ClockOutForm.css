@@ -32,7 +32,6 @@
   height: 8px;
   background: var(--success-color);
   border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .project-details {
@@ -40,7 +39,7 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--light-color) 0%, var(--primary-light) 50%);
+  background: var(--light-color);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
 }
@@ -83,7 +82,7 @@
 .current-vehicle-bookings {
   margin-bottom: var(--spacing-xl);
   padding: var(--spacing-lg);
-  background: var(--accent-light);
+  background: var(--light-color);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
 }
@@ -111,7 +110,6 @@
 
 .booking-item:hover {
   box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
 .booking-item-details {
@@ -162,18 +160,18 @@
 
 /* Primary Action - Ausstempeln mit Dokumentation */
 .clock-out-buttons .btn.primary-btn {
-  background: var(--primary-gradient);
+  background: var(--primary-color);
   color: white;
   border: none;
   min-height: 56px;
   font-size: clamp(1rem, 2.5vw, 1.0625rem);
-  box-shadow: var(--shadow-colored);
+  box-shadow: var(--shadow-sm);
   order: -1;
 }
 
 .clock-out-buttons .btn.primary-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 30px -8px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .clock-out-buttons .btn.primary-btn:active:not(:disabled) {
@@ -195,16 +193,16 @@
 
 /* Info Buttons - Fahrzeug und Dokumentation */
 .clock-out-buttons .btn.info-btn {
-  background: var(--accent-light);
-  color: var(--accent-color);
-  border: 2px solid transparent;
+  background: var(--card-background);
+  color: var(--text-color);
+  border: 2px solid var(--border-color);
 }
 
 .clock-out-buttons .btn.info-btn:hover:not(:disabled) {
-  background: var(--accent-color);
-  color: white;
+  background: var(--light-color);
+  color: var(--text-color);
   transform: translateY(-1px);
-  box-shadow: var(--shadow);
+  border-color: var(--medium-gray);
 }
 
 /* Disabled State */
@@ -212,25 +210,6 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none !important;
-}
-
-/* Ripple Effect */
-.clock-out-buttons .btn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.4s, height 0.4s;
-}
-
-.clock-out-buttons .btn:active::after {
-  width: 300px;
-  height: 300px;
 }
 
 /* Tablet+ Layout - 2-Spalten für sekundäre Buttons */

@@ -132,13 +132,13 @@ const VacationRequests: React.FC = () => {
   const getStatusBadge = (status: LeaveRequest['status']) => {
     switch (status) {
       case 'pending':
-        return <span className="status-badge pending">⏳ Ausstehend</span>
+        return <span className="vacation-status-badge pending">Ausstehend</span>
       case 'approved':
-        return <span className="status-badge approved">✅ Genehmigt</span>
+        return <span className="vacation-status-badge approved">Genehmigt</span>
       case 'rejected':
-        return <span className="status-badge rejected">❌ Abgelehnt</span>
+        return <span className="vacation-status-badge rejected">Abgelehnt</span>
       default:
-        return <span className="status-badge">{status}</span>
+        return <span className="vacation-status-badge">{status}</span>
     }
   }
 
@@ -207,7 +207,7 @@ const VacationRequests: React.FC = () => {
     <div className="vacation-container">
       <header className="vacation-header">
         <button onClick={() => navigate('/time-tracking')} className="back-btn">
-          ← Zurück
+          Zurück
         </button>
         <h1>Urlaubsanträge</h1>
       </header>
@@ -240,7 +240,7 @@ const VacationRequests: React.FC = () => {
       {/* Neuen Antrag Button */}
       {!showForm && (
         <button onClick={() => setShowForm(true)} className="btn primary-btn new-request-btn">
-          ➕ Neuen Antrag stellen
+          Neuen Antrag stellen
         </button>
       )}
 
@@ -279,9 +279,9 @@ const VacationRequests: React.FC = () => {
             {workingDays > 0 && (
               <div className={`working-days-info ${workingDays > remaining ? 'warning' : 'info'}`}>
                 {workingDays > remaining ? (
-                  <>⚠️ {workingDays} Arbeitstage beantragt, aber nur {remaining} verfügbar</>
+                  <>{workingDays} Arbeitstage beantragt, aber nur {remaining} verfügbar</>
                 ) : (
-                  <>ℹ️ {workingDays} Arbeitstage</>
+                  <>{workingDays} Arbeitstage</>
                 )}
               </div>
             )}
@@ -361,7 +361,7 @@ const VacationRequests: React.FC = () => {
                     className="delete-btn"
                     title="Antrag löschen"
                   >
-                    🗑️
+                    Löschen
                   </button>
                 )}
               </div>

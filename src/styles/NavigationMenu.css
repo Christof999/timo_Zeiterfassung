@@ -28,7 +28,7 @@
   box-shadow: none;
 }
 
-.hamburger-line {
+.nav-hamburger-line {
   width: 20px;
   height: 2px;
   background-color: var(--primary-color);
@@ -125,7 +125,7 @@
 
   /* Menu Header */
   .nav-menu::before {
-    content: 'Menu';
+    content: 'Menü';
     display: block;
     font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
     font-weight: 600;

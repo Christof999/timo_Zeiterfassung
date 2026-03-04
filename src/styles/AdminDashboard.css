@@ -17,7 +17,7 @@
   position: relative;
 }
 
-.admin-dashboard-header .logo {
+.admin-dashboard-header .admin-logo {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -25,6 +25,29 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.admin-logo-image {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--card-background);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.admin-logo h1 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.admin-logo p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .admin-dashboard-header .admin-header-controls {
@@ -47,7 +70,7 @@
   padding: var(--spacing-sm);
 }
 
-.hamburger-line {
+.admin-hamburger-line {
   width: 24px;
   height: 2px;
   background: var(--text-color);
@@ -139,7 +162,7 @@
     align-items: stretch;
   }
 
-  .admin-dashboard-header .logo {
+  .admin-dashboard-header .admin-logo {
     position: static;
     transform: none;
     margin-bottom: var(--spacing-md);

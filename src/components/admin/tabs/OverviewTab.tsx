@@ -191,10 +191,10 @@ const OverviewTab: React.FC = () => {
                       <div className="activity-project">{activity.project.name}</div>
                       <div className="activity-details">
                         <div className="activity-date">
-                          📅 {dateString} um {timeString}
+                          {dateString} um {timeString}
                         </div>
                         <div className="activity-duration">
-                          ⏱️ Eingestempelt seit: {durationString}
+                          Eingestempelt seit: {durationString}
                         </div>
                       </div>
                     </div>
@@ -204,7 +204,7 @@ const OverviewTab: React.FC = () => {
                       disabled={isClockingOut}
                       title="Mitarbeiter ausstempeln"
                     >
-                      {isClockingOut ? '...' : '⏹️'}
+                      {isClockingOut ? '...' : 'Ausstempeln'}
                     </button>
                   </div>
                 </div>

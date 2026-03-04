@@ -81,7 +81,7 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>📝 Dokumentation hinzufügen</h3>
+          <h3>Dokumentation hinzufügen</h3>
           <button type="button" className="close-modal-btn" onClick={onClose}>
             ×
           </button>
@@ -115,7 +115,7 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
                 className="btn primary-btn"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Speichere...' : '💾 Dokumentation speichern'}
+                {isSubmitting ? 'Speichere...' : 'Dokumentation speichern'}
               </button>
               <button 
                 type="button" 

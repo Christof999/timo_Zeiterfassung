@@ -3,14 +3,12 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--light-color) 0%, #EEF2FF 100%);
+  background: var(--light-color);
 }
 
-/* Header - Modern und Clean */
+/* Header */
 .time-tracking-header {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-backdrop);
-  -webkit-backdrop-filter: var(--glass-backdrop);
+  background: var(--card-background);
   padding: var(--spacing-lg) var(--spacing-md);
   text-align: center;
   border-bottom: 1px solid var(--border-light);
@@ -22,14 +20,14 @@
   padding-top: max(var(--spacing-lg), env(safe-area-inset-top));
 }
 
-.logo {
+.time-tracking-logo {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
 }
 
-.logo-image {
+.time-tracking-logo-image {
   width: clamp(56px, 10vw, 72px);
   height: clamp(56px, 10vw, 72px);
   object-fit: contain;
@@ -40,11 +38,11 @@
   transition: transform var(--transition-base);
 }
 
-.logo-image:hover {
+.time-tracking-logo-image:hover {
   transform: scale(1.02);
 }
 
-.logo h1 {
+.time-tracking-logo h1 {
   font-size: clamp(1.125rem, 3.5vw, 1.375rem);
   margin: 0;
   font-weight: 700;
@@ -52,7 +50,7 @@
   letter-spacing: -0.02em;
 }
 
-.logo p {
+.time-tracking-logo p {
   font-size: clamp(0.75rem, 2vw, 0.8125rem);
   margin: 0;
   color: var(--text-muted);
@@ -99,7 +97,7 @@
   font-weight: 600;
 }
 
-/* Time Status Card - Prominenter Hero-Bereich */
+/* Time Status Card */
 .time-status-section {
   background: var(--card-background);
   border-radius: var(--radius-xl);
@@ -112,7 +110,6 @@
   animation: slideUp 0.5s var(--transition-base) 0.1s backwards;
 }
 
-/* Dekorativer Gradient-Streifen oben */
 .time-status-section::before {
   content: '';
   position: absolute;
@@ -123,17 +120,8 @@
   background: var(--primary-gradient);
 }
 
-/* Dezente Hintergrund-Dekoration */
 .time-status-section::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -30%;
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, var(--primary-light) 0%, transparent 70%);
-  opacity: 0.5;
-  pointer-events: none;
+  content: none;
 }
 
 .time-status-section h2 {
@@ -145,7 +133,6 @@
   letter-spacing: 0.05em;
 }
 
-/* Status Badges - Klar erkennbar */
 .status-clocked-in {
   display: inline-flex;
   align-items: center;
@@ -158,7 +145,6 @@
   border-radius: var(--radius-full);
   text-transform: none;
   letter-spacing: normal;
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .status-clocked-in::before {
@@ -167,7 +153,6 @@
   height: 10px;
   background: var(--success-color);
   border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .status-clocked-out {
@@ -192,7 +177,6 @@
   border-radius: 50%;
 }
 
-/* Clock Display - Große, prominente Anzeige */
 .clock {
   font-size: clamp(3rem, 14vw, 4.5rem);
   font-weight: 700;
@@ -206,10 +190,7 @@
 }
 
 .clock span {
-  background: linear-gradient(135deg, var(--text-color) 0%, var(--text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-color);
 }
 
 /* Responsive Design */
@@ -236,16 +217,16 @@
     padding: var(--spacing-sm) var(--spacing-md);
   }
 
-  .logo-image {
+  .time-tracking-logo-image {
     width: 44px;
     height: 44px;
   }
 
-  .logo h1 {
+  .time-tracking-logo h1 {
     font-size: 1rem;
   }
 
-  .logo p {
+  .time-tracking-logo p {
     display: none;
   }
 
@@ -259,27 +240,8 @@
   }
 }
 
-/* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --light-color: #0F172A;
-    --card-background: #1E293B;
-    --text-color: #F1F5F9;
-    --text-secondary: #94A3B8;
-    --text-muted: #64748B;
-    --border-color: #334155;
-    --border-light: #1E293B;
-    --background-color: #0F172A;
-    --glass-bg: rgba(30, 41, 59, 0.85);
-    --glass-border: rgba(51, 65, 85, 0.5);
-    --primary-light: rgba(16, 185, 129, 0.15);
-    --success-light: rgba(16, 185, 129, 0.15);
-    --danger-light: rgba(239, 68, 68, 0.15);
-    --warning-light: rgba(245, 158, 11, 0.15);
-    --accent-light: rgba(59, 130, 246, 0.15);
-  }
-
   .time-tracking-container {
-    background: linear-gradient(180deg, var(--light-color) 0%, #1E1B4B 100%);
+    background: var(--light-color);
   }
 }

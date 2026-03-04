@@ -110,20 +110,20 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           <p className="project-name">
             <strong>{project?.name || 'Unbekanntes Projekt'}</strong>
           </p>
-          <p className="project-client">📋 Kunde: {project?.client || '-'}</p>
+          <p className="project-client">Kunde: {project?.client || '-'}</p>
           <p className="project-location">
-            📍 Adresse: {project?.address || project?.location || '-'}
+            Adresse: {project?.address || project?.location || '-'}
           </p>
         </div>
       </div>
 
       <p className="clock-in-info">
-        ⏱️ Eingestempelt seit: {formatTime(clockInTime)}
+        Eingestempelt seit: {formatTime(clockInTime)}
       </p>
 
       {vehicleBookings.length > 0 && (
         <div className="current-vehicle-bookings">
-          <h4>🚗 Gebuchte Fahrzeuge heute:</h4>
+          <h4>Gebuchte Fahrzeuge heute:</h4>
           <div className="vehicle-bookings-list">
             {vehicleBookings.map((booking) => (
               <div key={booking.id} className="booking-item">
@@ -133,7 +133,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
                   </div>
                   {booking.hoursUsed && (
                     <div className="booking-item-hours">
-                      ⏱️ {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
+                      {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
                     </div>
                   )}
                   {booking.comment && (
@@ -154,13 +154,13 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           onClick={() => setShowVehicleModal(true)} 
           className="btn info-btn"
         >
-          🚗 Fahrzeugzeit buchen
+          Fahrzeugzeit buchen
         </button>
         <button 
           onClick={() => setShowLiveDocModal(true)} 
           className="btn info-btn"
         >
-          📝 Dokumentation hinzufügen
+          Dokumentation hinzufügen
         </button>
         {canUseDocumentation && (
           <button 
