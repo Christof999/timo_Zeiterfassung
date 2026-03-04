@@ -208,7 +208,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 
                 const fileUrl = photo.filePath || (photo as any).url || ''
 
-                const key = `${photo.id || photo.fileName || fileUrl}-${photo.employeeId || ''}-${Math.random()}`
+                const key = photo.id || `${photo.fileName || fileUrl}-${photo.employeeId || ''}`
 
                 // Verwende entweder base64 oder die URL (Firebase Storage)
                 let imgSrc = ''
@@ -271,7 +271,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   }
                   
                   const fileUrl = doc.filePath || (doc as any).url || ''
-                  const key = `doc-${doc.id || doc.fileName || index}-${index}-${Math.random()}`
+                  const key = doc.id || `doc-${doc.fileName || fileUrl}-${index}`
                   
                   // Erstelle die Bild-URL
                   let imgSrc = ''
