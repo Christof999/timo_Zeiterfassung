@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
 import type { TimeEntry, Project } from '../../types'
 import { toast } from '../ToastContainer'
+import { formatDateForInputLocal } from '../../utils/dateUtils'
 import '../../styles/Modal.css'
 
 interface TimeEntryEditModalProps {
@@ -39,7 +40,7 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
       clockInTime: clockIn ? formatTimeForInput(clockIn) : '',
       clockOutDate: clockOut ? formatDateForInput(clockOut) : '',
       clockOutTime: clockOut ? formatTimeForInput(clockOut) : '',
-      pauseMinutes: entry.pauseTotalTime || 0,
+      pauseMinutes: Math.round((entry.pauseTotalTime || 0) / (1000 * 60)),
       notes: entry.notes || ''
     })
   }, [entry])
@@ -54,7 +55,7 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
   }
 
   const formatDateForInput = (date: Date): string => {
-    return date.toISOString().split('T')[0]
+    return formatDateForInputLocal(date)
   }
 
   const formatTimeForInput = (date: Date): string => {
@@ -95,7 +96,7 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
         projectId: formData.projectId,
         clockInTime: clockInDateTime,
         clockOutTime: clockOutDateTime,
-        pauseTotalTime: formData.pauseMinutes,
+        pauseTotalTime: formData.pauseMinutes * 60 * 1000,
         notes: formData.notes
       }
 
