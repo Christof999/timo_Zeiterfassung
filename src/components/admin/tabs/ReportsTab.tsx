@@ -68,12 +68,20 @@ const ReportsTab: React.FC = () => {
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
   const printResetTimeoutRef = useRef<number | null>(null)
   const isPrintInProgressRef = useRef(false)
+  const activePrintFrameRef = useRef<HTMLIFrameElement | null>(null)
 
   const clearPrintResetTimeout = () => {
     if (printResetTimeoutRef.current !== null) {
       window.clearTimeout(printResetTimeoutRef.current)
       printResetTimeoutRef.current = null
     }
+  }
+
+  const removeActivePrintFrame = () => {
+    if (activePrintFrameRef.current?.parentNode) {
+      activePrintFrameRef.current.parentNode.removeChild(activePrintFrameRef.current)
+    }
+    activePrintFrameRef.current = null
   }
 
   const resetPrintPreparation = () => {
@@ -92,22 +100,9 @@ const ReportsTab: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    const handleBeforePrint = () => {
-      isPrintInProgressRef.current = true
-      setIsPreparingPrint(true)
-    }
-
-    const handleAfterPrint = () => {
-      resetPrintPreparation()
-    }
-
-    window.addEventListener('beforeprint', handleBeforePrint)
-    window.addEventListener('afterprint', handleAfterPrint)
-
     return () => {
-      window.removeEventListener('beforeprint', handleBeforePrint)
-      window.removeEventListener('afterprint', handleAfterPrint)
       clearPrintResetTimeout()
+      removeActivePrintFrame()
     }
   }, [])
 
@@ -476,26 +471,120 @@ const ReportsTab: React.FC = () => {
     return ''
   }
 
+  const waitForPrintFrameReady = async (frame: HTMLIFrameElement): Promise<void> => {
+    const frameDoc = frame.contentDocument
+    if (!frameDoc) {
+      return
+    }
+
+    const imagePromises = Array.from(frameDoc.images).map((img) => {
+      if (img.complete) {
+        return Promise.resolve()
+      }
+
+      return new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true })
+        img.addEventListener('error', () => resolve(), { once: true })
+      })
+    })
+
+    let fontsReadyPromise: Promise<void> = Promise.resolve()
+    const fontsApi = (frameDoc as any).fonts
+    if (fontsApi?.ready) {
+      fontsReadyPromise = fontsApi.ready.then(() => undefined).catch(() => undefined)
+    }
+
+    await Promise.all([fontsReadyPromise, ...imagePromises])
+  }
+
   const handlePrint = () => {
     if (isPrintInProgressRef.current) {
       return
     }
 
+    const reportContent = document.querySelector('.reports-tab .report-content') as HTMLElement | null
+    if (!reportContent) {
+      toast.error('Kein Bericht zum Drucken vorhanden')
+      return
+    }
+
+    const styleMarkup = Array.from(
+      document.querySelectorAll('link[rel="stylesheet"], style')
+    )
+      .map((node) => node.outerHTML)
+      .join('\n')
+
+    const printHtml = `<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bericht drucken</title>
+    ${styleMarkup}
+  </head>
+  <body>
+    <div class="reports-tab">
+      ${reportContent.outerHTML}
+    </div>
+  </body>
+</html>`
+
     isPrintInProgressRef.current = true
     setIsPreparingPrint(true)
     clearPrintResetTimeout()
+    removeActivePrintFrame()
+
+    const finishPrintProcess = () => {
+      removeActivePrintFrame()
+      resetPrintPreparation()
+    }
 
     // Fallback, falls ein Browser kein afterprint-Event liefert.
     printResetTimeoutRef.current = window.setTimeout(() => {
-      resetPrintPreparation()
-    }, 30000)
+      finishPrintProcess()
+    }, 60000)
 
     try {
-      // Direkt auf Benutzer-Klick ausführen, damit Browser den Dialog stabil öffnet.
-      window.print()
+      const printFrame = document.createElement('iframe')
+      printFrame.setAttribute('aria-hidden', 'true')
+      printFrame.style.position = 'fixed'
+      printFrame.style.right = '0'
+      printFrame.style.bottom = '0'
+      printFrame.style.width = '0'
+      printFrame.style.height = '0'
+      printFrame.style.border = '0'
+      printFrame.style.visibility = 'hidden'
+
+      activePrintFrameRef.current = printFrame
+
+      printFrame.addEventListener('load', async () => {
+        const frameWindow = printFrame.contentWindow
+        if (!frameWindow) {
+          finishPrintProcess()
+          return
+        }
+
+        const handleAfterPrint = () => {
+          finishPrintProcess()
+        }
+        frameWindow.addEventListener('afterprint', handleAfterPrint, { once: true })
+
+        try {
+          await waitForPrintFrameReady(printFrame)
+          frameWindow.focus()
+          frameWindow.print()
+        } catch (frameError) {
+          console.error('Fehler beim Vorbereiten der Druckansicht:', frameError)
+          finishPrintProcess()
+          toast.error('Druckansicht konnte nicht vorbereitet werden')
+        }
+      }, { once: true })
+
+      document.body.appendChild(printFrame)
+      printFrame.srcdoc = printHtml
     } catch (error) {
       console.error('Fehler beim Öffnen der Druckvorschau:', error)
-      resetPrintPreparation()
+      finishPrintProcess()
       toast.error('Druckvorschau konnte nicht geöffnet werden')
     }
   }
