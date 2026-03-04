@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
 import type { Project, FileUpload, TimeEntry } from '../../types'
 import { Timestamp } from 'firebase/firestore'
@@ -20,10 +20,71 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; fileName: string; notes?: string } | null>(null)
+  const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
+  const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
+  const modalContentRef = useRef<HTMLDivElement | null>(null)
+  const detailInfoRef = useRef<HTMLDivElement | null>(null)
+
+  const setDetailHeightFromPointer = (clientY: number) => {
+    const detailsRect = detailInfoRef.current?.getBoundingClientRect()
+    const modalRect = modalContentRef.current?.getBoundingClientRect()
+    if (!detailsRect || !modalRect || modalRect.height <= 0) return
+
+    const minHeight = 120
+    const maxHeight = Math.max(minHeight, Math.floor(modalRect.height * 0.62))
+    const nextHeight = Math.round(clientY - detailsRect.top)
+    const clampedHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
+    setDetailInfoHeight(clampedHeight)
+  }
+
+  const startDetailResize = (clientY: number) => {
+    setDetailHeightFromPointer(clientY)
+    setIsDetailInfoResizing(true)
+  }
 
   useEffect(() => {
     loadProjectData()
   }, [project])
+
+  useEffect(() => {
+    setDetailInfoHeight(null)
+    setIsDetailInfoResizing(false)
+  }, [project.id])
+
+  useEffect(() => {
+    if (!isDetailInfoResizing) return
+
+    const handleMouseMove = (event: MouseEvent) => {
+      event.preventDefault()
+      setDetailHeightFromPointer(event.clientY)
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!event.touches.length) return
+      event.preventDefault()
+      setDetailHeightFromPointer(event.touches[0].clientY)
+    }
+
+    const stopResizing = () => {
+      setIsDetailInfoResizing(false)
+    }
+
+    document.body.style.cursor = 'row-resize'
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', stopResizing)
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', stopResizing)
+    window.addEventListener('touchcancel', stopResizing)
+
+    return () => {
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopResizing)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', stopResizing)
+      window.removeEventListener('touchcancel', stopResizing)
+    }
+  }, [isDetailInfoResizing])
 
   const loadProjectData = async () => {
     setIsLoading(true)
@@ -64,8 +125,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         }
       }
       
+      const sortedPhotos = [...allPhotos].sort((a, b) => getTimeValue(b.uploadTime) - getTimeValue(a.uploadTime))
+      const sortedDocuments = [...allDocs].sort((a, b) => getTimeValue(b.uploadTime) - getTimeValue(a.uploadTime))
+      const sortedTimeEntries = [...timeEntries].sort((a, b) => getTimeValue(b.clockInTime) - getTimeValue(a.clockInTime))
+
       // Mitarbeiternamen zu Zeiteinträgen hinzufügen
-      const entriesWithNames: TimeEntryWithEmployee[] = timeEntries.map(entry => {
+      const entriesWithNames: TimeEntryWithEmployee[] = sortedTimeEntries.map(entry => {
         const employee = employees.find(emp => emp.id === entry.employeeId)
         return {
           ...entry,
@@ -75,8 +140,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         }
       })
       
-      setPhotos(allPhotos)
-      setDocuments(allDocs)
+      setPhotos(sortedPhotos)
+      setDocuments(sortedDocuments)
       setTimeEntries(entriesWithNames)
     } catch (error) {
       console.error('Fehler beim Laden der Projektdaten:', error)
@@ -113,6 +178,23 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     return null
   }
 
+  const getTimeValue = (value: any): number => {
+    const date = convertToDate(value)
+    return date ? date.getTime() : 0
+  }
+
+  const formatUploadDay = (value: any): string => {
+    const date = convertToDate(value)
+    if (!date) return 'Uploaddatum unbekannt'
+
+    return date.toLocaleDateString('de-DE', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
+
   // Hilfsfunktion zur Berechnung der Arbeitsstunden
   const calculateHours = (entry: TimeEntry): string => {
     if (!entry.clockOutTime || !entry.clockInTime) {
@@ -140,13 +222,17 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div ref={modalContentRef} className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{project.name}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         
-        <div className="project-detail-info">
+        <div
+          ref={detailInfoRef}
+          className="project-detail-info"
+          style={detailInfoHeight !== null ? { height: `${detailInfoHeight}px`, maxHeight: 'none' } : undefined}
+        >
           <p><strong>Kunde:</strong> {project.client || '-'}</p>
           <p><strong>Status:</strong> {project.status || 'Aktiv'}</p>
           {(project.address || project.location) && (
@@ -163,6 +249,24 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             </div>
           )}
         </div>
+
+        <div
+          className={`project-detail-resizer ${isDetailInfoResizing ? 'is-resizing' : ''}`}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Höhe des oberen Bereichs anpassen"
+          title="Ziehen, um den unteren Medienbereich zu vergrößern"
+          onDoubleClick={() => setDetailInfoHeight(null)}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            startDetailResize(event.clientY)
+          }}
+          onTouchStart={(event) => {
+            if (!event.touches.length) return
+            event.preventDefault()
+            startDetailResize(event.touches[0].clientY)
+          }}
+        />
 
         <div className="project-tabs">
           <button 
@@ -197,6 +301,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 // Prüfe verschiedene mögliche Formate für base64Data oder filePath/URL
                 const base64Data = photo.base64Data || (photo as any).base64 || (photo as any).base64DataUrl || (photo as any).base64String || ''
                 let mimeType = photo.mimeType || 'image/jpeg'
+                const uploadDay = formatUploadDay(photo.uploadTime)
                 
                 // Falls mimeType ein data URL Präfix ist, extrahiere nur den MIME-Type
                 if (mimeType.startsWith('data:')) {
@@ -245,6 +350,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       </div>
                     )}
                     <p className="photo-filename">{photo.fileName}</p>
+                    <p className="photo-upload-date">Upload: {uploadDay}</p>
                     {photo.imageComment && (
                       <p className="photo-comment">{photo.imageComment}</p>
                     )}
@@ -261,6 +367,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 documents.map((doc, index) => {
                   const base64Data = doc.base64Data || (doc as any).base64 || (doc as any).base64String || ''
                   let mimeType = doc.mimeType || 'image/jpeg'
+                  const uploadDay = formatUploadDay(doc.uploadTime)
                   
                   // Falls mimeType ein data URL Präfix ist, extrahiere nur den MIME-Type
                   if (mimeType.startsWith('data:')) {
@@ -312,6 +419,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                         </div>
                       )}
                       <p className="photo-filename">{doc.fileName}</p>
+                      <p className="photo-upload-date">Upload: {uploadDay}</p>
                       {doc.notes && <p className="document-notes">{doc.notes}</p>}
                       {imgSrc && (
                         <a 

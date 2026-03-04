@@ -64,7 +64,8 @@
 .modal-content.project-detail-modal .project-detail-info {
   flex-shrink: 0;
   overflow-y: auto;
-  max-height: 40vh;
+  max-height: 32vh;
+  min-height: 120px;
 }
 
 .modal-content.project-detail-modal .project-tabs {
