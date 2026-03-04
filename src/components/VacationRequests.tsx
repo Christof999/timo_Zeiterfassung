@@ -154,11 +154,17 @@ const VacationRequests: React.FC = () => {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Urlaubskonto berechnen: genehmigte Urlaubstage zählen immer im aktuellen Jahr
+  // Urlaubskonto berechnen:
+  // - "Genutzt" (Basis) kommt aus dem hinterlegten Urlaubskonto
+  // - zusätzlich werden bereits genehmigte, zukünftige Urlaubstage im aktuellen Jahr reserviert
   const currentYear = new Date().getFullYear()
-  const totalVacationDays = currentUser?.vacationDays?.total || 30
+  const vacationAccount = currentUser?.vacationDays || { total: 30, used: 0, year: currentYear }
+  const totalVacationDays = Number(vacationAccount.total || 30)
+  const takenVacationDays = Number(vacationAccount.used || 0)
+  const todayDate = new Date()
+  todayDate.setHours(0, 0, 0, 0)
 
-  const approvedVacationDays = leaveRequests.reduce((sum, request) => {
+  const approvedPlannedVacationDays = leaveRequests.reduce((sum, request) => {
     if (request.type !== 'vacation' || request.status !== 'approved') {
       return sum
     }
@@ -173,16 +179,18 @@ const VacationRequests: React.FC = () => {
     const yearEnd = new Date(currentYear, 11, 31)
 
     const rangeStart = startDate > yearStart ? startDate : yearStart
+    const effectiveStart = rangeStart > todayDate ? rangeStart : todayDate
     const rangeEnd = endDate < yearEnd ? endDate : yearEnd
 
-    if (rangeEnd < rangeStart) {
+    if (rangeEnd < effectiveStart) {
       return sum
     }
 
-    return sum + DataService.calculateWorkingDays(rangeStart, rangeEnd)
+    return sum + DataService.calculateWorkingDays(effectiveStart, rangeEnd)
   }, 0)
 
-  const remaining = Math.max(0, totalVacationDays - approvedVacationDays)
+  const usedForAccount = takenVacationDays + approvedPlannedVacationDays
+  const remaining = Math.max(0, totalVacationDays - usedForAccount)
 
   // Min-Datum für Datumseingaben (heute)
   const today = getTodayLocalDateString()
@@ -213,7 +221,7 @@ const VacationRequests: React.FC = () => {
             <span className="stat-label">Verfügbar</span>
           </div>
           <div className="stat">
-            <span className="stat-value">{approvedVacationDays}</span>
+            <span className="stat-value">{usedForAccount}</span>
             <span className="stat-label">Genutzt</span>
           </div>
           <div className="stat">
@@ -224,7 +232,7 @@ const VacationRequests: React.FC = () => {
         <div className="vacation-progress">
           <div 
             className="vacation-progress-bar" 
-            style={{ width: `${totalVacationDays > 0 ? Math.min(100, (approvedVacationDays / totalVacationDays) * 100) : 0}%` }}
+            style={{ width: `${totalVacationDays > 0 ? Math.min(100, (usedForAccount / totalVacationDays) * 100) : 0}%` }}
           />
         </div>
       </div>

@@ -952,38 +952,12 @@ class DataServiceClass {
           return
         }
 
-        let employeeRef: any = null
-        let updatedVacationDays: Employee['vacationDays'] | null = null
-        if (leaveRequest.type === 'vacation' && leaveRequest.employeeId) {
-          employeeRef = doc(db, 'employees', leaveRequest.employeeId)
-          const employeeDoc = await transaction.get(employeeRef)
-          if (employeeDoc.exists()) {
-            const employee = employeeDoc.data() as Employee
-            const currentVacation = employee.vacationDays || {
-              total: 30,
-              used: 0,
-              year: new Date().getFullYear()
-            }
-            const usedDays = Number(leaveRequest.workingDays || 0)
-            updatedVacationDays = {
-              ...currentVacation,
-              used: (currentVacation.used || 0) + Math.max(0, usedDays)
-            }
-          }
-        }
-
         transaction.update(leaveRequestRef, {
           status: 'approved',
           approvedBy,
           approvedAt: new Date(),
           updatedAt: new Date()
         })
-
-        if (employeeRef && updatedVacationDays) {
-          transaction.update(employeeRef, {
-            vacationDays: updatedVacationDays
-          })
-        }
       })
     } catch (error) {
       console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
