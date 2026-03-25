@@ -1,14 +1,32 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry } from '../types'
+import type { TimeEntry, Vehicle } from '../types'
 import PhotoUpload from './PhotoUpload'
+import { VehicleBookingFormFields } from './VehicleBookingFormFields'
 import { toast } from './ToastContainer'
+import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/Modal.css'
 
 interface ExtendedClockOutModalProps {
   timeEntry: TimeEntry
   onClose: () => void
   onClockOutSuccess: () => void
+}
+
+type VehicleBookingRow = {
+  id: string
+  vehicleId: string
+  hours: number
+  comment: string
+}
+
+function createVehicleBookingRow(): VehicleBookingRow {
+  return {
+    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+    vehicleId: '',
+    hours: 1,
+    comment: ''
+  }
 }
 
 const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
@@ -20,12 +38,77 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   const [sitePhotos, setSitePhotos] = useState<File[]>([])
   const [documentPhotos, setDocumentPhotos] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [vehicleRows, setVehicleRows] = useState<VehicleBookingRow[]>(() => [createVehicleBookingRow()])
+
+  useEffect(() => {
+    const loadVehicles = async () => {
+      try {
+        const allVehicles = await DataService.getAllVehicles()
+        setVehicles(allVehicles.filter(v => v.isActive !== false))
+      } catch (error) {
+        console.error('Fehler beim Laden der Fahrzeuge:', error)
+      }
+    }
+    loadVehicles()
+  }, [])
+
+  const updateVehicleRow = (id: string, patch: Partial<Omit<VehicleBookingRow, 'id'>>) => {
+    setVehicleRows((rows) =>
+      rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    )
+  }
+
+  const addVehicleRow = () => {
+    setVehicleRows((rows) => [...rows, createVehicleBookingRow()])
+  }
+
+  const removeVehicleRow = (id: string) => {
+    setVehicleRows((rows) => {
+      const next = rows.filter((r) => r.id !== id)
+      return next.length > 0 ? next : [createVehicleBookingRow()]
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     try {
+      const bookingsToSave = vehicleRows.filter((r) => r.vehicleId.trim() !== '')
+
+      if (bookingsToSave.length > 0) {
+        for (const row of bookingsToSave) {
+          if (!Number.isFinite(row.hours) || row.hours < 0.25 || row.hours > 24) {
+            toast.error('Bitte gültige Betriebsstunden (0,25–24) für alle gewählten Fahrzeuge eingeben.')
+            setIsSubmitting(false)
+            return
+          }
+        }
+        const currentUser = await DataService.getCurrentUser()
+        if (!currentUser) {
+          toast.error('Benutzer nicht gefunden.')
+          setIsSubmitting(false)
+          return
+        }
+        const today = getTodayLocalDateString()
+        for (const row of bookingsToSave) {
+          const selectedVehicle = vehicles.find(
+            (v) => String(v.id) === String(row.vehicleId)
+          )
+          await DataService.addVehicleUsage({
+            vehicleId: row.vehicleId,
+            vehicleName: selectedVehicle?.name,
+            employeeId: currentUser.id,
+            projectId: timeEntry.projectId,
+            date: today,
+            hours: row.hours,
+            hoursUsed: row.hours,
+            comment: row.comment.trim() || undefined
+          })
+        }
+      }
+
       const location = await getCurrentLocation()
 
       // Upload site photos
@@ -145,6 +228,58 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               label="Lieferscheine oder Rechnungen:"
               onPhotosChange={setDocumentPhotos}
             />
+
+            <div className="form-group">
+              <h4 className="extended-doc-vehicle-heading">Fahrzeugzeit buchen (optional)</h4>
+              <p className="form-hint" style={{ marginTop: 0 }}>
+                Gleiche Auswahl wie bei „Fahrzeugzeit buchen“ auf der Zeiterfassungskarte. Mehrere Buchungen sind möglich.
+              </p>
+              {vehicleRows.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="extended-vehicle-booking-row"
+                  style={index > 0 ? { marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color, #e0e0e0)' } : undefined}
+                >
+                  {vehicleRows.length > 1 && (
+                    <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                      <strong>Buchung {index + 1}</strong>
+                    </div>
+                  )}
+                  <VehicleBookingFormFields
+                    vehicles={vehicles}
+                    selectedVehicleId={row.vehicleId}
+                    hours={row.hours}
+                    comment={row.comment}
+                    onVehicleChange={(vehicleId) => updateVehicleRow(row.id, { vehicleId })}
+                    onHoursChange={(hours) => updateVehicleRow(row.id, { hours })}
+                    onCommentChange={(comment) => updateVehicleRow(row.id, { comment })}
+                    idPrefix={`extended-vehicle-${row.id}`}
+                  />
+                  {vehicleRows.length > 1 && (
+                    <div className="form-group">
+                      <button
+                        type="button"
+                        className="btn secondary-btn"
+                        onClick={() => removeVehicleRow(row.id)}
+                        disabled={isSubmitting}
+                      >
+                        Diese Buchung entfernen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="form-group">
+                <button
+                  type="button"
+                  className="btn info-btn"
+                  onClick={addVehicleRow}
+                  disabled={isSubmitting}
+                >
+                  Weitere Fahrzeugbuchung hinzufügen
+                </button>
+              </div>
+            </div>
 
             <div className="form-group text-center">
               <button 
