@@ -3,6 +3,7 @@ import { DataService } from '../services/dataService'
 import type { TimeEntry, Vehicle } from '../types'
 import { toast } from './ToastContainer'
 import { getTodayLocalDateString } from '../utils/dateUtils'
+import { VehicleBookingFormFields } from './VehicleBookingFormFields'
 import '../styles/Modal.css'
 
 interface VehicleBookingModalProps {
@@ -73,48 +74,16 @@ const VehicleBookingModal: React.FC<VehicleBookingModalProps> = ({ timeEntry, on
         </div>
         <div className="modal-body">
           <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="booking-vehicle-select">Fahrzeug auswählen:</label>
-              <select
-                id="booking-vehicle-select"
-                value={selectedVehicleId}
-                onChange={(e) => setSelectedVehicleId(e.target.value)}
-                required
-              >
-                <option value="" disabled>Bitte Fahrzeug wählen</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} {vehicle.type ? `(${vehicle.type})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="booking-vehicle-hours">Betriebsstunden:</label>
-              <input
-                type="number"
-                id="booking-vehicle-hours"
-                min="0.25"
-                max="24"
-                step="0.25"
-                value={hours}
-                onChange={(e) => setHours(parseFloat(e.target.value))}
-                required
-              />
-              <small>Bitte geben Sie die Betriebszeit in Stunden an (z.B. 1,5 für 1,5 Stunden)</small>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="vehicle-booking-comment">Kommentar (optional):</label>
-              <textarea
-                id="vehicle-booking-comment"
-                rows={2}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Optionaler Kommentar zur Fahrzeugnutzung"
-              />
-            </div>
+            <VehicleBookingFormFields
+              vehicles={vehicles}
+              selectedVehicleId={selectedVehicleId}
+              hours={hours}
+              comment={comment}
+              onVehicleChange={setSelectedVehicleId}
+              onHoursChange={setHours}
+              onCommentChange={setComment}
+              idPrefix="booking-vehicle"
+            />
 
             <div className="form-group text-center">
               <button type="submit" className="btn primary-btn" disabled={isLoading}>
@@ -132,4 +101,3 @@ const VehicleBookingModal: React.FC<VehicleBookingModalProps> = ({ timeEntry, on
 }
 
 export default VehicleBookingModal
-
