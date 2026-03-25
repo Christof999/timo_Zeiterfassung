@@ -223,6 +223,17 @@
   text-align: center;
 }
 
+.manual-time-entry-hint {
+  margin: 0 0 var(--spacing-md);
+  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.manual-time-entry-body textarea#manual-entry-notes {
+  min-height: 72px;
+}
+
 .modal-body .btn {
   width: 100%;
   margin-bottom: var(--spacing-sm);
