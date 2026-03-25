@@ -633,10 +633,16 @@ class DataServiceClass {
         }
       }
 
-      const docRef = await addDoc(vehicleUsagesRef, {
+      const rawPayload = {
         ...normalizedUsageData,
         createdAt: serverTimestamp()
-      })
+      }
+      // Firestore lehnt undefined in Feldern ab (z. B. optionales comment)
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      const docRef = await addDoc(vehicleUsagesRef, payload)
       const usageDoc = await getDoc(docRef)
       
       return { id: docRef.id, ...usageDoc.data() } as VehicleUsage
