@@ -6,9 +6,11 @@ import '../styles/RecentActivities.css'
 
 interface RecentActivitiesProps {
   employeeId: string
+  /** Bei Änderung wird die Liste neu geladen (z. B. nach Nachtrag) */
+  refreshKey?: number
 }
 
-const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
+const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refreshKey = 0 }) => {
   const [activities, setActivities] = useState<TimeEntry[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -49,7 +51,7 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
     }
 
     loadActivities()
-  }, [employeeId])
+  }, [employeeId, refreshKey])
 
   const getProjectName = (projectId: string): string => {
     const project = projects.find(p => p.id === projectId)

@@ -4,6 +4,7 @@ import {
   getDoc, 
   getDocs, 
   addDoc, 
+  setDoc,
   updateDoc,
   deleteDoc, 
   query, 
@@ -259,6 +260,73 @@ class DataServiceClass {
       return { id: timeEntryRef.id, ...newEntry.data() } as TimeEntry
     } catch (error) {
       console.error('Fehler beim Erstellen des Zeiteintrags:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Abgeschlossenen Zeiteintrag nachtragen (Start + Ende).
+   * Ändert nicht den Einstempel-Status des Mitarbeiters (kein activeTimeEntryId).
+   */
+  async addManualCompletedTimeEntry(params: {
+    targetEmployeeId: string
+    projectId: string
+    clockInTime: Date
+    clockOutTime: Date
+    pauseTotalTimeMs?: number
+    notes?: string
+    addedByEmployeeId: string
+    addedByDisplayName: string
+  }): Promise<TimeEntry> {
+    await this.authReadyPromise
+    try {
+      if (!params.targetEmployeeId || !params.projectId) {
+        throw new Error('Mitarbeiter und Projekt sind erforderlich')
+      }
+      if (params.clockOutTime.getTime() <= params.clockInTime.getTime()) {
+        throw new Error('Endzeit muss nach der Startzeit liegen')
+      }
+      const now = Date.now()
+      if (params.clockInTime.getTime() > now) {
+        throw new Error('Startzeit darf nicht in der Zukunft liegen')
+      }
+      if (params.clockOutTime.getTime() > now) {
+        throw new Error('Endzeit darf nicht in der Zukunft liegen')
+      }
+
+      const timeEntriesRef = collection(db, 'timeEntries')
+      const timeEntryRef = doc(timeEntriesRef)
+      const clockInTs = Timestamp.fromDate(params.clockInTime)
+      const clockOutTs = Timestamp.fromDate(params.clockOutTime)
+      const pauseTotalTime = params.pauseTotalTimeMs ?? 0
+
+      const noteBase = params.notes?.trim() ?? ''
+      const auditNote = `Nachtrag durch ${params.addedByDisplayName}`
+      const notes = noteBase ? `${noteBase} | ${auditNote}` : auditNote
+
+      const rawPayload: Record<string, unknown> = {
+        entryId: timeEntryRef.id,
+        employeeId: params.targetEmployeeId,
+        projectId: params.projectId,
+        clockInTime: clockInTs,
+        clockOutTime: clockOutTs,
+        pauseTotalTime,
+        notes,
+        manualTimeEntry: true,
+        manualTimeEntryAddedByEmployeeId: params.addedByEmployeeId,
+        manualTimeEntryAddedByDisplayName: params.addedByDisplayName,
+        manualTimeEntryCreatedAt: serverTimestamp()
+      }
+
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      await setDoc(timeEntryRef, payload)
+      const snap = await getDoc(timeEntryRef)
+      return { id: timeEntryRef.id, ...snap.data() } as TimeEntry
+    } catch (error) {
+      console.error('Fehler beim Nachtragen des Zeiteintrags:', error)
       throw error
     }
   }

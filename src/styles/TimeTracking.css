@@ -245,3 +245,52 @@
     background: var(--light-color);
   }
 }
+
+/* Stempelzeit nachtragen (befugte Mitarbeiter) */
+.manual-time-entry-banner {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.manual-time-entry-banner-text {
+  margin: 0;
+  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.manual-time-entry-open-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--btn-padding-y, 12px) var(--btn-padding-x, var(--spacing-md));
+  min-height: var(--btn-height, 44px);
+  border-radius: var(--radius-md);
+  font-size: var(--btn-font-size, 0.9375rem);
+  font-weight: var(--font-weight-semibold, 600);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background: var(--card-background);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.manual-time-entry-open-btn:hover:not(:disabled) {
+  background: var(--light-color);
+  border-color: var(--medium-gray, var(--border-color));
+  transform: translateY(-1px);
+}
+
+.manual-time-entry-open-btn:active:not(:disabled) {
+  background: var(--border-light);
+  transform: translateY(0);
+}
