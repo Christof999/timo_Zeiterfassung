@@ -563,6 +563,11 @@
   color: var(--text-secondary);
 }
 
+.vehicle-booking-card .vehicle-booking-comment {
+  margin-top: var(--spacing-sm);
+  margin-bottom: 0;
+}
+
 /* Dokumenten-Galerie (wie Foto-Galerie) */
 .documents-gallery {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
