@@ -27,7 +27,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
   const [vehicleUsages, setVehicleUsages] = useState<VehicleUsageWithEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [lightboxImage, setLightboxImage] = useState<{ src: string; fileName: string; notes?: string } | null>(null)
+  const [lightboxImage, setLightboxImage] = useState<{
+    src: string
+    fileName: string
+    notes?: string
+    imageComment?: string
+  } | null>(null)
   const [timeEntryDetail, setTimeEntryDetail] = useState<TimeEntryWithEmployee | null>(null)
   const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
   const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
@@ -221,6 +226,9 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     const date = convertToDate(value)
     return date ? date.getTime() : 0
   }
+
+  const fileCaption = (file: FileUpload): string =>
+    file.imageComment?.trim() || file.notes?.trim() || ''
 
   const formatUploadDay = (value: any): string => {
     const date = convertToDate(value)
@@ -531,13 +539,22 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   imgSrc = fileUrl
                 }
 
+                const caption = fileCaption(photo)
+
                 return (
                   <div key={key} className="photo-item">
                     {imgSrc ? (
                       <img 
                         src={imgSrc} 
                         alt={photo.fileName}
-                        onClick={() => setLightboxImage({ src: imgSrc, fileName: photo.fileName })}
+                        onClick={() =>
+                          setLightboxImage({
+                            src: imgSrc,
+                            fileName: photo.fileName,
+                            notes: photo.notes,
+                            imageComment: photo.imageComment
+                          })
+                        }
                         style={{ cursor: 'pointer' }}
                         onError={(e) => {
                           console.error('Fehler beim Laden des Bildes:', photo.fileName, {
@@ -558,9 +575,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                     )}
                     <p className="photo-filename">{photo.fileName}</p>
                     <p className="photo-upload-date">Upload: {uploadDay}</p>
-                    {photo.imageComment && (
-                      <p className="photo-comment">{photo.imageComment}</p>
-                    )}
+                    {caption ? <p className="photo-comment">{caption}</p> : null}
                   </div>
                 )
                 })
@@ -600,13 +615,22 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                     doc.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
                     fileUrl?.startsWith('data:image/')
                   
+                  const docCaption = fileCaption(doc)
+
                   return (
                     <div key={key} className="photo-item document-item-card">
                       {imgSrc && isImage ? (
                         <img 
                           src={imgSrc} 
                           alt={doc.fileName}
-                          onClick={() => setLightboxImage({ src: imgSrc, fileName: doc.fileName, notes: doc.notes })}
+                          onClick={() =>
+                            setLightboxImage({
+                              src: imgSrc,
+                              fileName: doc.fileName,
+                              notes: doc.notes,
+                              imageComment: doc.imageComment
+                            })
+                          }
                           style={{ cursor: 'pointer' }}
                           onError={(e) => {
                             console.error('Fehler beim Laden des Dokuments:', doc.fileName)
@@ -627,7 +651,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       )}
                       <p className="photo-filename">{doc.fileName}</p>
                       <p className="photo-upload-date">Upload: {uploadDay}</p>
-                      {doc.notes && <p className="document-notes">{doc.notes}</p>}
+                      {docCaption ? <p className="document-notes">{docCaption}</p> : null}
                       {imgSrc && (
                         <a 
                           href={imgSrc}
@@ -757,10 +781,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               alt={lightboxImage.fileName}
             />
             <p className="lightbox-filename">{lightboxImage.fileName}</p>
-            {lightboxImage.notes && (
+            {(lightboxImage.imageComment?.trim() || lightboxImage.notes?.trim()) && (
               <div className="lightbox-notes">
-                <strong>Beschreibung:</strong>
-                <p>{lightboxImage.notes}</p>
+                <strong>Kommentar:</strong>
+                <p>{lightboxImage.imageComment?.trim() || lightboxImage.notes}</p>
               </div>
             )}
           </div>
