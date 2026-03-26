@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
 import type { TimeEntry, Vehicle } from '../types'
-import PhotoUpload from './PhotoUpload'
+import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
 import { VehicleBookingFormFields } from './VehicleBookingFormFields'
 import { toast } from './ToastContainer'
 import { getTodayLocalDateString } from '../utils/dateUtils'
@@ -35,8 +35,8 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   onClockOutSuccess
 }) => {
   const [notes, setNotes] = useState('')
-  const [sitePhotos, setSitePhotos] = useState<File[]>([])
-  const [documentPhotos, setDocumentPhotos] = useState<File[]>([])
+  const [sitePhotoItems, setSitePhotoItems] = useState<PhotoUploadItem[]>([])
+  const [documentPhotoItems, setDocumentPhotoItems] = useState<PhotoUploadItem[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [vehicleRows, setVehicleRows] = useState<VehicleBookingRow[]>(() => [createVehicleBookingRow()])
@@ -111,23 +111,23 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 
       const location = await getCurrentLocation()
 
-      // Upload site photos
+      // Upload site photos (Kommentar pro Bild → imageComment in Firestore)
       const sitePhotoObjects = []
-      for (const file of sitePhotos) {
+      for (const { file, comment } of sitePhotoItems) {
         const upload = await DataService.uploadFile(
           file,
           timeEntry.projectId,
           timeEntry.employeeId,
           'construction_site',
-          notes,
-          ''
+          '',
+          comment.trim()
         )
         sitePhotoObjects.push(upload)
       }
 
       // Upload document photos
       const documentPhotoObjects = []
-      for (const file of documentPhotos) {
+      for (const { file, comment } of documentPhotoItems) {
         const documentType = file.name.toLowerCase().includes('rechnung') 
           ? 'invoice' 
           : 'delivery_note'
@@ -136,8 +136,8 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
           timeEntry.projectId,
           timeEntry.employeeId,
           documentType,
-          notes,
-          ''
+          '',
+          comment.trim()
         )
         documentPhotoObjects.push(upload)
       }
@@ -155,9 +155,10 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         documentPhotoUploads: documentPhotoObjects.map(u => u.id),
         sitePhotos: sitePhotoObjects,
         documents: documentPhotoObjects,
-        hasDocumentation: sitePhotoObjects.length > 0 || 
-                         documentPhotoObjects.length > 0 || 
-                         notes.trim() !== ''
+        hasDocumentation:
+          sitePhotoObjects.length > 0 ||
+          documentPhotoObjects.length > 0 ||
+          notes.trim() !== ''
       })
 
       if (result.automaticBreak) {
@@ -221,12 +222,13 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 
             <PhotoUpload
               label="Fotos von der Baustelle:"
-              onPhotosChange={setSitePhotos}
+              onItemsChange={setSitePhotoItems}
             />
 
             <PhotoUpload
               label="Lieferscheine oder Rechnungen:"
-              onPhotosChange={setDocumentPhotos}
+              onItemsChange={setDocumentPhotoItems}
+              commentFieldLabel="Kommentar zu diesem Dokument (optional)"
             />
 
             <div className="form-group">
