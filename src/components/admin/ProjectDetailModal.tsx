@@ -20,6 +20,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; fileName: string; notes?: string } | null>(null)
+  const [timeEntryDetail, setTimeEntryDetail] = useState<TimeEntryWithEmployee | null>(null)
 
   useEffect(() => {
     loadProjectData()
@@ -136,6 +137,140 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
 
     return hours.toFixed(2) + 'h'
+  }
+
+  const getClockOutLocation = (entry: TimeEntry) =>
+    entry.clockOutLocation ?? entry.locationOut ?? null
+
+  const formatLocationText = (loc: { lat: number | null; lng: number | null } | null | undefined) => {
+    if (!loc || loc.lat == null || loc.lng == null) return null
+    return `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`
+  }
+
+  const openStreetMapUrl = (lat: number, lng: number) =>
+    `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+
+  const renderTimeEntryLocationModal = () => {
+    if (!timeEntryDetail) return null
+
+    const clockInDate = convertToDate(timeEntryDetail.clockInTime)
+    const clockOutDate = convertToDate(timeEntryDetail.clockOutTime)
+    const inLoc = formatLocationText(timeEntryDetail.clockInLocation)
+    const outLocRaw = getClockOutLocation(timeEntryDetail)
+    const outLoc = formatLocationText(outLocRaw)
+
+    return (
+      <div
+        className="time-entry-location-overlay"
+        onClick={(e) => {
+          e.stopPropagation()
+          setTimeEntryDetail(null)
+        }}
+      >
+        <div
+          className="time-entry-location-modal"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="time-entry-location-close"
+            onClick={() => setTimeEntryDetail(null)}
+            aria-label="Schließen"
+          >
+            ×
+          </button>
+          <div className="time-entry-location-head">
+            <h3 className="time-entry-location-name">
+              {timeEntryDetail.employeeName || timeEntryDetail.employeeId}
+            </h3>
+            <p className="time-entry-location-date">
+              {clockInDate
+                ? clockInDate.toLocaleDateString('de-DE', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  })
+                : '—'}
+            </p>
+          </div>
+
+          <div className="time-entry-location-block">
+            <span className="time-entry-location-label">Eingestempelt</span>
+            <p className="time-entry-location-time">
+              {clockInDate
+                ? clockInDate.toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : '—'}
+            </p>
+            <span className="time-entry-location-sublabel">Ort</span>
+            {inLoc ? (
+              <>
+                <p className="time-entry-location-coords">{inLoc}</p>
+                {timeEntryDetail.clockInLocation?.lat != null &&
+                  timeEntryDetail.clockInLocation?.lng != null && (
+                    <a
+                      href={openStreetMapUrl(
+                        timeEntryDetail.clockInLocation.lat,
+                        timeEntryDetail.clockInLocation.lng
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="time-entry-location-maplink"
+                    >
+                      Auf Karte anzeigen
+                    </a>
+                  )}
+              </>
+            ) : (
+              <p className="time-entry-location-missing">Kein Standort erfasst</p>
+            )}
+          </div>
+
+          <div className="time-entry-location-block">
+            <span className="time-entry-location-label">Ausgestempelt</span>
+            <p className="time-entry-location-time">
+              {clockOutDate
+                ? clockOutDate.toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : 'Noch eingestempelt'}
+            </p>
+            <span className="time-entry-location-sublabel">Ort</span>
+            {clockOutDate ? (
+              outLoc ? (
+                <>
+                  <p className="time-entry-location-coords">{outLoc}</p>
+                  {outLocRaw?.lat != null && outLocRaw?.lng != null && (
+                    <a
+                      href={openStreetMapUrl(outLocRaw.lat, outLocRaw.lng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="time-entry-location-maplink"
+                    >
+                      Auf Karte anzeigen
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="time-entry-location-missing">Kein Standort erfasst</p>
+              )
+            ) : (
+              <p className="time-entry-location-missing">—</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -338,7 +473,20 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   const clockOutDate = convertToDate(entry.clockOutTime)
                   
                   return (
-                    <div key={entry.id} className="time-entry-card">
+                    <div
+                      key={entry.id}
+                      className="time-entry-card time-entry-card--clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Klicken für Zeiten und Standorte"
+                      onClick={() => setTimeEntryDetail(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setTimeEntryDetail(entry)
+                        }
+                      }}
+                    >
                       <div className="time-entry-header">
                         <span className="time-entry-employee">{entry.employeeName || entry.employeeId}</span>
                         <span className="time-entry-hours">{calculateHours(entry)}</span>
@@ -379,6 +527,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       </div>
 
       {/* Lightbox Modal für Bildvergrößerung */}
+      {renderTimeEntryLocationModal()}
+
       {lightboxImage && (
         <div 
           className="lightbox-overlay" 

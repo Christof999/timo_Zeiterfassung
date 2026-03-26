@@ -500,3 +500,136 @@
     font-size: 0.9rem;
   }
 }
+
+/* Zeiteintrag: Zeiten & Standorte (nested über Projektdetails) */
+.time-entry-location-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  padding-bottom: max(var(--spacing-lg), env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.time-entry-location-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: min(85vh, 640px);
+  overflow-y: auto;
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: var(--spacing-lg);
+  padding-top: calc(var(--spacing-lg) + 8px);
+}
+
+.time-entry-location-close {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.time-entry-location-close:hover {
+  background: var(--light-color);
+  color: var(--text-primary);
+}
+
+.time-entry-location-head {
+  margin-bottom: var(--spacing-lg);
+  padding-right: var(--spacing-xl);
+}
+
+.time-entry-location-name {
+  margin: 0 0 var(--spacing-xs);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.time-entry-location-date {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.time-entry-location-block {
+  padding: var(--spacing-md) 0;
+}
+
+.time-entry-location-head + .time-entry-location-block {
+  padding-top: 0;
+}
+
+.time-entry-location-block + .time-entry-location-block {
+  border-top: 1px solid var(--border-color);
+}
+
+.time-entry-location-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.time-entry-location-time {
+  margin: 0 0 var(--spacing-sm);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.time-entry-location-sublabel {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.time-entry-location-coords {
+  margin: 0 0 var(--spacing-xs);
+  font-size: 0.9rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.time-entry-location-missing {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.time-entry-location-maplink {
+  display: inline-block;
+  margin-top: var(--spacing-xs);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.time-entry-location-maplink:hover {
+  text-decoration: underline;
+}

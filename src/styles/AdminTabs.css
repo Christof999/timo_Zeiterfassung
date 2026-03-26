@@ -469,6 +469,25 @@
   border: 1px solid var(--border-color);
 }
 
+.time-entry-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.time-entry-card--clickable:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.time-entry-card--clickable:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.time-entry-card--clickable:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .time-entry-header {
   display: flex;
   justify-content: space-between;
