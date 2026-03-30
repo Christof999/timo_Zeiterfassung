@@ -165,6 +165,10 @@
   max-width: 1200px;
 }
 
+.admin-push-card-page {
+  margin-top: 0;
+}
+
 .admin-push-toggle {
   width: 100%;
   border: none;
@@ -172,6 +176,10 @@
   text-align: left;
   cursor: pointer;
   padding: 0;
+}
+
+.admin-push-toggle:hover .admin-push-header h3 {
+  color: var(--primary-color);
 }
 
 .admin-push-header {
