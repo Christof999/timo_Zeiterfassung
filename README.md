@@ -69,7 +69,26 @@ Hinweise:
 
 - Auf iOS funktionieren Web-Push nur aus der installierten Homescreen-App.
 - Die Web-Push-Subscription wird in Firestore unter `adminPushSubscriptions` gespeichert.
-- Fuer echte Remote-Push (Server -> iPhone) ist zusaetzlich ein Backend/Cloud-Function noetig, das diese Subscriptions mit VAPID anspricht.
+- Neue Urlaubsantraege triggern automatisch einen Server-Push ueber `/api/push/leave-request`.
+
+### Server-Setup fuer automatische Push bei neuem Urlaubsantrag
+
+Die Vercel Function `/api/push/leave-request` versendet Web-Push an alle aktiven Admin-Subscriptions.
+
+Noetige Environment Variables in Vercel:
+
+```bash
+FIREBASE_PROJECT_ID=...
+FIREBASE_CLIENT_EMAIL=...
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+PUSH_VAPID_PUBLIC_KEY=...
+PUSH_VAPID_PRIVATE_KEY=...
+PUSH_VAPID_SUBJECT=mailto:admin@deine-domain.de
+```
+
+Authentifizierung der API:
+- Standard: Firebase ID Token aus dem Frontend (automatisch in `createLeaveRequest`)
+- Optional: `PUSH_API_TOKEN` als statischer Service-Token
 
 ## Projektstruktur
 
