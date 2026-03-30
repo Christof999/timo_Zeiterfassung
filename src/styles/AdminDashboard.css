@@ -165,6 +165,15 @@
   max-width: 1200px;
 }
 
+.admin-push-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
 .admin-push-header {
   display: flex;
   justify-content: space-between;
@@ -182,6 +191,22 @@
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.admin-push-toggle-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.admin-push-chevron {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  transition: transform var(--transition-base);
+}
+
+.admin-push-chevron.open {
+  transform: rotate(180deg);
 }
 
 .admin-push-badge {
