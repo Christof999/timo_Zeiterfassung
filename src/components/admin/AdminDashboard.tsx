@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
+import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
 import OverviewTab from './tabs/OverviewTab'
 import EmployeesTab from './tabs/EmployeesTab'
@@ -17,6 +18,16 @@ const AdminDashboard: React.FC = () => {
   const [currentAdmin, setCurrentAdmin] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isPushLoading, setIsPushLoading] = useState(true)
+  const [isPushSupported, setIsPushSupported] = useState(false)
+  const [pushSupportReason, setPushSupportReason] = useState<string | null>(null)
+  const [isIosDevice, setIsIosDevice] = useState(false)
+  const [isStandaloneMode, setIsStandaloneMode] = useState(false)
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
+  const [hasPushSubscription, setHasPushSubscription] = useState(false)
+  const [isEnablingPush, setIsEnablingPush] = useState(false)
+  const [isDisablingPush, setIsDisablingPush] = useState(false)
+  const [isTestingPush, setIsTestingPush] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -27,10 +38,79 @@ const AdminDashboard: React.FC = () => {
         return
       }
       setCurrentAdmin(admin)
+      await refreshPushStatus()
       setIsLoading(false)
     }
     checkAdmin()
   }, [navigate])
+
+  const refreshPushStatus = async () => {
+    setIsPushLoading(true)
+    try {
+      const supportState = pushNotificationService.getSupportState()
+      setIsPushSupported(supportState.isSupported)
+      setPushSupportReason(supportState.reason || null)
+      setIsIosDevice(supportState.isIos)
+      setIsStandaloneMode(supportState.isStandalone)
+      setNotificationPermission(typeof Notification !== 'undefined' ? Notification.permission : 'default')
+
+      if (!supportState.isSupported) {
+        setHasPushSubscription(false)
+        return
+      }
+
+      const existingSubscription = await pushNotificationService.getCurrentSubscription()
+      setHasPushSubscription(!!existingSubscription)
+    } catch (error) {
+      console.error('Fehler beim Laden des Push-Status:', error)
+      setHasPushSubscription(false)
+    } finally {
+      setIsPushLoading(false)
+    }
+  }
+
+  const handleEnablePush = async () => {
+    if (!currentAdmin) return
+    setIsEnablingPush(true)
+    try {
+      await pushNotificationService.requestAndSaveSubscription({
+        id: currentAdmin.id,
+        username: currentAdmin.username,
+        name: currentAdmin.name
+      })
+      toast.success('Push-Benachrichtigungen wurden aktiviert.')
+      await refreshPushStatus()
+    } catch (error: any) {
+      toast.error(error?.message || 'Push konnte nicht aktiviert werden.')
+    } finally {
+      setIsEnablingPush(false)
+    }
+  }
+
+  const handleDisablePush = async () => {
+    setIsDisablingPush(true)
+    try {
+      await pushNotificationService.disableSubscription()
+      toast.success('Push-Benachrichtigungen wurden deaktiviert.')
+      await refreshPushStatus()
+    } catch (error: any) {
+      toast.error(error?.message || 'Push konnte nicht deaktiviert werden.')
+    } finally {
+      setIsDisablingPush(false)
+    }
+  }
+
+  const handleLocalPushTest = async () => {
+    setIsTestingPush(true)
+    try {
+      await pushNotificationService.showLocalTestNotification()
+      toast.success('Lokale Test-Benachrichtigung wurde ausgelöst.')
+    } catch (error: any) {
+      toast.error(error?.message || 'Test-Benachrichtigung fehlgeschlagen.')
+    } finally {
+      setIsTestingPush(false)
+    }
+  }
 
   const handleLogout = () => {
     DataService.clearCurrentAdmin()
@@ -111,6 +191,76 @@ const AdminDashboard: React.FC = () => {
         </nav>
 
         <div className="dashboard-content">
+          <section className="admin-push-card">
+            <div className="admin-push-header">
+              <div>
+                <h3>iPhone Homescreen-Benachrichtigungen</h3>
+                <p>Aktiviere Push für dieses Admin-Gerät.</p>
+              </div>
+              <span className={`admin-push-badge ${hasPushSubscription ? 'active' : 'inactive'}`}>
+                {hasPushSubscription ? 'Aktiv' : 'Nicht aktiv'}
+              </span>
+            </div>
+
+            {isPushLoading ? (
+              <p className="admin-push-info">Push-Status wird geladen…</p>
+            ) : (
+              <>
+                {isPushSupported ? (
+                  <p className="admin-push-info">
+                    Berechtigung: <strong>{notificationPermission}</strong>
+                  </p>
+                ) : (
+                  <p className="admin-push-warning">{pushSupportReason || 'Push wird nicht unterstützt.'}</p>
+                )}
+
+                {isIosDevice && !isStandaloneMode && (
+                  <p className="admin-push-warning">
+                    Hinweis für iPhone: Safari öffnen → Teilen → „Zum Home-Bildschirm“, dann dort erneut anmelden und Push aktivieren.
+                  </p>
+                )}
+
+                <div className="admin-push-actions">
+                  <button
+                    type="button"
+                    className="admin-push-btn primary"
+                    disabled={!isPushSupported || isEnablingPush}
+                    onClick={handleEnablePush}
+                  >
+                    {isEnablingPush ? 'Aktiviere…' : 'Push aktivieren'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-push-btn secondary"
+                    disabled={!hasPushSubscription || isDisablingPush}
+                    onClick={handleDisablePush}
+                  >
+                    {isDisablingPush ? 'Deaktiviere…' : 'Push deaktivieren'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-push-btn secondary"
+                    disabled={!hasPushSubscription || notificationPermission !== 'granted' || isTestingPush}
+                    onClick={handleLocalPushTest}
+                  >
+                    {isTestingPush ? 'Teste…' : 'Test-Benachrichtigung'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-push-btn ghost"
+                    disabled={isPushLoading}
+                    onClick={refreshPushStatus}
+                  >
+                    Status aktualisieren
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
           {currentTab === 'overview' && <OverviewTab />}
           {currentTab === 'employees' && <EmployeesTab />}
           {currentTab === 'projects' && <ProjectsTab />}

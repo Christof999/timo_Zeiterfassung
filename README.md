@@ -43,6 +43,33 @@ Die gebauten Dateien befinden sich im `dist` Ordner.
 - ✅ Standortverfolgung
 - ✅ Mobile-optimiertes Design
 - ✅ Toast-Notifications statt Alerts
+- ✅ iPhone-Homescreen Push-Basis (PWA Service Worker + Admin-Aktivierung)
+
+## iPhone Homescreen Push einrichten (Admin)
+
+Voraussetzungen:
+
+- HTTPS in Produktion
+- VAPID Public Key in `.env`:
+
+```bash
+VITE_PUSH_VAPID_PUBLIC_KEY=dein-vapid-public-key
+```
+
+Schritte für den Admin auf iPhone:
+
+1. In Safari die App oeffnen
+2. Teilen-Symbol -> "Zum Home-Bildschirm"
+3. Die Homescreen-App starten
+4. Als Admin anmelden
+5. Im Admin-Dashboard "Push aktivieren" klicken
+6. Optional "Test-Benachrichtigung" ausloesen
+
+Hinweise:
+
+- Auf iOS funktionieren Web-Push nur aus der installierten Homescreen-App.
+- Die Web-Push-Subscription wird in Firestore unter `adminPushSubscriptions` gespeichert.
+- Fuer echte Remote-Push (Server -> iPhone) ist zusaetzlich ein Backend/Cloud-Function noetig, das diese Subscriptions mit VAPID anspricht.
 
 ## Projektstruktur
 
