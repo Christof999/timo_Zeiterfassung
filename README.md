@@ -16,6 +16,13 @@ Moderne React-Version der Zeiterfassungs-App, optimiert für mobile Geräte.
 npm install
 ```
 
+## Node.js Version
+
+Fuer konsistente lokale Builds und Vercel-Deployments wird Node.js 20 verwendet.
+
+- Empfohlen: `20.x`
+- In Vercel Projekt-Einstellungen ebenfalls auf `20.x` setzen.
+
 ## Entwicklung
 
 ```bash
