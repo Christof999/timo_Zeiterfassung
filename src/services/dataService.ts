@@ -1044,6 +1044,45 @@ class DataServiceClass {
     }
   }
 
+  private async triggerLeaveRequestPushNotification(payload: {
+    leaveRequestId: string
+    employeeId: string | null
+    employeeName: string
+    startDate: string | null
+    endDate: string | null
+    type: LeaveRequest['type'] | null
+    workingDays: number | null
+  }): Promise<void> {
+    try {
+      const currentAuthUser = auth.currentUser
+      if (!currentAuthUser) {
+        if (isDevMode) {
+          console.warn('Push-Trigger übersprungen: kein Firebase Auth User vorhanden')
+        }
+        return
+      }
+
+      const idToken = await currentAuthUser.getIdToken()
+      const response = await fetch('/api/push/leave-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null)
+        const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      // Push-Fehler dürfen den Urlaubsantrag nicht blockieren.
+      console.error('Fehler beim Auslösen der Push-Benachrichtigung:', error)
+    }
+  }
+
   async createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
     await this.authReadyPromise
     try {
@@ -1053,6 +1092,17 @@ class DataServiceClass {
         status: 'pending',
         createdAt: new Date()
       })
+
+      await this.triggerLeaveRequestPushNotification({
+        leaveRequestId: docRef.id,
+        employeeId: requestData.employeeId || null,
+        employeeName: requestData.employeeName || 'Mitarbeiter',
+        startDate: requestData.startDate ? new Date(requestData.startDate as any).toISOString() : null,
+        endDate: requestData.endDate ? new Date(requestData.endDate as any).toISOString() : null,
+        type: requestData.type || null,
+        workingDays: typeof requestData.workingDays === 'number' ? requestData.workingDays : null
+      })
+
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Urlaubsantrags:', error)
