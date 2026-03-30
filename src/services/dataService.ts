@@ -77,6 +77,14 @@ class DataServiceClass {
     localStorage.removeItem('lauffer_current_user')
   }
 
+  private createPushSubscriptionDocId(endpoint: string): string {
+    try {
+      return `sub_${btoa(endpoint).replace(/[+/=]/g, '').slice(0, 120)}`
+    } catch {
+      return `sub_${Date.now()}`
+    }
+  }
+
   async authenticateEmployee(username: string, password: string): Promise<Employee | null> {
     await this.authReadyPromise
     try {
@@ -747,6 +755,61 @@ class DataServiceClass {
   clearCurrentAdmin() {
     localStorage.removeItem('lauffer_admin_user')
     localStorage.removeItem('lauffer_current_admin')
+  }
+
+  async saveAdminPushSubscription(
+    subscription: PushSubscriptionJSON,
+    admin: { id?: string; username?: string; name?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+
+    if (!subscription.endpoint) {
+      throw new Error('Push-Subscription enthält keinen Endpoint')
+    }
+
+    const subscriptionId = this.createPushSubscriptionDocId(subscription.endpoint)
+    const subscriptionRef = doc(db, 'adminPushSubscriptions', subscriptionId)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+
+    await setDoc(
+      subscriptionRef,
+      {
+        endpoint: subscription.endpoint,
+        keys: subscription.keys || {},
+        expirationTime: subscription.expirationTime ?? null,
+        active: true,
+        adminId: admin.id || null,
+        adminUsername: admin.username || null,
+        adminName: admin.name || null,
+        permission: Notification.permission,
+        isStandalone,
+        userAgent: navigator.userAgent,
+        updatedAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp()
+      },
+      { merge: true }
+    )
+  }
+
+  async removeAdminPushSubscription(endpoint: string): Promise<void> {
+    await this.authReadyPromise
+
+    if (!endpoint) {
+      return
+    }
+
+    const subscriptionId = this.createPushSubscriptionDocId(endpoint)
+    const subscriptionRef = doc(db, 'adminPushSubscriptions', subscriptionId)
+
+    await setDoc(
+      subscriptionRef,
+      {
+        active: false,
+        disabledAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    )
   }
 
   async authenticateAdmin(username: string, password: string): Promise<any | null> {
