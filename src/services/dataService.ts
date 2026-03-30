@@ -77,14 +77,6 @@ class DataServiceClass {
     localStorage.removeItem('lauffer_current_user')
   }
 
-  private createPushSubscriptionDocId(endpoint: string): string {
-    try {
-      return `sub_${btoa(endpoint).replace(/[+/=]/g, '').slice(0, 120)}`
-    } catch {
-      return `sub_${Date.now()}`
-    }
-  }
-
   async authenticateEmployee(username: string, password: string): Promise<Employee | null> {
     await this.authReadyPromise
     try {
@@ -761,55 +753,70 @@ class DataServiceClass {
     subscription: PushSubscriptionJSON,
     admin: { id?: string; username?: string; name?: string }
   ): Promise<void> {
-    await this.authReadyPromise
-
     if (!subscription.endpoint) {
       throw new Error('Push-Subscription enthält keinen Endpoint')
     }
 
-    const subscriptionId = this.createPushSubscriptionDocId(subscription.endpoint)
-    const subscriptionRef = doc(db, 'adminPushSubscriptions', subscriptionId)
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
 
-    await setDoc(
-      subscriptionRef,
-      {
-        endpoint: subscription.endpoint,
-        keys: subscription.keys || {},
-        expirationTime: subscription.expirationTime ?? null,
-        active: true,
-        adminId: admin.id || null,
-        adminUsername: admin.username || null,
-        adminName: admin.name || null,
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'upsert',
+        subscription,
+        admin,
         permission: Notification.permission,
         isStandalone,
-        userAgent: navigator.userAgent,
-        updatedAt: serverTimestamp(),
-        lastSeenAt: serverTimestamp()
-      },
-      { merge: true }
-    )
+        userAgent: navigator.userAgent
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
   }
 
   async removeAdminPushSubscription(endpoint: string): Promise<void> {
-    await this.authReadyPromise
-
     if (!endpoint) {
       return
     }
 
-    const subscriptionId = this.createPushSubscriptionDocId(endpoint)
-    const subscriptionRef = doc(db, 'adminPushSubscriptions', subscriptionId)
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
 
-    await setDoc(
-      subscriptionRef,
-      {
-        active: false,
-        disabledAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
       },
-      { merge: true }
-    )
+      body: JSON.stringify({
+        action: 'disable',
+        endpoint
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
   }
 
   async authenticateAdmin(username: string, password: string): Promise<any | null> {
