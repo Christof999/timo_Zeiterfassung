@@ -90,6 +90,28 @@ function buildPayload(payload) {
   })
 }
 
+async function loadLeaveRequestForNotification(leaveRequestId) {
+  if (!leaveRequestId) {
+    throw new Error('leaveRequestId fehlt')
+  }
+
+  const db = getFirestore()
+  const leaveRequestRef = db.collection('leaveRequests').doc(leaveRequestId)
+  const leaveRequestSnap = await leaveRequestRef.get()
+
+  if (!leaveRequestSnap.exists) {
+    throw new Error('Urlaubsantrag nicht gefunden')
+  }
+
+  const leaveRequestData = leaveRequestSnap.data() || {}
+
+  return {
+    ref: leaveRequestRef,
+    data: leaveRequestData,
+    alreadyNotified: !!leaveRequestData.leavePushNotifiedAt
+  }
+}
+
 async function authorizeRequest(req) {
   const authHeader = req.headers.authorization || ''
   if (!authHeader.startsWith('Bearer ')) {
@@ -121,8 +143,30 @@ module.exports = async function handler(req, res) {
     initWebPush()
     await authorizeRequest(req)
 
+    const requestPayload = req.body || {}
+    const leaveRequest = await loadLeaveRequestForNotification(requestPayload.leaveRequestId)
+    if (leaveRequest.alreadyNotified) {
+      return res.status(200).json({
+        success: true,
+        sent: 0,
+        failed: 0,
+        message: 'Push fuer diesen Urlaubsantrag wurde bereits versendet.'
+      })
+    }
+
     const subscriptions = await loadActiveSubscriptions()
     if (subscriptions.length === 0) {
+      await leaveRequest.ref.set(
+        {
+          leavePushNotifiedAt: new Date(),
+          leavePushSent: 0,
+          leavePushFailed: 0,
+          leavePushMessage: 'Keine aktiven Push-Subscriptions vorhanden',
+          updatedAt: new Date()
+        },
+        { merge: true }
+      )
+
       return res.status(200).json({
         success: true,
         sent: 0,
@@ -131,7 +175,11 @@ module.exports = async function handler(req, res) {
       })
     }
 
-    const payload = buildPayload(req.body || {})
+    const payload = buildPayload({
+      ...requestPayload,
+      employeeName: requestPayload.employeeName || leaveRequest.data.employeeName || 'Mitarbeiter',
+      employeeId: requestPayload.employeeId || leaveRequest.data.employeeId || null
+    })
     let sent = 0
     let failed = 0
 
@@ -159,6 +207,16 @@ module.exports = async function handler(req, res) {
           })
         }
       })
+    )
+
+    await leaveRequest.ref.set(
+      {
+        leavePushNotifiedAt: new Date(),
+        leavePushSent: sent,
+        leavePushFailed: failed,
+        updatedAt: new Date()
+      },
+      { merge: true }
     )
 
     return res.status(200).json({ success: true, sent, failed })
