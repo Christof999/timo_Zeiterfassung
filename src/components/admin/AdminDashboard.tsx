@@ -28,6 +28,10 @@ const AdminDashboard: React.FC = () => {
   const [isEnablingPush, setIsEnablingPush] = useState(false)
   const [isDisablingPush, setIsDisablingPush] = useState(false)
   const [isTestingPush, setIsTestingPush] = useState(false)
+  const [isPushPanelOpen, setIsPushPanelOpen] = useState(() => {
+    const saved = localStorage.getItem('lauffer_admin_push_panel_open')
+    return saved ? saved === 'true' : false
+  })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -118,6 +122,14 @@ const AdminDashboard: React.FC = () => {
     navigate('/admin/login')
   }
 
+  const togglePushPanel = () => {
+    setIsPushPanelOpen((prev) => {
+      const next = !prev
+      localStorage.setItem('lauffer_admin_push_panel_open', String(next))
+      return next
+    })
+  }
+
   if (isLoading) {
     return <div className="loading">Lade...</div>
   }
@@ -192,72 +204,87 @@ const AdminDashboard: React.FC = () => {
 
         <div className="dashboard-content">
           <section className="admin-push-card">
-            <div className="admin-push-header">
-              <div>
-                <h3>iPhone Homescreen-Benachrichtigungen</h3>
-                <p>Aktiviere Push für dieses Admin-Gerät.</p>
-              </div>
-              <span className={`admin-push-badge ${hasPushSubscription ? 'active' : 'inactive'}`}>
-                {hasPushSubscription ? 'Aktiv' : 'Nicht aktiv'}
-              </span>
-            </div>
-
-            {isPushLoading ? (
-              <p className="admin-push-info">Push-Status wird geladen…</p>
-            ) : (
-              <>
-                {isPushSupported ? (
-                  <p className="admin-push-info">
-                    Berechtigung: <strong>{notificationPermission}</strong>
-                  </p>
-                ) : (
-                  <p className="admin-push-warning">{pushSupportReason || 'Push wird nicht unterstützt.'}</p>
-                )}
-
-                {isIosDevice && !isStandaloneMode && (
-                  <p className="admin-push-warning">
-                    Hinweis für iPhone: Safari öffnen → Teilen → „Zum Home-Bildschirm“, dann dort erneut anmelden und Push aktivieren.
-                  </p>
-                )}
-
-                <div className="admin-push-actions">
-                  <button
-                    type="button"
-                    className="admin-push-btn primary"
-                    disabled={!isPushSupported || isEnablingPush}
-                    onClick={handleEnablePush}
-                  >
-                    {isEnablingPush ? 'Aktiviere…' : 'Push aktivieren'}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="admin-push-btn secondary"
-                    disabled={!hasPushSubscription || isDisablingPush}
-                    onClick={handleDisablePush}
-                  >
-                    {isDisablingPush ? 'Deaktiviere…' : 'Push deaktivieren'}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="admin-push-btn secondary"
-                    disabled={!hasPushSubscription || notificationPermission !== 'granted' || isTestingPush}
-                    onClick={handleLocalPushTest}
-                  >
-                    {isTestingPush ? 'Teste…' : 'Test-Benachrichtigung'}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="admin-push-btn ghost"
-                    disabled={isPushLoading}
-                    onClick={refreshPushStatus}
-                  >
-                    Status aktualisieren
-                  </button>
+            <button
+              type="button"
+              className="admin-push-toggle"
+              onClick={togglePushPanel}
+              aria-expanded={isPushPanelOpen}
+              aria-controls="admin-push-content"
+            >
+              <div className="admin-push-header">
+                <div>
+                  <h3>iPhone Homescreen-Benachrichtigungen</h3>
+                  <p>Aktiviere Push für dieses Admin-Gerät.</p>
                 </div>
-              </>
+                <div className="admin-push-toggle-right">
+                  <span className={`admin-push-badge ${hasPushSubscription ? 'active' : 'inactive'}`}>
+                    {hasPushSubscription ? 'Aktiv' : 'Nicht aktiv'}
+                  </span>
+                  <span className={`admin-push-chevron ${isPushPanelOpen ? 'open' : ''}`} aria-hidden="true">▾</span>
+                </div>
+              </div>
+            </button>
+
+            {isPushPanelOpen && (
+              <div id="admin-push-content">
+                {isPushLoading ? (
+                  <p className="admin-push-info">Push-Status wird geladen…</p>
+                ) : (
+                  <>
+                    {isPushSupported ? (
+                      <p className="admin-push-info">
+                        Berechtigung: <strong>{notificationPermission}</strong>
+                      </p>
+                    ) : (
+                      <p className="admin-push-warning">{pushSupportReason || 'Push wird nicht unterstützt.'}</p>
+                    )}
+
+                    {isIosDevice && !isStandaloneMode && (
+                      <p className="admin-push-warning">
+                        Hinweis für iPhone: Safari öffnen → Teilen → „Zum Home-Bildschirm“, dann dort erneut anmelden und Push aktivieren.
+                      </p>
+                    )}
+
+                    <div className="admin-push-actions">
+                      <button
+                        type="button"
+                        className="admin-push-btn primary"
+                        disabled={!isPushSupported || isEnablingPush}
+                        onClick={handleEnablePush}
+                      >
+                        {isEnablingPush ? 'Aktiviere…' : 'Push aktivieren'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-push-btn secondary"
+                        disabled={!hasPushSubscription || isDisablingPush}
+                        onClick={handleDisablePush}
+                      >
+                        {isDisablingPush ? 'Deaktiviere…' : 'Push deaktivieren'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-push-btn secondary"
+                        disabled={!hasPushSubscription || notificationPermission !== 'granted' || isTestingPush}
+                        onClick={handleLocalPushTest}
+                      >
+                        {isTestingPush ? 'Teste…' : 'Test-Benachrichtigung'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-push-btn ghost"
+                        disabled={isPushLoading}
+                        onClick={refreshPushStatus}
+                      >
+                        Status aktualisieren
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </section>
 
