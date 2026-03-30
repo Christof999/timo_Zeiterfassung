@@ -18,11 +18,11 @@ const isStandaloneApp = (): boolean => {
   return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
 }
 
-const base64ToUint8Array = (base64: string): Uint8Array => {
+const base64ToUint8Array = (base64: string): Uint8Array<ArrayBuffer> => {
   const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
   const raw = atob(padded)
-  const outputArray = new Uint8Array(raw.length)
+  const outputArray = new Uint8Array(new ArrayBuffer(raw.length))
   for (let i = 0; i < raw.length; ++i) {
     outputArray[i] = raw.charCodeAt(i)
   }
