@@ -50,15 +50,14 @@ const Login: React.FC = () => {
   return (
     <div className="login-container">
       <header className="login-header">
-        <div className="logo">
+        <div className="login-logo">
           <img 
             src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
             alt="Lauffer Logo" 
-            className="logo-image"
+            className="login-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
           <p>Gartenbau • Erdbau • Natursteinhandel</p>
-          <p style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '4px' }}>React Version</p>
         </div>
       </header>
 

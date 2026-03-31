@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
 import type { Project } from '../../types'
 import { toast } from '../ToastContainer'
+import { toDateInputValue } from '../../utils/dateUtils'
 import '../../styles/Modal.css'
 
 interface ProjectModalProps {
@@ -24,25 +25,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
 
   // Hilfsfunktion um Datum aus verschiedenen Formaten zu konvertieren
   const convertToDateString = (date: any): string => {
-    if (!date) return ''
-    try {
-      // Firebase Timestamp
-      if (date && typeof date.toDate === 'function') {
-        return date.toDate().toISOString().split('T')[0]
-      }
-      // Sekunden (Unix timestamp)
-      if (date && typeof date.seconds === 'number') {
-        return new Date(date.seconds * 1000).toISOString().split('T')[0]
-      }
-      // Bereits ein Date-Objekt oder String
-      const d = new Date(date)
-      if (!isNaN(d.getTime())) {
-        return d.toISOString().split('T')[0]
-      }
-      return ''
-    } catch {
-      return ''
-    }
+    return toDateInputValue(date)
   }
 
   useEffect(() => {

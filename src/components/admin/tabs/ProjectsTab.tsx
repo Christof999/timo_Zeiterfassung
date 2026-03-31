@@ -89,7 +89,7 @@ const ProjectsTab: React.FC = () => {
       <div className="tab-header">
         <h3>Projekte</h3>
         <button onClick={handleAdd} className="btn primary-btn">
-          ➕ Projekt hinzufügen
+          Projekt hinzufügen
         </button>
       </div>
 
@@ -118,21 +118,21 @@ const ProjectsTab: React.FC = () => {
                       className="action-btn view-btn"
                       aria-label="Details anzeigen"
                     >
-                      👁️
+                      Details
                     </button>
                     <button 
                       onClick={() => handleEdit(project)} 
                       className="action-btn edit-btn"
                       aria-label="Bearbeiten"
                     >
-                      ✏️
+                      Bearbeiten
                     </button>
                     <button 
                       onClick={() => handleDelete(project.id!)} 
                       className="action-btn delete-btn"
                       aria-label="Archivieren"
                     >
-                      🗑️
+                      Archivieren
                     </button>
                   </td>
                 </tr>

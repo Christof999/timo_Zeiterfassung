@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { DataService } from '../services/dataService'
 import type { TimeEntry } from '../types'
-import PhotoUpload from './PhotoUpload'
+import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
 import { toast } from './ToastContainer'
 import '../styles/Modal.css'
 
@@ -15,8 +15,8 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
   onClose
 }) => {
   const [notes, setNotes] = useState('')
-  const [sitePhotos, setSitePhotos] = useState<File[]>([])
-  const [documentPhotos, setDocumentPhotos] = useState<File[]>([])
+  const [sitePhotoItems, setSitePhotoItems] = useState<PhotoUploadItem[]>([])
+  const [documentPhotoItems, setDocumentPhotoItems] = useState<PhotoUploadItem[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,23 +26,23 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
     try {
       const currentUser = await DataService.getCurrentUser()
 
-      // Upload site photos
+      // Upload site photos (Kommentar pro Bild → imageComment)
       const sitePhotoObjects = []
-      for (const file of sitePhotos) {
+      for (const { file, comment } of sitePhotoItems) {
         const upload = await DataService.uploadFile(
           file,
           timeEntry.projectId,
           timeEntry.employeeId,
           'construction_site',
-          notes,
-          ''
+          '',
+          comment.trim()
         )
         sitePhotoObjects.push(upload)
       }
 
       // Upload document photos
       const documentPhotoObjects = []
-      for (const file of documentPhotos) {
+      for (const { file, comment } of documentPhotoItems) {
         const documentType = file.name.toLowerCase().includes('rechnung') 
           ? 'invoice' 
           : 'delivery_note'
@@ -51,8 +51,8 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
           timeEntry.projectId,
           timeEntry.employeeId,
           documentType,
-          notes,
-          ''
+          '',
+          comment.trim()
         )
         documentPhotoObjects.push(upload)
       }
@@ -81,7 +81,7 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>📝 Dokumentation hinzufügen</h3>
+          <h3>Dokumentation hinzufügen</h3>
           <button type="button" className="close-modal-btn" onClick={onClose}>
             ×
           </button>
@@ -101,12 +101,13 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
 
             <PhotoUpload
               label="Baustellenfotos:"
-              onPhotosChange={setSitePhotos}
+              onItemsChange={setSitePhotoItems}
             />
 
             <PhotoUpload
               label="Dokumente/Lieferscheine:"
-              onPhotosChange={setDocumentPhotos}
+              onItemsChange={setDocumentPhotoItems}
+              commentFieldLabel="Kommentar zu diesem Dokument (optional)"
             />
 
             <div className="form-group text-center">
@@ -115,7 +116,7 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
                 className="btn primary-btn"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Speichere...' : '💾 Dokumentation speichern'}
+                {isSubmitting ? 'Speichere...' : 'Dokumentation speichern'}
               </button>
               <button 
                 type="button" 

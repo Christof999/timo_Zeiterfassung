@@ -65,6 +65,11 @@ export interface TimeEntry {
     addedByName: string
     timestamp: any
   }>
+  /** Nachtrag durch befugte Kollegen (nicht Admin) */
+  manualTimeEntry?: boolean
+  manualTimeEntryAddedByEmployeeId?: string
+  manualTimeEntryAddedByDisplayName?: string
+  manualTimeEntryCreatedAt?: any
 }
 
 export interface Vehicle {
@@ -79,6 +84,7 @@ export interface Vehicle {
 export interface VehicleUsage {
   id: string
   vehicleId: string
+  vehicleName?: string
   employeeId: string
   projectId: string
   date: string | Date | any

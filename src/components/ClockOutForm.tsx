@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project, Employee } from '../types'
+import type { TimeEntry, Project, Employee, Vehicle, VehicleUsage } from '../types'
 import VehicleBookingModal from './VehicleBookingModal'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
@@ -11,6 +11,7 @@ interface ClockOutFormProps {
   project: Project | null
   clockInTime: Date | null
   onSimpleClockOut: () => void
+  onExtendedClockOutSuccess: () => void
   onUpdate: () => void
 }
 
@@ -19,12 +20,13 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   project,
   clockInTime,
   onSimpleClockOut,
+  onExtendedClockOutSuccess,
   onUpdate
 }) => {
   const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showExtendedModal, setShowExtendedModal] = useState(false)
   const [showLiveDocModal, setShowLiveDocModal] = useState(false)
-  const [vehicleBookings, setVehicleBookings] = useState<any[]>([])
+  const [vehicleBookings, setVehicleBookings] = useState<VehicleUsage[]>([])
 
   const documentationUsers = ['mdorner', 'plauffer', 'csoergel']
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
@@ -42,17 +44,53 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
 
   const loadVehicleBookings = async () => {
     try {
-      const bookings = await DataService.getVehicleUsagesByProject(timeEntry.projectId)
-      const today = new Date().toISOString().split('T')[0]
-      
-      const user = await DataService.getCurrentUser()
-      const myBookings = bookings.filter(booking => {
-        const bookingDate = booking.date instanceof Date
-          ? booking.date.toISOString().split('T')[0]
-          : booking.date?.toDate?.()?.toISOString().split('T')[0] || booking.date
-        return booking.employeeId === user?.id && bookingDate === today
-      })
-      
+      const [bookings, vehicles, user] = await Promise.all([
+        DataService.getVehicleUsagesByProject(timeEntry.projectId),
+        DataService.getAllVehicles(),
+        DataService.getCurrentUser()
+      ])
+
+      const formatDateToKey = (value: any): string => {
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return value
+        }
+
+        const asDate = value instanceof Date
+          ? value
+          : value?.toDate?.()
+            ? value.toDate()
+            : typeof value === 'string'
+              ? new Date(value)
+              : null
+
+        if (!asDate || isNaN(asDate.getTime())) {
+          return typeof value === 'string' ? value : ''
+        }
+
+        const year = asDate.getFullYear()
+        const month = String(asDate.getMonth() + 1).padStart(2, '0')
+        const day = String(asDate.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      const today = formatDateToKey(new Date())
+      const vehicleNameById = new Map<string, string>(
+        (vehicles || []).map((vehicle: Vehicle) => [String(vehicle.id), vehicle.name])
+      )
+
+      const myBookings = bookings
+        .filter((booking) => {
+          const bookingDate = formatDateToKey(booking.date)
+          return booking.employeeId === user?.id && bookingDate === today
+        })
+        .map((booking) => ({
+          ...booking,
+          vehicleName:
+            booking.vehicleName ||
+            vehicleNameById.get(String(booking.vehicleId)) ||
+            'Unbekanntes Fahrzeug'
+        }))
+
       setVehicleBookings(myBookings)
     } catch (error) {
       console.error('Fehler beim Laden der Fahrzeugbuchungen:', error)
@@ -72,20 +110,20 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           <p className="project-name">
             <strong>{project?.name || 'Unbekanntes Projekt'}</strong>
           </p>
-          <p className="project-client">📋 Kunde: {project?.client || '-'}</p>
+          <p className="project-client">Kunde: {project?.client || '-'}</p>
           <p className="project-location">
-            📍 Adresse: {project?.address || project?.location || '-'}
+            Adresse: {project?.address || project?.location || '-'}
           </p>
         </div>
       </div>
 
       <p className="clock-in-info">
-        ⏱️ Eingestempelt seit: {formatTime(clockInTime)}
+        Eingestempelt seit: {formatTime(clockInTime)}
       </p>
 
       {vehicleBookings.length > 0 && (
         <div className="current-vehicle-bookings">
-          <h4>🚗 Gebuchte Fahrzeuge heute:</h4>
+          <h4>Gebuchte Fahrzeuge heute:</h4>
           <div className="vehicle-bookings-list">
             {vehicleBookings.map((booking) => (
               <div key={booking.id} className="booking-item">
@@ -95,7 +133,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
                   </div>
                   {booking.hoursUsed && (
                     <div className="booking-item-hours">
-                      ⏱️ {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
+                      {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
                     </div>
                   )}
                   {booking.comment && (
@@ -116,13 +154,13 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           onClick={() => setShowVehicleModal(true)} 
           className="btn info-btn"
         >
-          🚗 Fahrzeugzeit buchen
+          Fahrzeugzeit buchen
         </button>
         <button 
           onClick={() => setShowLiveDocModal(true)} 
           className="btn info-btn"
         >
-          📝 Dokumentation hinzufügen
+          Dokumentation hinzufügen
         </button>
         {canUseDocumentation && (
           <button 
@@ -151,7 +189,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
             setShowExtendedModal(false)
             onUpdate()
           }}
-          onClockOut={onSimpleClockOut}
+          onClockOutSuccess={onExtendedClockOutSuccess}
         />
       )}
 

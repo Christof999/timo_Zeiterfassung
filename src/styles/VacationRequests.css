@@ -1,56 +1,92 @@
 .vacation-container {
   min-height: 100vh;
-  background: var(--background-color);
-  padding: var(--spacing-lg);
+  min-height: 100dvh;
+  background: var(--light-color);
+  padding: var(--spacing-md);
   padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
-  padding-bottom: calc(var(--spacing-xl) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
 }
 
 .vacation-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .vacation-header h1 {
-  font-size: clamp(1.5rem, 4vw, 1.75rem);
+  font-size: clamp(1.375rem, 4vw, 1.625rem);
   margin: 0;
   flex: 1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-color);
 }
 
 .back-btn {
-  background: var(--light-color);
-  border: none;
-  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  padding: 10px var(--spacing-md);
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   color: var(--text-color);
-  min-height: var(--touch-target-min);
+  min-height: var(--btn-height);
   transition: all var(--transition-base);
+  font-weight: var(--font-weight-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  box-shadow: var(--shadow-sm);
 }
 
 .back-btn:hover {
-  background: var(--border-color);
+  background: var(--light-color);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-/* Urlaubskonto Card */
+.back-btn:active {
+  transform: scale(0.98);
+}
+
+/* Urlaubskonto */
 .vacation-account {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%) !important;
-  color: white !important;
+  background: var(--card-background) !important;
+  color: var(--text-color) !important;
   padding: var(--spacing-xl);
   border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-lg);
-  border: none !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--shadow-sm);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.vacation-account::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary-color);
+  pointer-events: none;
 }
 
 .vacation-account h3 {
   margin: 0 0 var(--spacing-lg);
-  font-size: 1rem;
-  opacity: 0.9;
-  font-weight: 500;
-  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .vacation-stats {
@@ -65,30 +101,30 @@
 
 .vacation-stats .stat-value {
   display: block;
-  font-size: clamp(2rem, 6vw, 2.5rem);
+  font-size: clamp(2rem, 7vw, 2.75rem);
   font-weight: 700;
-  line-height: 1.2;
-  color: white;
+  line-height: 1.1;
+  color: var(--text-color);
 }
 
 .vacation-stats .stat-label {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .vacation-progress {
   height: 8px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
+  background: var(--border-light);
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
 .vacation-progress-bar {
   height: 100%;
-  background: white;
-  border-radius: 4px;
-  transition: width 0.3s ease;
+  background: var(--primary-color);
+  border-radius: var(--radius-full);
+  transition: width 0.5s var(--transition-spring);
 }
 
 /* Neuer Antrag Button */
@@ -96,7 +132,28 @@
   width: 100%;
   margin-bottom: var(--spacing-lg);
   font-size: 1rem;
-  min-height: 52px;
+  min-height: 54px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.new-request-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.new-request-btn:active {
+  transform: translateY(0);
 }
 
 /* Antragsformular */
@@ -105,8 +162,12 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   margin-bottom: var(--spacing-lg);
-  border: 0.5px solid var(--border-color);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  animation: slideUp 0.4s var(--transition-base);
 }
 
 .vacation-form .form-header {
@@ -114,20 +175,24 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .vacation-form .form-header h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-color);
 }
 
 .vacation-form .close-btn {
   background: var(--light-color);
-  border: none;
-  width: 36px;
-  height: 36px;
+  border: 2px solid var(--border-color);
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-full);
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   cursor: pointer;
   color: var(--text-secondary);
   display: flex;
@@ -137,8 +202,9 @@
 }
 
 .vacation-form .close-btn:hover {
-  background: var(--border-color);
-  color: var(--text-color);
+  background: var(--danger-light);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
 }
 
 .vacation-form .form-row {
@@ -155,7 +221,7 @@
   display: block;
   margin-bottom: var(--spacing-sm);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   color: var(--text-color);
 }
 
@@ -163,15 +229,21 @@
 .vacation-form select,
 .vacation-form textarea {
   width: 100%;
-  padding: var(--spacing-md);
-  border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: 1rem;
+  padding: 12px var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-base);
   font-family: inherit;
   background: var(--background-color);
   color: var(--text-color);
-  min-height: var(--touch-target-min);
+  min-height: var(--touch-target-comfortable);
   transition: all var(--transition-base);
+}
+
+.vacation-form input:hover,
+.vacation-form select:hover,
+.vacation-form textarea:hover {
+  border-color: var(--medium-gray);
 }
 
 .vacation-form input:focus,
@@ -179,52 +251,92 @@
 .vacation-form textarea:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.15);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .vacation-form textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 100px;
 }
 
 .working-days-info {
-  padding: var(--spacing-md);
-  border-radius: var(--radius-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-lg);
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .working-days-info.info {
-  background: rgba(0, 122, 255, 0.1);
+  background: var(--accent-light);
   color: var(--accent-color);
-  border: 1px solid rgba(0, 122, 255, 0.2);
+  border: 1px solid var(--border-light);
 }
 
 .working-days-info.warning {
-  background: rgba(255, 149, 0, 0.1);
-  color: #cc7700;
-  border: 1px solid rgba(255, 149, 0, 0.2);
+  background: var(--warning-light);
+  color: #B45309;
+  border: 1px solid var(--border-light);
 }
 
 .vacation-form .form-actions {
   display: flex;
   gap: var(--spacing-md);
-  margin-top: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-light);
 }
 
 .vacation-form .form-actions .btn {
   flex: 1;
-  min-height: var(--touch-target-min);
+  min-height: var(--touch-target-comfortable);
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.vacation-form .form-actions .btn.primary-btn {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.vacation-form .form-actions .btn.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.vacation-form .form-actions .btn.secondary-btn {
+  background: var(--card-background);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.vacation-form .form-actions .btn.secondary-btn:hover {
+  background: var(--light-color);
+  border-color: var(--medium-gray);
 }
 
 /* Antragsliste */
 .requests-list {
   margin-top: var(--spacing-xl);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .requests-list h3 {
   margin-bottom: var(--spacing-lg);
-  font-size: 1.125rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .request-card {
@@ -232,13 +344,18 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-md);
-  border: 0.5px solid var(--border-color);
+  border: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
   border-left: 4px solid var(--border-color);
+  transition: all var(--transition-base);
+}
+
+.request-card:hover {
+  box-shadow: var(--shadow);
 }
 
 .request-card.status-pending {
-  border-left-color: #ff9500;
+  border-left-color: var(--warning-color);
 }
 
 .request-card.status-approved {
@@ -257,30 +374,32 @@
 }
 
 .request-type {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 1rem;
   color: var(--text-color);
 }
 
-.status-badge {
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
+.vacation-status-badge {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
-.status-badge.pending {
-  background: rgba(255, 149, 0, 0.15);
-  color: #cc7700;
+.vacation-status-badge.pending {
+  background: var(--warning-light);
+  color: #B45309;
 }
 
-.status-badge.approved {
-  background: rgba(52, 199, 89, 0.15);
+.vacation-status-badge.approved {
+  background: var(--success-light);
   color: var(--success-color);
 }
 
-.status-badge.rejected {
-  background: rgba(255, 59, 48, 0.15);
+.vacation-status-badge.rejected {
+  background: var(--danger-light);
   color: var(--danger-color);
 }
 
@@ -292,34 +411,38 @@
 }
 
 .date-range {
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
   color: var(--text-color);
+  font-weight: 500;
 }
 
 .days-count {
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
   color: var(--text-secondary);
   background: var(--light-color);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  font-weight: 500;
 }
 
 .request-reason {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
   margin: var(--spacing-sm) 0;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-md);
   background: var(--light-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
 }
 
 .rejection-reason {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--danger-color);
   margin: var(--spacing-sm) 0;
-  padding: var(--spacing-sm);
-  background: rgba(255, 59, 48, 0.1);
-  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  background: var(--danger-light);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
 }
 
 .request-footer {
@@ -327,42 +450,56 @@
   justify-content: space-between;
   align-items: center;
   margin-top: var(--spacing-md);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .request-date {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .delete-btn {
-  background: none;
-  border: none;
-  font-size: 1.25rem;
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  padding: var(--spacing-xs);
-  opacity: 0.6;
+  padding: 6px 10px;
+  min-height: 30px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-base);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .delete-btn:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  background: var(--danger-light);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.delete-btn:active {
+  transform: scale(0.95);
 }
 
 /* Card-Klasse für allgemeine Verwendung */
 .card {
   background: var(--card-background);
-  border-radius: var(--radius-lg);
-  border: 0.5px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
 }
 
 .no-data {
   text-align: center;
-  color: var(--text-secondary);
-  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  padding: var(--spacing-2xl);
+  font-size: 0.9375rem;
 }
 
 /* Mobile Anpassungen */
@@ -370,22 +507,35 @@
   .vacation-container {
     padding: var(--spacing-md);
   }
-  
+
   .vacation-form .form-row {
     grid-template-columns: 1fr;
   }
-  
+
   .vacation-account {
     padding: var(--spacing-lg);
+    border-radius: var(--radius-lg);
   }
-  
+
   .vacation-stats .stat-value {
     font-size: 1.75rem;
   }
-  
+
   .request-dates {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-xs);
+  }
+
+  .vacation-form,
+  .request-card {
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .vacation-container {
+    background: var(--light-color);
   }
 }

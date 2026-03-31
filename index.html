@@ -31,17 +31,6 @@
 <body>
     <div id="root"></div>
     <script type="module" src="./src/main.tsx"></script>
-    <!-- Service Worker deaktivieren für React-Version -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for(let registration of registrations) {
-                    registration.unregister();
-                    console.log('Service Worker deaktiviert');
-                }
-            });
-        }
-    </script>
 </body>
 </html>
 

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload } from '../../../types'
 import { toast } from '../../ToastContainer'
+import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
 
@@ -38,8 +39,28 @@ interface VehicleSummary {
   totalCost: number
 }
 
-const ReportsTab: React.FC = () => {
-  const [reportType, setReportType] = useState<ReportType>('employee')
+interface ReportsTabProps {
+  defaultReportType?: ReportType
+  allowedReportTypes?: ReportType[]
+}
+
+const ReportsTab: React.FC<ReportsTabProps> = ({
+  defaultReportType = 'employee',
+  allowedReportTypes
+}) => {
+  const availableReportTypes: ReportType[] =
+    allowedReportTypes && allowedReportTypes.length > 0
+      ? allowedReportTypes
+      : ['employee', 'project']
+
+  const getInitialReportType = (): ReportType => {
+    if (availableReportTypes.includes(defaultReportType)) {
+      return defaultReportType
+    }
+    return availableReportTypes[0] || 'employee'
+  }
+
+  const [reportType, setReportType] = useState<ReportType>(getInitialReportType)
   
   // Gemeinsame States
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -65,14 +86,43 @@ const ReportsTab: React.FC = () => {
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [useTimeFilter, setUseTimeFilter] = useState(false)
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false)
+  const printResetTimeoutRef = useRef<number | null>(null)
+  const isPrintInProgressRef = useRef(false)
+
+  const clearPrintResetTimeout = () => {
+    if (printResetTimeoutRef.current !== null) {
+      window.clearTimeout(printResetTimeoutRef.current)
+      printResetTimeoutRef.current = null
+    }
+  }
+
+  const resetPrintPreparation = () => {
+    clearPrintResetTimeout()
+    isPrintInProgressRef.current = false
+    setIsPreparingPrint(false)
+  }
 
   useEffect(() => {
     loadInitialData()
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    setStartDate(firstDay.toISOString().split('T')[0])
-    setEndDate(lastDay.toISOString().split('T')[0])
+    setStartDate(formatDateForInputLocal(firstDay))
+    setEndDate(formatDateForInputLocal(lastDay))
+  }, [])
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      resetPrintPreparation()
+    }
+
+    window.addEventListener('afterprint', handleAfterPrint)
+
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+      clearPrintResetTimeout()
+    }
   }, [])
 
   // Reset wenn Berichtstyp wechselt
@@ -376,7 +426,7 @@ const ReportsTab: React.FC = () => {
         const hours = usage.hours || usage.hoursUsed || 0
         const vehicle = vehicles.find(v => v.id === usage.vehicleId)
         const hourlyRate = vehicle?.hourlyRate || 0
-        const vehicleName = vehicle?.name || usage.vehicleId
+        const vehicleName = vehicle?.name || usage.vehicleName || usage.vehicleId
         
         const existing = vehicleMap.get(usage.vehicleId)
         if (existing) {
@@ -399,7 +449,7 @@ const ReportsTab: React.FC = () => {
       // Fotos und Dokumente laden
       try {
         const [photos, docs] = await Promise.all([
-          DataService.getProjectFiles(selectedProjectId, 'photo'),
+          DataService.getProjectFiles(selectedProjectId, 'construction_site'),
           DataService.getProjectFiles(selectedProjectId, 'document')
         ])
         
@@ -440,7 +490,39 @@ const ReportsTab: React.FC = () => {
     return ''
   }
 
-  const handlePrint = () => window.print()
+  const handlePrint = () => {
+    if (isPrintInProgressRef.current) {
+      return
+    }
+
+    if (reportType === 'employee') {
+      handleEmployeeTablePrint()
+      return
+    }
+
+    if (!hasSearched) {
+      toast.error('Kein Bericht zum Drucken vorhanden')
+      return
+    }
+
+    isPrintInProgressRef.current = true
+    setIsPreparingPrint(true)
+    clearPrintResetTimeout()
+    toast.info('Druckvorschau wird geöffnet ...')
+
+    // Fallback, falls ein Browser kein afterprint-Event liefert.
+    printResetTimeoutRef.current = window.setTimeout(() => {
+      resetPrintPreparation()
+    }, 15000)
+
+    try {
+      window.print()
+    } catch (error) {
+      console.error('Fehler beim Öffnen der Druckvorschau:', error)
+      resetPrintPreparation()
+      toast.error('Druckvorschau konnte nicht geöffnet werden')
+    }
+  }
 
   const formatPeriod = (): string => {
     const start = new Date(startDate)
@@ -448,28 +530,207 @@ const ReportsTab: React.FC = () => {
     return `${start.toLocaleDateString('de-DE')} - ${end.toLocaleDateString('de-DE')}`
   }
 
+  const escapeHtml = (value: string): string => {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  }
+
+  const buildEmployeePrintHtml = (): string => {
+    const rowsHtml = reportEntries
+      .map((entry) => {
+        return `<tr>
+  <td>${escapeHtml(entry.date)}</td>
+  <td>${escapeHtml(entry.projectName)}</td>
+  <td>${escapeHtml(entry.clockIn)}</td>
+  <td>${escapeHtml(entry.clockOut)}</td>
+  <td>${entry.pauseMinutes}</td>
+  <td>${escapeHtml(entry.workHours)}</td>
+</tr>`
+      })
+      .join('')
+
+    return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arbeitszeitnachweis</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #222;
+      background: #fff;
+    }
+    .meta {
+      margin-bottom: 16px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .meta strong {
+      display: inline-block;
+      min-width: 110px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #d6d6d6;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background: #f4f4f4;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    tfoot td {
+      font-weight: 700;
+      background: #fafafa;
+    }
+    .right {
+      text-align: right;
+    }
+    @page {
+      margin: 12mm;
+      size: A4 portrait;
+    }
+  </style>
+</head>
+<body>
+  <div class="meta">
+    <div><strong>Mitarbeiter:</strong> ${escapeHtml(selectedEmployeeName || '-')}</div>
+    <div><strong>Zeitraum:</strong> ${escapeHtml(formatPeriod())}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tag</th>
+        <th>Projekt</th>
+        <th>Kommen</th>
+        <th>Gehen</th>
+        <th>Pause</th>
+        <th>Arbeitszeit</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Gesamt:</td>
+        <td class="right">${escapeHtml(calculateTotalHours())}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`
+  }
+
+  const handleEmployeeTablePrint = () => {
+    if (reportEntries.length === 0) {
+      toast.error('Keine Zeiteinträge zum Drucken vorhanden')
+      return
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Popup blockiert. Bitte Popups für diese Seite erlauben.')
+      return
+    }
+
+    isPrintInProgressRef.current = true
+    setIsPreparingPrint(true)
+    clearPrintResetTimeout()
+    toast.info('Druckansicht wird vorbereitet ...')
+
+    let hasCleanedUp = false
+    let hasTriggeredPrint = false
+
+    const cleanup = () => {
+      if (hasCleanedUp) return
+      hasCleanedUp = true
+      resetPrintPreparation()
+      window.setTimeout(() => {
+        try {
+          printWindow.close()
+        } catch {
+          // no-op
+        }
+      }, 200)
+    }
+
+    printResetTimeoutRef.current = window.setTimeout(() => {
+      cleanup()
+    }, 20000)
+
+    const triggerPrint = () => {
+      if (hasTriggeredPrint) return
+      hasTriggeredPrint = true
+      try {
+        printWindow.focus()
+        printWindow.print()
+      } catch (error) {
+        console.error('Fehler beim Öffnen der Druckvorschau:', error)
+        toast.error('Druckvorschau konnte nicht geöffnet werden')
+        cleanup()
+      }
+    }
+
+    try {
+      printWindow.document.open()
+      printWindow.document.write(buildEmployeePrintHtml())
+      printWindow.document.close()
+
+      printWindow.addEventListener('afterprint', cleanup, { once: true })
+      printWindow.onload = () => {
+        window.setTimeout(() => triggerPrint(), 80)
+      }
+
+      // Fallback, falls onload/afterprint auf einzelnen Browsern nicht zuverlässig feuert.
+      window.setTimeout(() => triggerPrint(), 350)
+    } catch (error) {
+      console.error('Fehler beim Vorbereiten des Druckdokuments:', error)
+      cleanup()
+      toast.error('Druckdokument konnte nicht erstellt werden')
+    }
+  }
+
   const hasEdits = reportEntries.some(e => e.isEdited)
+  const isEmployeeReportEnabled = availableReportTypes.includes('employee')
+  const isProjectReportEnabled = availableReportTypes.includes('project')
+  const showReportTypeTabs = isEmployeeReportEnabled && isProjectReportEnabled
 
   return (
     <div className="reports-tab">
       {/* Tab-Auswahl */}
-      <div className="report-type-tabs no-print">
-        <button
-          className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
-          onClick={() => setReportType('employee')}
-        >
-          👤 Mitarbeiter-Zeitauswertung
-        </button>
-        <button
-          className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
-          onClick={() => setReportType('project')}
-        >
-          📁 Projekt-Nachkalkulation
-        </button>
-      </div>
+      {showReportTypeTabs && (
+        <div className="report-type-tabs no-print">
+          <button
+            className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
+            onClick={() => setReportType('employee')}
+          >
+            Mitarbeiter-Zeitauswertung
+          </button>
+          <button
+            className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
+            onClick={() => setReportType('project')}
+          >
+            Projekt-Nachkalkulation
+          </button>
+        </div>
+      )}
 
       {/* ==================== MITARBEITER-BERICHT ==================== */}
-      {reportType === 'employee' && (
+      {isEmployeeReportEnabled && reportType === 'employee' && (
         <>
           <div className="report-filters no-print">
             <h3>Zeitauswertung erstellen</h3>
@@ -497,7 +758,7 @@ const ReportsTab: React.FC = () => {
               </div>
             </div>
             <button onClick={handleEmployeeSearch} className="btn primary-btn search-btn" disabled={isLoading}>
-              {isLoading ? 'Lädt...' : '🔍 Auswertung laden'}
+              {isLoading ? 'Lädt...' : 'Auswertung laden'}
             </button>
           </div>
 
@@ -515,16 +776,18 @@ const ReportsTab: React.FC = () => {
               <div className="report-actions no-print">
                 <div className="actions-left">
                   <h4>Bericht für {selectedEmployeeName} <span className="date-range">({formatPeriod()})</span></h4>
-                  {hasEdits && <span className="edit-hint">⚠️ Es gibt temporäre Änderungen (nur für Druck)</span>}
+                  {hasEdits && <span className="edit-hint">Es gibt temporäre Änderungen (nur für Druck)</span>}
                 </div>
                 <div className="actions-right">
-                  {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">↩️ Zurücksetzen</button>}
-                  <button onClick={handlePrint} className="btn primary-btn">🖨️ Drucken</button>
+                  {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">Zurücksetzen</button>}
+                  <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
+                    {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
+                  </button>
                 </div>
               </div>
 
               <div className="edit-notice no-print">
-                <p>💡 <strong>Tipp:</strong> Änderungen sind nur temporär für den Druck.</p>
+                <p><strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck.</p>
               </div>
 
               {reportEntries.length === 0 ? (
@@ -552,7 +815,7 @@ const ReportsTab: React.FC = () => {
                           <td><input type="time" value={entry.clockOut} onChange={(e) => handleFieldChange(index, 'clockOut', e.target.value)} className="inline-edit time-input" /></td>
                           <td><input type="number" min="0" value={entry.pauseMinutes} onChange={(e) => handleFieldChange(index, 'pauseMinutes', e.target.value)} className="inline-edit pause-input" /></td>
                           <td className="hours-cell">{entry.workHours}</td>
-                          <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">↩️</button>}</td>
+                          <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">Zurück</button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -579,7 +842,7 @@ const ReportsTab: React.FC = () => {
       )}
 
       {/* ==================== PROJEKT-BERICHT ==================== */}
-      {reportType === 'project' && (
+      {isProjectReportEnabled && reportType === 'project' && (
         <>
           <div className="report-filters no-print">
             <h3>Projekt-Nachkalkulation</h3>
@@ -616,7 +879,7 @@ const ReportsTab: React.FC = () => {
             )}
 
             <button onClick={handleProjectSearch} className="btn primary-btn search-btn" disabled={isLoading}>
-              {isLoading ? 'Lädt...' : '🔍 Kalkulation erstellen'}
+              {isLoading ? 'Lädt...' : 'Kalkulation erstellen'}
             </button>
           </div>
 
@@ -633,13 +896,15 @@ const ReportsTab: React.FC = () => {
                   <h4>Kalkulation: {selectedProject.name}</h4>
                 </div>
                 <div className="actions-right">
-                  <button onClick={handlePrint} className="btn primary-btn">🖨️ Drucken</button>
+                  <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
+                    {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
+                  </button>
                 </div>
               </div>
 
               {/* Projektinfo */}
               <div className="project-info-section">
-                <h4>📋 Projektinformationen</h4>
+                <h4>Projektinformationen</h4>
                 <div className="project-info-grid">
                   <div className="info-item">
                     <span className="info-label">Projekt:</span>
@@ -674,7 +939,7 @@ const ReportsTab: React.FC = () => {
 
               {/* Personalkosten */}
               <div className="cost-section">
-                <h4>👥 Personalkosten</h4>
+                <h4>Personalkosten</h4>
                 {employeeSummaries.length === 0 ? (
                   <p className="no-data">Keine Zeiteinträge vorhanden</p>
                 ) : (
@@ -709,7 +974,7 @@ const ReportsTab: React.FC = () => {
 
               {/* Fahrzeugkosten */}
               <div className="cost-section">
-                <h4>🚗 Fahrzeugkosten</h4>
+                <h4>Fahrzeugkosten</h4>
                 {vehicleSummaries.length === 0 ? (
                   <p className="no-data">Keine Fahrzeugbuchungen vorhanden</p>
                 ) : (
@@ -753,7 +1018,7 @@ const ReportsTab: React.FC = () => {
               {/* Baustellenfotos */}
               {projectPhotos.length > 0 && (
                 <div className="media-section">
-                  <h4>📷 Baustellenfotos ({projectPhotos.length})</h4>
+                  <h4>Baustellenfotos ({projectPhotos.length})</h4>
                   <div className="photo-grid">
                     {projectPhotos.map((photo, idx) => {
                       const imgSrc = getImageSrc(photo)
@@ -763,7 +1028,7 @@ const ReportsTab: React.FC = () => {
                           {imgSrc ? (
                             <img src={imgSrc} alt={photo.fileName || 'Foto'} className="photo-thumbnail" />
                           ) : (
-                            <div className="photo-placeholder">📷</div>
+                            <div className="photo-placeholder">Kein Bild</div>
                           )}
                           <div className="photo-info">
                             {uploadDate && <span className="photo-date">{uploadDate.toLocaleDateString('de-DE')}</span>}
@@ -781,7 +1046,7 @@ const ReportsTab: React.FC = () => {
               {/* Dokumente */}
               {projectDocuments.length > 0 && (
                 <div className="media-section">
-                  <h4>📄 Dokumente ({projectDocuments.length})</h4>
+                  <h4>Dokumente ({projectDocuments.length})</h4>
                   <div className="document-list">
                     {projectDocuments.map((doc, idx) => {
                       const imgSrc = getImageSrc(doc)
@@ -791,7 +1056,7 @@ const ReportsTab: React.FC = () => {
                           {imgSrc ? (
                             <img src={imgSrc} alt={doc.fileName || 'Dokument'} className="document-thumbnail" />
                           ) : (
-                            <div className="document-placeholder">📄</div>
+                            <div className="document-placeholder">Dok.</div>
                           )}
                           <div className="document-info">
                             <span className="document-name">{doc.fileName || 'Dokument'}</span>

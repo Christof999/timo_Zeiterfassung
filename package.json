@@ -16,6 +16,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "20.x"
+  },
   "bugs": {
     "url": "https://github.com/Christof999/Zeiterfassung/issues"
   },
@@ -25,10 +28,12 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "firebase": "^12.6.0",
+    "firebase-admin": "^13.7.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.1",
     "typescript": "^5.9.3",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "web-push": "^3.6.7"
   }
 }

@@ -6,10 +6,37 @@
 }
 
 .admin-login-header {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-xl) var(--spacing-md);
   text-align: center;
   background: var(--card-background);
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.admin-login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.admin-login-logo-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  background: var(--card-background);
+}
+
+.admin-login-logo h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.admin-login-logo p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .admin-login-main {
@@ -17,7 +44,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
 }
 
 .admin-login-section {
@@ -25,27 +52,29 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
   box-shadow: var(--shadow-md);
-  border: 0.5px solid var(--border-color);
+  border: 1px solid var(--border-color);
   width: 100%;
   max-width: 420px;
 }
 
 .admin-login-section h2 {
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   text-align: center;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
 }
 
 .admin-login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 .user-link {
   margin-top: var(--spacing-lg);
   text-align: center;
   padding-top: var(--spacing-lg);
-  border-top: 0.5px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
 }
 
 .link-btn {
@@ -53,8 +82,8 @@
   border: none;
   color: var(--primary-color);
   text-decoration: none;
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: color var(--transition-base);
   padding: 0;

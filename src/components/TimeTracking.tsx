@@ -4,7 +4,9 @@ import { DataService } from '../services/dataService'
 import type { Employee, Project, TimeEntry } from '../types'
 import ClockInForm from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
+import ManualTimeEntryModal from './ManualTimeEntryModal'
 import RecentActivities from './RecentActivities'
+import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
 import '../styles/TimeTracking.css'
@@ -16,7 +18,11 @@ const TimeTracking: React.FC = () => {
   const [clockInTime, setClockInTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState('00:00:00')
   const [isLoading, setIsLoading] = useState(true)
+  const [showManualEntryModal, setShowManualEntryModal] = useState(false)
+  const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
   const navigate = useNavigate()
+
+  const canManualTimeEntry = canAddManualTimeEntries(currentUser?.username)
 
   useEffect(() => {
     const init = async () => {
@@ -101,10 +107,7 @@ const TimeTracking: React.FC = () => {
         location
       )
 
-      setCurrentTimeEntry(null)
-      setCurrentProject(null)
-      setClockInTime(null)
-      setElapsedTime('00:00:00')
+      resetClockOutState()
 
       if (result.automaticBreak) {
         toast.success(`Erfolgreich ausgestempelt! Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten (${result.automaticBreak.reason})`, 6000)
@@ -114,6 +117,13 @@ const TimeTracking: React.FC = () => {
     } catch (error: any) {
       toast.error('Fehler beim Ausstempeln: ' + error.message)
     }
+  }
+
+  const resetClockOutState = () => {
+    setCurrentTimeEntry(null)
+    setCurrentProject(null)
+    setClockInTime(null)
+    setElapsedTime('00:00:00')
   }
 
   const handleLogout = () => {
@@ -160,11 +170,11 @@ const TimeTracking: React.FC = () => {
   return (
     <div className="time-tracking-container">
       <header className="time-tracking-header">
-        <div className="logo">
+        <div className="time-tracking-logo">
           <img 
             src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
             alt="Lauffer Logo" 
-            className="logo-image"
+            className="time-tracking-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
           <p>Gartenbau • Erdbau • Natursteinhandel</p>
@@ -176,6 +186,21 @@ const TimeTracking: React.FC = () => {
           <p>Angemeldet als: <strong>{currentUser.firstName} {currentUser.lastName}</strong></p>
           <NavigationMenu onLogout={handleLogout} />
         </div>
+
+        {canManualTimeEntry && (
+          <div className="manual-time-entry-banner">
+            <p className="manual-time-entry-banner-text">
+              Sie können vergessene Stempelzeiten für sich oder andere Mitarbeiter nachtragen.
+            </p>
+            <button
+              type="button"
+              className="manual-time-entry-open-btn"
+              onClick={() => setShowManualEntryModal(true)}
+            >
+              Stempelzeit nachtragen
+            </button>
+          </div>
+        )}
 
         <div className="time-status-section">
           <h2>Status: <span className={currentTimeEntry ? 'status-clocked-in' : 'status-clocked-out'}>
@@ -194,14 +219,38 @@ const TimeTracking: React.FC = () => {
             project={currentProject}
             clockInTime={clockInTime}
             onSimpleClockOut={handleSimpleClockOut}
+            onExtendedClockOutSuccess={resetClockOutState}
             onUpdate={() => {
-              // Reload time entry
-              DataService.getCurrentTimeEntry(currentUser.id!).then(setCurrentTimeEntry)
+              // Reload time entry inkl. Anzeigezustand
+              DataService.getCurrentTimeEntry(currentUser.id!).then(async (entry) => {
+                setCurrentTimeEntry(entry)
+
+                if (!entry) {
+                  resetClockOutState()
+                  return
+                }
+
+                const project = await DataService.getProjectById(entry.projectId)
+                setCurrentProject(project)
+
+                const clockIn = entry.clockInTime instanceof Date
+                  ? entry.clockInTime
+                  : entry.clockInTime?.toDate?.() || new Date(entry.clockInTime)
+                setClockInTime(clockIn)
+              })
             }}
           />
         )}
 
-        <RecentActivities employeeId={currentUser.id!} />
+        <RecentActivities employeeId={currentUser.id!} refreshKey={activitiesRefreshKey} />
+
+        {showManualEntryModal && (
+          <ManualTimeEntryModal
+            addedBy={currentUser}
+            onClose={() => setShowManualEntryModal(false)}
+            onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
       </main>
     </div>
   )

@@ -8,6 +8,7 @@ import '../../../styles/AdminTabs.css'
 const VehiclesTab: React.FC = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
 
@@ -43,6 +44,25 @@ const VehiclesTab: React.FC = () => {
     loadVehicles()
   }
 
+  const handleDelete = async (vehicle: Vehicle) => {
+    if (!vehicle.id) return
+
+    if (!confirm(`Fahrzeug "${vehicle.name}" wirklich löschen?`)) {
+      return
+    }
+
+    setDeletingVehicleId(vehicle.id)
+    try {
+      await DataService.deleteVehicle(vehicle.id)
+      toast.success('Fahrzeug gelöscht')
+      await loadVehicles()
+    } catch (error: any) {
+      toast.error('Fehler beim Löschen: ' + error.message)
+    } finally {
+      setDeletingVehicleId(null)
+    }
+  }
+
   if (isLoading) {
     return <div className="loading">Lade Fahrzeuge...</div>
   }
@@ -52,7 +72,7 @@ const VehiclesTab: React.FC = () => {
       <div className="tab-header">
         <h3>Fahrzeuge</h3>
         <button onClick={handleAdd} className="btn primary-btn">
-          ➕ Fahrzeug hinzufügen
+          Fahrzeug hinzufügen
         </button>
       </div>
 
@@ -87,7 +107,16 @@ const VehiclesTab: React.FC = () => {
                       className="action-btn edit-btn"
                       aria-label="Bearbeiten"
                     >
-                      ✏️
+                      Bearbeiten
+                    </button>
+                    <button
+                      onClick={() => handleDelete(vehicle)}
+                      className="action-btn delete-btn"
+                      aria-label="Löschen"
+                      disabled={deletingVehicleId === vehicle.id}
+                      title="Fahrzeug löschen"
+                    >
+                      {deletingVehicleId === vehicle.id ? 'Löscht...' : 'Löschen'}
                     </button>
                   </td>
                 </tr>

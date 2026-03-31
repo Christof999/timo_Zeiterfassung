@@ -6,9 +6,11 @@ import '../styles/RecentActivities.css'
 
 interface RecentActivitiesProps {
   employeeId: string
+  /** Bei Änderung wird die Liste neu geladen (z. B. nach Nachtrag) */
+  refreshKey?: number
 }
 
-const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
+const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refreshKey = 0 }) => {
   const [activities, setActivities] = useState<TimeEntry[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -49,7 +51,7 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
     }
 
     loadActivities()
-  }, [employeeId])
+  }, [employeeId, refreshKey])
 
   const getProjectName = (projectId: string): string => {
     const project = projects.find(p => p.id === projectId)
@@ -106,41 +108,29 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId }) => {
       {activities.length === 0 ? (
         <p>Keine Aktivitäten vorhanden</p>
       ) : (
-        <ul className="activities-list">
+        <ul className="recent-activities-list">
           {activities.map((entry) => {
             const projectName = entry.isVacationDay ? 'Urlaub' : getProjectName(entry.projectId)
             const workHours = calculateWorkHours(entry)
 
             return (
-              <li key={entry.id} className="activity-item">
-                <strong>{projectName}</strong>
-                <br />
-                Datum: {formatDate(entry.clockInTime)}
-                <br />
-                Eingestempelt: {formatTime(entry.clockInTime)}
+              <li key={entry.id} className="recent-activity-item">
+                <p className="recent-activity-title">{projectName}</p>
+                <p>Datum: {formatDate(entry.clockInTime)}</p>
+                <p>Eingestempelt: {formatTime(entry.clockInTime)}</p>
                 {entry.clockOutTime && (
                   <>
-                    <br />
-                    Ausgestempelt: {formatTime(entry.clockOutTime)}
+                    <p>Ausgestempelt: {formatTime(entry.clockOutTime)}</p>
                     {entry.pauseTotalTime && entry.pauseTotalTime > 0 && (
-                      <>
-                        <br />
-                        Pausenzeit: {(entry.pauseTotalTime / (1000 * 60 * 60)).toFixed(2).replace('.', ',')}h
-                      </>
+                      <p>Pausenzeit: {(entry.pauseTotalTime / (1000 * 60 * 60)).toFixed(2).replace('.', ',')}h</p>
                     )}
                     {workHours && (
-                      <>
-                        <br />
-                        Arbeitsstunden: {workHours}h
-                      </>
+                      <p>Arbeitsstunden: {workHours}h</p>
                     )}
                   </>
                 )}
                 {!entry.clockOutTime && (
-                  <>
-                    <br />
-                    <em>Noch eingestempelt</em>
-                  </>
+                  <p className="recent-activity-status">Noch eingestempelt</p>
                 )}
               </li>
             )

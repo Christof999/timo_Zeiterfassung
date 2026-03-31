@@ -4,17 +4,23 @@ import {
   getDoc, 
   getDocs, 
   addDoc, 
+  setDoc,
   updateDoc,
   deleteDoc, 
   query, 
   where, 
   limit,
+  runTransaction,
+  documentId,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
 import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
+
+const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
 
 class DataServiceClass {
   private authReadyPromise: Promise<void>
@@ -103,9 +109,12 @@ class DataServiceClass {
       let projects = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
       
       projects = projects.filter(
-        (project) =>
-          !project.isActive || project.isActive === true ||
-          !project.status || project.status === 'active' || project.status === 'aktiv'
+        (project) => {
+          const isActiveFlag = project.isActive !== false
+          const normalizedStatus = (project.status || '').toLowerCase()
+          const isActiveStatus = !project.status || normalizedStatus === 'active' || normalizedStatus === 'aktiv'
+          return isActiveFlag && isActiveStatus
+        }
       )
       
       projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
@@ -148,14 +157,27 @@ class DataServiceClass {
       const q = query(
         timeEntriesRef,
         where('employeeId', '==', employeeId),
-        where('clockOutTime', '==', null),
-        limit(1)
+        where('clockOutTime', '==', null)
       )
       
       const snapshot = await getDocs(q)
       if (!snapshot.empty) {
-        const doc = snapshot.docs[0]
-        return { id: doc.id, ...doc.data() } as TimeEntry
+        const activeEntries = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+        activeEntries.sort((a, b) => {
+          const aDate = a.clockInTime instanceof Timestamp
+            ? a.clockInTime.toDate()
+            : new Date(a.clockInTime)
+          const bDate = b.clockInTime instanceof Timestamp
+            ? b.clockInTime.toDate()
+            : new Date(b.clockInTime)
+          return bDate.getTime() - aDate.getTime()
+        })
+
+        if (isDevMode && activeEntries.length > 1) {
+          console.warn(`Mehrere offene Zeiteinträge für Mitarbeiter ${employeeId} gefunden:`, activeEntries.length)
+        }
+
+        return activeEntries[0]
       }
       return null
     } catch (error) {
@@ -181,30 +203,130 @@ class DataServiceClass {
   async addTimeEntry(timeEntryData: Partial<TimeEntry>): Promise<TimeEntry> {
     await this.authReadyPromise
     try {
+      if (!timeEntryData.employeeId) {
+        throw new Error('Keine gültige Mitarbeiter-ID angegeben')
+      }
+
       // Validierung: Prüfe auf doppelte Einstempelung
       const existingEntry = await this.getCurrentTimeEntry(timeEntryData.employeeId!)
       if (existingEntry) {
         throw new Error('Sie sind bereits eingestempelt. Bitte stempeln Sie zuerst aus.')
       }
 
+      const employeeRef = doc(db, 'employees', timeEntryData.employeeId)
       const timeEntriesRef = collection(db, 'timeEntries')
+      const timeEntryRef = doc(timeEntriesRef)
+
+      const normalizedClockInTime = timeEntryData.clockInTime
+        ? (timeEntryData.clockInTime instanceof Date
+            ? Timestamp.fromDate(timeEntryData.clockInTime)
+            : timeEntryData.clockInTime)
+        : Timestamp.now()
+
       const entryData = {
         ...timeEntryData,
-        clockInTime: timeEntryData.clockInTime 
-          ? (timeEntryData.clockInTime instanceof Date 
-              ? Timestamp.fromDate(timeEntryData.clockInTime)
-              : timeEntryData.clockInTime)
-          : serverTimestamp(),
+        entryId: timeEntryRef.id,
+        clockInTime: normalizedClockInTime,
         clockOutTime: null
       }
 
-      const docRef = await addDoc(timeEntriesRef, entryData)
-      await updateDoc(docRef, { entryId: docRef.id })
+      await runTransaction(db, async (transaction) => {
+        const employeeDoc = await transaction.get(employeeRef)
+        if (!employeeDoc.exists()) {
+          throw new Error('Mitarbeiter nicht gefunden')
+        }
+
+        const employeeData = employeeDoc.data() as any
+        if (employeeData.activeTimeEntryId) {
+          const activeEntryRef = doc(db, 'timeEntries', employeeData.activeTimeEntryId)
+          const activeEntryDoc = await transaction.get(activeEntryRef)
+          if (activeEntryDoc.exists()) {
+            const activeEntryData = activeEntryDoc.data() as TimeEntry
+            if (activeEntryData.clockOutTime == null) {
+              throw new Error('Sie sind bereits eingestempelt. Bitte stempeln Sie zuerst aus.')
+            }
+          }
+        }
+
+        transaction.set(timeEntryRef, entryData)
+        transaction.update(employeeRef, {
+          activeTimeEntryId: timeEntryRef.id,
+          activeClockInAt: normalizedClockInTime,
+          updatedAt: new Date()
+        })
+      })
       
-      const newEntry = await getDoc(docRef)
-      return { id: docRef.id, ...newEntry.data() } as TimeEntry
+      const newEntry = await getDoc(timeEntryRef)
+      return { id: timeEntryRef.id, ...newEntry.data() } as TimeEntry
     } catch (error) {
       console.error('Fehler beim Erstellen des Zeiteintrags:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Abgeschlossenen Zeiteintrag nachtragen (Start + Ende).
+   * Ändert nicht den Einstempel-Status des Mitarbeiters (kein activeTimeEntryId).
+   */
+  async addManualCompletedTimeEntry(params: {
+    targetEmployeeId: string
+    projectId: string
+    clockInTime: Date
+    clockOutTime: Date
+    pauseTotalTimeMs?: number
+    notes?: string
+    addedByEmployeeId: string
+    addedByDisplayName: string
+  }): Promise<TimeEntry> {
+    await this.authReadyPromise
+    try {
+      if (!params.targetEmployeeId || !params.projectId) {
+        throw new Error('Mitarbeiter und Projekt sind erforderlich')
+      }
+      if (params.clockOutTime.getTime() <= params.clockInTime.getTime()) {
+        throw new Error('Endzeit muss nach der Startzeit liegen')
+      }
+      const now = Date.now()
+      if (params.clockInTime.getTime() > now) {
+        throw new Error('Startzeit darf nicht in der Zukunft liegen')
+      }
+      if (params.clockOutTime.getTime() > now) {
+        throw new Error('Endzeit darf nicht in der Zukunft liegen')
+      }
+
+      const timeEntriesRef = collection(db, 'timeEntries')
+      const timeEntryRef = doc(timeEntriesRef)
+      const clockInTs = Timestamp.fromDate(params.clockInTime)
+      const clockOutTs = Timestamp.fromDate(params.clockOutTime)
+      const pauseTotalTime = params.pauseTotalTimeMs ?? 0
+
+      const noteBase = params.notes?.trim() ?? ''
+      const auditNote = `Nachtrag durch ${params.addedByDisplayName}`
+      const notes = noteBase ? `${noteBase} | ${auditNote}` : auditNote
+
+      const rawPayload: Record<string, unknown> = {
+        entryId: timeEntryRef.id,
+        employeeId: params.targetEmployeeId,
+        projectId: params.projectId,
+        clockInTime: clockInTs,
+        clockOutTime: clockOutTs,
+        pauseTotalTime,
+        notes,
+        manualTimeEntry: true,
+        manualTimeEntryAddedByEmployeeId: params.addedByEmployeeId,
+        manualTimeEntryAddedByDisplayName: params.addedByDisplayName,
+        manualTimeEntryCreatedAt: serverTimestamp()
+      }
+
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      await setDoc(timeEntryRef, payload)
+      const snap = await getDoc(timeEntryRef)
+      return { id: timeEntryRef.id, ...snap.data() } as TimeEntry
+    } catch (error) {
+      console.error('Fehler beim Nachtragen des Zeiteintrags:', error)
       throw error
     }
   }
@@ -221,51 +343,73 @@ class DataServiceClass {
       }
 
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
-      const timeEntryDoc = await getDoc(timeEntryRef)
-      
-      if (!timeEntryDoc.exists()) {
-        throw new Error('Zeiteintrag nicht gefunden')
-      }
+      const automaticBreak = await runTransaction(db, async (transaction) => {
+        const timeEntryDoc = await transaction.get(timeEntryRef)
+        if (!timeEntryDoc.exists()) {
+          throw new Error('Zeiteintrag nicht gefunden')
+        }
 
-      const timeEntry = timeEntryDoc.data() as TimeEntry
-      if (timeEntry.clockOutTime !== null) {
-        throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
-      }
+        const timeEntry = timeEntryDoc.data() as TimeEntry
+        if (timeEntry.clockOutTime != null) {
+          throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
+        }
 
-      const clockOutTime = Timestamp.now()
-      const clockInTime = timeEntry.clockInTime instanceof Timestamp 
-        ? timeEntry.clockInTime.toDate()
-        : new Date(timeEntry.clockInTime)
+        let employeeRef: any = null
+        let shouldClearActiveEntry = false
+        if (timeEntry.employeeId) {
+          employeeRef = doc(db, 'employees', timeEntry.employeeId)
+          const employeeDoc = await transaction.get(employeeRef)
+          if (employeeDoc.exists()) {
+            const employeeData = employeeDoc.data() as any
+            shouldClearActiveEntry = employeeData.activeTimeEntryId === timeEntryId
+          }
+        }
 
-      // Automatische Pausenberechnung nach deutschem Arbeitszeitgesetz
-      const workDurationMs = clockOutTime.toDate().getTime() - clockInTime.getTime()
-      const workDurationHours = workDurationMs / (1000 * 60 * 60)
-      
-      let pauseTotalTime = 0
-      let automaticBreak = undefined
+        const clockOutTime = Timestamp.now()
+        const clockInTime = timeEntry.clockInTime instanceof Timestamp
+          ? timeEntry.clockInTime.toDate()
+          : new Date(timeEntry.clockInTime)
 
-      if (workDurationHours > 6) {
-        // Bei mehr als 6 Stunden: 30 Minuten Pause
-        pauseTotalTime = 30 * 60 * 1000
-        automaticBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
-      } else if (workDurationHours > 9) {
-        // Bei mehr als 9 Stunden: 45 Minuten Pause
-        pauseTotalTime = 45 * 60 * 1000
-        automaticBreak = { duration: 45, reason: 'Arbeitszeit über 9 Stunden' }
-      }
+        // Automatische Pausenberechnung nach deutschem Arbeitszeitgesetz
+        const workDurationMs = clockOutTime.toDate().getTime() - clockInTime.getTime()
+        const workDurationHours = workDurationMs / (1000 * 60 * 60)
 
-      const updateData: any = {
-        clockOutTime,
-        notes: notes || timeEntry.notes || '',
-        pauseTotalTime
-      }
+        let pauseTotalTime = 0
+        let calculatedBreak = undefined
 
-      if (location) {
-        updateData.clockOutLocation = location
-        updateData.locationOut = location
-      }
+        if (workDurationHours > 9) {
+          // Bei mehr als 9 Stunden: 45 Minuten Pause
+          pauseTotalTime = 45 * 60 * 1000
+          calculatedBreak = { duration: 45, reason: 'Arbeitszeit über 9 Stunden' }
+        } else if (workDurationHours > 6) {
+          // Bei mehr als 6 Stunden: 30 Minuten Pause
+          pauseTotalTime = 30 * 60 * 1000
+          calculatedBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
+        }
 
-      await updateDoc(timeEntryRef, updateData)
+        const updateData: any = {
+          clockOutTime,
+          notes: notes || timeEntry.notes || '',
+          pauseTotalTime
+        }
+
+        if (location) {
+          updateData.clockOutLocation = location
+          updateData.locationOut = location
+        }
+
+        transaction.update(timeEntryRef, updateData)
+
+        if (employeeRef && shouldClearActiveEntry) {
+          transaction.update(employeeRef, {
+            activeTimeEntryId: null,
+            activeClockInAt: null,
+            updatedAt: new Date()
+          })
+        }
+
+        return calculatedBreak
+      })
 
       return { automaticBreak }
     } catch (error) {
@@ -434,14 +578,15 @@ class DataServiceClass {
         throw new Error('Zeiteintrag nicht gefunden')
       }
 
-      const existingLiveDoc = timeEntryDoc.data().liveDocumentation || []
       const newDocumentation = {
         ...documentationData,
-        timestamp: serverTimestamp()
+        timestamp: Timestamp.now()
       }
 
       await updateDoc(timeEntryRef, {
-        liveDocumentation: [...existingLiveDoc, newDocumentation]
+        liveDocumentation: arrayUnion(newDocumentation),
+        hasDocumentation: true,
+        lastLiveDocumentationAt: serverTimestamp()
       })
     } catch (error) {
       console.error('Fehler beim Hinzufügen der Live-Dokumentation:', error)
@@ -491,6 +636,42 @@ class DataServiceClass {
     }
   }
 
+  async deleteVehicle(id: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const vehicleRef = doc(db, 'vehicles', id)
+      const vehicleDoc = await getDoc(vehicleRef)
+      if (!vehicleDoc.exists()) {
+        return
+      }
+
+      const vehicle = vehicleDoc.data() as Vehicle
+      const vehicleName = vehicle.name || ''
+
+      if (vehicleName) {
+        const vehicleUsagesRef = collection(db, 'vehicleUsages')
+        const usageQuery = query(vehicleUsagesRef, where('vehicleId', '==', id))
+        const usageSnapshot = await getDocs(usageQuery)
+
+        const updatePromises = usageSnapshot.docs
+          .filter((usageDoc) => {
+            const usage = usageDoc.data() as VehicleUsage
+            return !usage.vehicleName
+          })
+          .map((usageDoc) => updateDoc(usageDoc.ref, { vehicleName }))
+
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises)
+        }
+      }
+
+      await deleteDoc(vehicleRef)
+    } catch (error) {
+      console.error(`Fehler beim Löschen des Fahrzeugs ${id}:`, error)
+      throw error
+    }
+  }
+
   async getVehicleUsagesByProject(projectId: string): Promise<VehicleUsage[]> {
     await this.authReadyPromise
     try {
@@ -509,7 +690,27 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const docRef = await addDoc(vehicleUsagesRef, usageData)
+      const normalizedUsageData: Partial<VehicleUsage> = { ...usageData }
+
+      if (!normalizedUsageData.vehicleName && normalizedUsageData.vehicleId) {
+        const vehicleRef = doc(db, 'vehicles', normalizedUsageData.vehicleId)
+        const vehicleDoc = await getDoc(vehicleRef)
+        if (vehicleDoc.exists()) {
+          const vehicleData = vehicleDoc.data() as Vehicle
+          normalizedUsageData.vehicleName = vehicleData.name
+        }
+      }
+
+      const rawPayload = {
+        ...normalizedUsageData,
+        createdAt: serverTimestamp()
+      }
+      // Firestore lehnt undefined in Feldern ab (z. B. optionales comment)
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      const docRef = await addDoc(vehicleUsagesRef, payload)
       const usageDoc = await getDoc(docRef)
       
       return { id: docRef.id, ...usageDoc.data() } as VehicleUsage
@@ -546,6 +747,76 @@ class DataServiceClass {
   clearCurrentAdmin() {
     localStorage.removeItem('lauffer_admin_user')
     localStorage.removeItem('lauffer_current_admin')
+  }
+
+  async saveAdminPushSubscription(
+    subscription: PushSubscriptionJSON,
+    admin: { id?: string; username?: string; name?: string }
+  ): Promise<void> {
+    if (!subscription.endpoint) {
+      throw new Error('Push-Subscription enthält keinen Endpoint')
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'upsert',
+        subscription,
+        admin,
+        permission: Notification.permission,
+        isStandalone,
+        userAgent: navigator.userAgent
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
+  }
+
+  async removeAdminPushSubscription(endpoint: string): Promise<void> {
+    if (!endpoint) {
+      return
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'disable',
+        endpoint
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
   }
 
   async authenticateAdmin(username: string, password: string): Promise<any | null> {
@@ -780,6 +1051,45 @@ class DataServiceClass {
     }
   }
 
+  private async triggerLeaveRequestPushNotification(payload: {
+    leaveRequestId: string
+    employeeId: string | null
+    employeeName: string
+    startDate: string | null
+    endDate: string | null
+    type: LeaveRequest['type'] | null
+    workingDays: number | null
+  }): Promise<void> {
+    try {
+      const currentAuthUser = auth.currentUser
+      if (!currentAuthUser) {
+        if (isDevMode) {
+          console.warn('Push-Trigger übersprungen: kein Firebase Auth User vorhanden')
+        }
+        return
+      }
+
+      const idToken = await currentAuthUser.getIdToken()
+      const response = await fetch('/api/push/leave-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null)
+        const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      // Push-Fehler dürfen den Urlaubsantrag nicht blockieren.
+      console.error('Fehler beim Auslösen der Push-Benachrichtigung:', error)
+    }
+  }
+
   async createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
     await this.authReadyPromise
     try {
@@ -789,6 +1099,17 @@ class DataServiceClass {
         status: 'pending',
         createdAt: new Date()
       })
+
+      await this.triggerLeaveRequestPushNotification({
+        leaveRequestId: docRef.id,
+        employeeId: requestData.employeeId || null,
+        employeeName: requestData.employeeName || 'Mitarbeiter',
+        startDate: requestData.startDate ? new Date(requestData.startDate as any).toISOString() : null,
+        endDate: requestData.endDate ? new Date(requestData.endDate as any).toISOString() : null,
+        type: requestData.type || null,
+        workingDays: typeof requestData.workingDays === 'number' ? requestData.workingDays : null
+      })
+
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Urlaubsantrags:', error)
@@ -814,11 +1135,23 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await updateDoc(leaveRequestRef, {
-        status: 'approved',
-        approvedBy,
-        approvedAt: new Date(),
-        updatedAt: new Date()
+      await runTransaction(db, async (transaction) => {
+        const leaveRequestDoc = await transaction.get(leaveRequestRef)
+        if (!leaveRequestDoc.exists()) {
+          throw new Error('Urlaubsantrag nicht gefunden')
+        }
+
+        const leaveRequest = leaveRequestDoc.data() as LeaveRequest
+        if (leaveRequest.status === 'approved') {
+          return
+        }
+
+        transaction.update(leaveRequestRef, {
+          status: 'approved',
+          approvedBy,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        })
       })
     } catch (error) {
       console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
@@ -959,9 +1292,12 @@ class DataServiceClass {
         return []
       }
 
+      const normalizedType = type === 'photo' ? 'construction_site' : type
       const timeEntries = await this.getTimeEntriesByProject(projectId)
       if (!timeEntries || timeEntries.length === 0) {
-        console.log('Keine Zeiteinträge für Projekt gefunden:', projectId)
+        if (isDevMode) {
+          console.log('Keine Zeiteinträge für Projekt gefunden:', projectId)
+        }
       }
 
       let fileIds: string[] = []
@@ -969,7 +1305,7 @@ class DataServiceClass {
 
       timeEntries.forEach((entry) => {
         try {
-          if (type === 'construction_site') {
+          if (normalizedType === 'construction_site') {
             // Sammle sitePhotoUploads IDs
             if (entry.sitePhotoUploads && Array.isArray(entry.sitePhotoUploads)) {
               fileIds = [...fileIds, ...entry.sitePhotoUploads.filter((id: any) => id && typeof id === 'string')]
@@ -1013,7 +1349,7 @@ class DataServiceClass {
                 }
               })
             }
-          } else if (type === 'document' || type === 'delivery_note') {
+          } else if (normalizedType === 'document' || normalizedType === 'delivery_note') {
             // Sammle documentPhotoUploads IDs
             if (entry.documentPhotoUploads && Array.isArray(entry.documentPhotoUploads)) {
               fileIds = [...fileIds, ...entry.documentPhotoUploads.filter((id: any) => id && typeof id === 'string')]
@@ -1052,61 +1388,65 @@ class DataServiceClass {
       const files: FileUpload[] = []
       
       if (fileIds.length > 0) {
-        console.log(`Lade ${fileIds.length} Dateien für Projekt ${projectId}, Typ: ${type}`)
-        // Lade Dateien einzeln (Firestore unterstützt keine IN-Queries mit vielen IDs)
-        const promises = fileIds.map(async (fileId) => {
-          try {
-            if (!fileId || typeof fileId !== 'string') {
-              console.warn('Ungültige Datei-ID:', fileId)
-              return null
-            }
-            
-            const fileRef = doc(db, 'fileUploads', fileId)
-            const fileDoc = await getDoc(fileRef)
-            if (fileDoc.exists()) {
-              const data = fileDoc.data() as any
-              const uploadTime = data.uploadTime instanceof Timestamp
-                ? data.uploadTime.toDate()
-                : (data.uploadTime instanceof Date 
-                    ? data.uploadTime 
-                    : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now()))
-              
-              return {
-                id: fileDoc.id,
-                fileName: data.fileName || '',
-                filePath: data.filePath || '',
-                fileType: data.fileType || type,
-                projectId: data.projectId || projectId,
-                employeeId: data.employeeId || '',
-                uploadTime: uploadTime || new Date(),
-                notes: data.notes || '',
-                imageComment: data.imageComment || '',
-                base64Data: data.base64Data,
-                mimeType: data.mimeType
-              } as FileUpload
-            } else {
-              console.warn(`Datei ${fileId} nicht gefunden in fileUploads`)
-              return null
-            }
-          } catch (error) {
-            console.error(`Fehler beim Laden der Datei ${fileId}:`, error)
-            return null
+        if (isDevMode) {
+          console.log(`Lade ${fileIds.length} Dateien für Projekt ${projectId}, Typ: ${normalizedType}`)
+        }
+
+        const chunkSize = 10
+        for (let i = 0; i < fileIds.length; i += chunkSize) {
+          const chunk = fileIds.slice(i, i + chunkSize).filter((id) => !!id)
+          if (chunk.length === 0) continue
+
+          const chunkQuery = query(collection(db, 'fileUploads'), where(documentId(), 'in', chunk))
+          const chunkSnapshot = await getDocs(chunkQuery)
+
+          chunkSnapshot.forEach((fileDoc) => {
+            const data = fileDoc.data() as any
+            const uploadTime = data.uploadTime instanceof Timestamp
+              ? data.uploadTime.toDate()
+              : (data.uploadTime instanceof Date
+                  ? data.uploadTime
+                  : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now()))
+
+            files.push({
+              id: fileDoc.id,
+              fileName: data.fileName || '',
+              filePath: data.filePath || '',
+              fileType: data.fileType || normalizedType,
+              projectId: data.projectId || projectId,
+              employeeId: data.employeeId || '',
+              uploadTime: uploadTime || new Date(),
+              notes: data.notes || '',
+              imageComment: data.imageComment || '',
+              base64Data: data.base64Data,
+              mimeType: data.mimeType
+            } as FileUpload)
+          })
+
+          if (isDevMode && chunkSnapshot.size < chunk.length) {
+            console.warn(
+              `Nicht alle Datei-IDs wurden gefunden (Projekt ${projectId}):`,
+              { expected: chunk.length, loaded: chunkSnapshot.size }
+            )
           }
-        })
-        
-        const loadedFiles = await Promise.all(promises)
-        const validFiles = loadedFiles.filter(f => f !== null) as FileUpload[]
-        files.push(...validFiles)
-        console.log(`${validFiles.length} von ${fileIds.length} Dateien erfolgreich geladen`)
+        }
+
+        if (isDevMode) {
+          console.log(`${files.length} Datei-Datensätze für Referenz-IDs geladen`)
+        }
       }
 
       // Zusätzliche Dateien direkt über projectId (falls nicht in Zeiteinträgen referenziert)
       try {
         const uploadsByProject = await this.getFileUploads(projectId)
-        console.log(`Zusätzliche Dateien direkt über projectId (${projectId}):`, uploadsByProject.length)
+        if (isDevMode) {
+          console.log(`Zusätzliche Dateien direkt über projectId (${projectId}):`, uploadsByProject.length)
+        }
         uploadsByProject.forEach((u) => files.push(u))
       } catch (extraErr) {
-        console.warn('Konnte zusätzliche Dateien über projectId nicht laden:', extraErr)
+        if (isDevMode) {
+          console.warn('Konnte zusätzliche Dateien über projectId nicht laden:', extraErr)
+        }
       }
 
       // Füge direkte Dateien hinzu
@@ -1115,7 +1455,7 @@ class DataServiceClass {
           id: file.id || `direct-${Date.now()}-${Math.random()}`,
           fileName: file.fileName || file.name || 'Unbekannt',
           filePath: file.url || file.filePath || '',
-          fileType: file.fileType || type,
+          fileType: file.fileType || normalizedType,
           projectId: file.projectId || projectId,
           employeeId: file.employeeId || '',
           uploadTime: file.timestamp ? this.convertToDate(file.timestamp) : new Date(),
@@ -1126,26 +1466,28 @@ class DataServiceClass {
         } as FileUpload)
       })
 
-      // Debug: Zeige alle Dateien VOR dem Filtern mit ALLEN Feldern
-      console.log(`📋 Alle Dateien für Projekt ${projectId} VOR Filterung (${files.length}):`, files.map(f => ({
-        id: f.id,
-        fileName: f.fileName,
-        fileType: f.fileType,
-        mimeType: f.mimeType,
-        hasBase64Data: !!f.base64Data,
-        hasFilePath: !!f.filePath,
-        hasData: !!(f as any).data,
-        hasUrl: !!(f as any).url,
-        allKeys: Object.keys(f)
-      })))
-      
-      // Zeige die ersten 2 Fotos komplett
-      const photoFiles = files.filter(f => {
-        const fileName = (f.fileName || '').toLowerCase()
-        return fileName.match(/\.(jpg|jpeg|png|gif)$/i)
-      }).slice(0, 2)
-      if (photoFiles.length > 0) {
-        console.log(`🖼️ Beispiel-Foto-Objekte (erste 2):`, photoFiles)
+      if (isDevMode) {
+        // Debug: Zeige alle Dateien VOR dem Filtern mit ALLEN Feldern
+        console.log(`📋 Alle Dateien für Projekt ${projectId} VOR Filterung (${files.length}):`, files.map(f => ({
+          id: f.id,
+          fileName: f.fileName,
+          fileType: f.fileType,
+          mimeType: f.mimeType,
+          hasBase64Data: !!f.base64Data,
+          hasFilePath: !!f.filePath,
+          hasData: !!(f as any).data,
+          hasUrl: !!(f as any).url,
+          allKeys: Object.keys(f)
+        })))
+        
+        // Zeige die ersten 2 Fotos komplett
+        const photoFiles = files.filter(f => {
+          const fileName = (f.fileName || '').toLowerCase()
+          return fileName.match(/\.(jpg|jpeg|png|gif)$/i)
+        }).slice(0, 2)
+        if (photoFiles.length > 0) {
+          console.log(`🖼️ Beispiel-Foto-Objekte (erste 2):`, photoFiles)
+        }
       }
 
       // Endgültig nach Typ filtern (falls kein typ gesetzt, anhand mimeType raten)
@@ -1162,7 +1504,7 @@ class DataServiceClass {
           }
         }
 
-        if (type === 'construction_site') {
+        if (normalizedType === 'construction_site') {
           // Prüfe verschiedene Kriterien für Fotos
           const isPhotoByType = fileType === 'construction_site' || fileType === 'site_photo' || fileType === 'photo' || fileType === 'baustellenfoto' || fileType === 'baustelle'
           const isPhotoByMime = mime.startsWith('image/') || fileType.startsWith('image/')
@@ -1170,11 +1512,13 @@ class DataServiceClass {
           const isPhotoByBase64 = f.base64Data && (!mime || mime.startsWith('image/'))
           
           const isPhoto = isPhotoByType || isPhotoByMime || isPhotoByExtension || isPhotoByBase64
-          console.log(`🔍 Prüfe Foto ${f.fileName}: fileType="${fileType}", mime="${mime}", fileName="${fileName}", isPhoto=${isPhoto} (byType=${isPhotoByType}, byMime=${isPhotoByMime}, byExt=${!!isPhotoByExtension}, byBase64=${isPhotoByBase64})`)
+          if (isDevMode) {
+            console.log(`🔍 Prüfe Foto ${f.fileName}: fileType="${fileType}", mime="${mime}", fileName="${fileName}", isPhoto=${isPhoto} (byType=${isPhotoByType}, byMime=${isPhotoByMime}, byExt=${!!isPhotoByExtension}, byBase64=${isPhotoByBase64})`)
+          }
           return isPhoto
         }
 
-        if (type === 'document' || type === 'delivery_note') {
+        if (normalizedType === 'document' || normalizedType === 'delivery_note') {
           // Dokumente: alles was KEIN Bild ist
           const isImage = mime.startsWith('image/') || fileType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)
           const isDoc = fileType === 'document' || fileType === 'invoice' || fileType === 'delivery_note' || fileType === 'rechnung' || fileType === 'lieferschein' || fileType === 'dokument' || !isImage
@@ -1266,7 +1610,7 @@ class DataServiceClass {
           : (data.uploadTime as Date | undefined)
         
         // Debug: Zeige die ersten 3 Firestore-Dokumente KOMPLETT als JSON
-        if (index < 3) {
+        if (isDevMode && index < 1) {
           // Finde Felder, die groß sind (könnten base64 sein)
           const largeFields = Object.keys(data).filter(key => {
             const val = data[key]
