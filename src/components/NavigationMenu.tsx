@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import '../styles/NavigationMenu.css'
 
 interface NavigationMenuProps {
   onLogout: () => void
+  hasPushSubscription?: boolean
 }
 
-const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
+const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout, hasPushSubscription }) => {
+  const location = useLocation()
+  const showNotificationsLink = hasPushSubscription || location.pathname === '/notifications'
   const [isOpen, setIsOpen] = useState(false)
 
   // Close menu on escape key
@@ -61,6 +64,15 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
         >
           Urlaubsanträge
         </Link>
+        {showNotificationsLink && (
+          <Link
+            to="/notifications"
+            className="nav-item btn secondary-btn"
+            onClick={() => setIsOpen(false)}
+          >
+            Benachrichtigungen
+          </Link>
+        )}
         <button 
           onClick={() => {
             setIsOpen(false)

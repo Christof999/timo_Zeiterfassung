@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
+import { pushNotificationService } from '../services/pushNotificationService'
 import type { Employee, LeaveRequest } from '../types'
+import EmployeePushSettings from './EmployeePushSettings'
 import { toast } from './ToastContainer'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
@@ -22,6 +24,7 @@ const VacationRequests: React.FC = () => {
   })
   const [workingDays, setWorkingDays] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasEmployeePushSubscription, setHasEmployeePushSubscription] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -52,6 +55,14 @@ const VacationRequests: React.FC = () => {
         return
       }
       setCurrentUser(user)
+
+      const supportState = pushNotificationService.getSupportState()
+      if (supportState.isSupported) {
+        const sub = await pushNotificationService.getCurrentSubscription()
+        setHasEmployeePushSubscription(!!sub)
+      } else {
+        setHasEmployeePushSubscription(false)
+      }
 
       const requests = await DataService.getLeaveRequestsByEmployee(user.id!)
       // Sortieren nach Erstellungsdatum (neueste zuerst)
@@ -211,6 +222,8 @@ const VacationRequests: React.FC = () => {
         </button>
         <h1>Urlaubsanträge</h1>
       </header>
+
+      {currentUser && !hasEmployeePushSubscription && <EmployeePushSettings employee={currentUser} />}
 
       {/* Urlaubskonto */}
       <div className="vacation-account card">

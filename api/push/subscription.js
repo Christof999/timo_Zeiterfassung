@@ -72,25 +72,53 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'subscription.endpoint fehlt' })
       }
 
+      const scope = payload.subscriptionScope === 'employee' ? 'employee' : 'admin'
       const subscriptionId = createPushSubscriptionDocId(subscription.endpoint)
-      await db.collection('adminPushSubscriptions').doc(subscriptionId).set(
-        {
-          endpoint: subscription.endpoint,
-          keys: subscription.keys || {},
-          expirationTime: subscription.expirationTime ?? null,
-          active: true,
-          adminId: payload.admin?.id || null,
-          adminUsername: payload.admin?.username || null,
-          adminName: payload.admin?.name || null,
-          permission: payload.permission || null,
-          isStandalone: !!payload.isStandalone,
-          userAgent: payload.userAgent || null,
-          updatedByUid: requester.uid,
-          updatedAt: new Date(),
-          lastSeenAt: new Date()
-        },
-        { merge: true }
-      )
+
+      if (scope === 'employee') {
+        const employeeId = payload.employee?.id
+        if (!employeeId) {
+          return res.status(400).json({ success: false, error: 'employee.id fehlt für Mitarbeiter-Push' })
+        }
+
+        await db.collection('employeePushSubscriptions').doc(subscriptionId).set(
+          {
+            endpoint: subscription.endpoint,
+            keys: subscription.keys || {},
+            expirationTime: subscription.expirationTime ?? null,
+            active: true,
+            employeeId,
+            employeeUsername: payload.employee?.username || null,
+            employeeName: payload.employee?.name || null,
+            permission: payload.permission || null,
+            isStandalone: !!payload.isStandalone,
+            userAgent: payload.userAgent || null,
+            updatedByUid: requester.uid,
+            updatedAt: new Date(),
+            lastSeenAt: new Date()
+          },
+          { merge: true }
+        )
+      } else {
+        await db.collection('adminPushSubscriptions').doc(subscriptionId).set(
+          {
+            endpoint: subscription.endpoint,
+            keys: subscription.keys || {},
+            expirationTime: subscription.expirationTime ?? null,
+            active: true,
+            adminId: payload.admin?.id || null,
+            adminUsername: payload.admin?.username || null,
+            adminName: payload.admin?.name || null,
+            permission: payload.permission || null,
+            isStandalone: !!payload.isStandalone,
+            userAgent: payload.userAgent || null,
+            updatedByUid: requester.uid,
+            updatedAt: new Date(),
+            lastSeenAt: new Date()
+          },
+          { merge: true }
+        )
+      }
 
       return res.status(200).json({ success: true, id: subscriptionId })
     }
@@ -101,8 +129,12 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'endpoint fehlt' })
       }
 
+      const scope = payload.subscriptionScope === 'employee' ? 'employee' : 'admin'
       const subscriptionId = createPushSubscriptionDocId(endpoint)
-      await db.collection('adminPushSubscriptions').doc(subscriptionId).set(
+      const collectionName =
+        scope === 'employee' ? 'employeePushSubscriptions' : 'adminPushSubscriptions'
+
+      await db.collection(collectionName).doc(subscriptionId).set(
         {
           active: false,
           disabledAt: new Date(),

@@ -773,6 +773,7 @@ class DataServiceClass {
       },
       body: JSON.stringify({
         action: 'upsert',
+        subscriptionScope: 'admin',
         subscription,
         admin,
         permission: Notification.permission,
@@ -808,6 +809,82 @@ class DataServiceClass {
       },
       body: JSON.stringify({
         action: 'disable',
+        subscriptionScope: 'admin',
+        endpoint
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
+  }
+
+  async saveEmployeePushSubscription(
+    subscription: PushSubscriptionJSON,
+    employee: { id?: string; username?: string; name?: string }
+  ): Promise<void> {
+    if (!subscription.endpoint) {
+      throw new Error('Push-Subscription enthält keinen Endpoint')
+    }
+    if (!employee.id) {
+      throw new Error('Mitarbeiter-ID fehlt')
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'upsert',
+        subscriptionScope: 'employee',
+        subscription,
+        employee,
+        permission: Notification.permission,
+        isStandalone,
+        userAgent: navigator.userAgent
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
+  }
+
+  async removeEmployeePushSubscription(endpoint: string): Promise<void> {
+    if (!endpoint) {
+      return
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'disable',
+        subscriptionScope: 'employee',
         endpoint
       })
     })
@@ -1051,6 +1128,69 @@ class DataServiceClass {
     }
   }
 
+  private formatLeavePeriodLabel(start: unknown, end: unknown): string {
+    const fmt = (d: unknown) => {
+      if (!d) return ''
+      const date =
+        d instanceof Date
+          ? d
+          : typeof (d as { toDate?: () => Date })?.toDate === 'function'
+            ? (d as { toDate: () => Date }).toDate()
+            : new Date(d as string | number)
+      if (Number.isNaN(date.getTime())) return ''
+      return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+    const a = fmt(start)
+    const b = fmt(end)
+    if (a && b) return `${a} – ${b}`
+    return a || b || ''
+  }
+
+  private async triggerLeaveApprovedPushNotification(payload: {
+    leaveRequestId: string
+    employeeId: string | null
+    employeeName: string
+    periodLabel: string
+  }): Promise<void> {
+    try {
+      const currentAuthUser = auth.currentUser
+      if (!currentAuthUser) {
+        if (isDevMode) {
+          console.warn('Push (Genehmigung) übersprungen: kein Firebase Auth User vorhanden')
+        }
+        return
+      }
+
+      const idToken = await currentAuthUser.getIdToken()
+      const bodyText = payload.periodLabel
+        ? `Ihr Antrag (${payload.periodLabel}) wurde genehmigt.`
+        : 'Ihr Urlaubsantrag wurde genehmigt.'
+
+      const response = await fetch('/api/push/leave-approved', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          leaveRequestId: payload.leaveRequestId,
+          employeeId: payload.employeeId,
+          employeeName: payload.employeeName,
+          periodLabel: payload.periodLabel,
+          body: bodyText
+        })
+      })
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null)
+        const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      console.error('Fehler beim Auslösen der Push-Benachrichtigung (Genehmigung):', error)
+    }
+  }
+
   private async triggerLeaveRequestPushNotification(payload: {
     leaveRequestId: string
     employeeId: string | null
@@ -1133,9 +1273,10 @@ class DataServiceClass {
 
   async approveLeaveRequest(id: string, approvedBy: string): Promise<void> {
     await this.authReadyPromise
+
     try {
       const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await runTransaction(db, async (transaction) => {
+      const approvedSnapshot = await runTransaction(db, async (transaction) => {
         const leaveRequestDoc = await transaction.get(leaveRequestRef)
         if (!leaveRequestDoc.exists()) {
           throw new Error('Urlaubsantrag nicht gefunden')
@@ -1143,8 +1284,13 @@ class DataServiceClass {
 
         const leaveRequest = leaveRequestDoc.data() as LeaveRequest
         if (leaveRequest.status === 'approved') {
-          return
+          return null
         }
+
+        const periodLabel = this.formatLeavePeriodLabel(leaveRequest.startDate, leaveRequest.endDate)
+        const employeeName =
+          leaveRequest.employeeName?.trim() ||
+          'Mitarbeiter'
 
         transaction.update(leaveRequestRef, {
           status: 'approved',
@@ -1152,7 +1298,22 @@ class DataServiceClass {
           approvedAt: new Date(),
           updatedAt: new Date()
         })
+
+        return {
+          employeeId: leaveRequest.employeeId || null,
+          employeeName,
+          periodLabel
+        }
       })
+
+      if (approvedSnapshot) {
+        await this.triggerLeaveApprovedPushNotification({
+          leaveRequestId: id,
+          employeeId: approvedSnapshot.employeeId,
+          employeeName: approvedSnapshot.employeeName,
+          periodLabel: approvedSnapshot.periodLabel
+        })
+      }
     } catch (error) {
       console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
       throw error

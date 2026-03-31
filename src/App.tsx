@@ -4,6 +4,7 @@ import { DataService } from './services/dataService'
 import Login from './components/Login'
 import TimeTracking from './components/TimeTracking'
 import VacationRequests from './components/VacationRequests'
+import EmployeeNotificationsPage from './components/EmployeeNotificationsPage'
 import AdminLogin from './components/admin/AdminLogin'
 import AdminDashboard from './components/admin/AdminDashboard'
 import SplashScreen from './components/SplashScreen'
@@ -43,6 +44,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/time-tracking" element={<TimeTracking />} />
         <Route path="/vacation" element={<VacationRequests />} />
+        <Route path="/notifications" element={<EmployeeNotificationsPage />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin" element={<Navigate to="/admin/login" replace />} />

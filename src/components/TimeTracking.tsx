@@ -8,6 +8,7 @@ import ManualTimeEntryModal from './ManualTimeEntryModal'
 import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
+import { pushNotificationService } from '../services/pushNotificationService'
 import { toast } from './ToastContainer'
 import '../styles/TimeTracking.css'
 
@@ -20,6 +21,7 @@ const TimeTracking: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [showManualEntryModal, setShowManualEntryModal] = useState(false)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
+  const [hasEmployeePushSubscription, setHasEmployeePushSubscription] = useState(false)
   const navigate = useNavigate()
 
   const canManualTimeEntry = canAddManualTimeEntries(currentUser?.username)
@@ -33,7 +35,15 @@ const TimeTracking: React.FC = () => {
       }
 
       setCurrentUser(user)
-      
+
+      const supportState = pushNotificationService.getSupportState()
+      if (supportState.isSupported) {
+        const sub = await pushNotificationService.getCurrentSubscription()
+        setHasEmployeePushSubscription(!!sub)
+      } else {
+        setHasEmployeePushSubscription(false)
+      }
+
       // Prüfe auf aktiven Zeiteintrag
       const timeEntry = await DataService.getCurrentTimeEntry(user.id)
       if (timeEntry) {
@@ -184,7 +194,7 @@ const TimeTracking: React.FC = () => {
       <main className="time-tracking-main">
         <div className="user-info-section">
           <p>Angemeldet als: <strong>{currentUser.firstName} {currentUser.lastName}</strong></p>
-          <NavigationMenu onLogout={handleLogout} />
+          <NavigationMenu onLogout={handleLogout} hasPushSubscription={hasEmployeePushSubscription} />
         </div>
 
         {canManualTimeEntry && (
