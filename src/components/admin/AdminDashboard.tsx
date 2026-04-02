@@ -158,7 +158,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'vehicles' as TabType, label: 'Fahrzeuge' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     { id: 'vacation' as TabType, label: 'Urlaub' },
-    { id: 'reports' as TabType, label: 'Berichte' }
+    { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' }
   ]
 
   const renderPushSettings = (renderAsPage = false) => (
