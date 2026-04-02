@@ -89,20 +89,23 @@ const OverviewTab: React.FC = () => {
     setClockingOut(timeEntry.id)
     
     try {
-      const now = new Date()
-      
-      // Arbeitszeit berechnen für automatische Pause
-      const clockInTime = timeEntry.clockInTime?.toDate?.() || new Date(timeEntry.clockInTime)
-      const workDurationMs = now.getTime() - clockInTime.getTime()
-      const workDurationHours = workDurationMs / (1000 * 60 * 60)
-      
-      // Automatische Pause nach deutschem Arbeitszeitgesetz
-      let pauseTotalTime = timeEntry.pauseTotalTime || 0
-      if (workDurationHours > 9 && pauseTotalTime < 45 * 60 * 1000) {
-        pauseTotalTime = 45 * 60 * 1000 // 45 Minuten
-      } else if (workDurationHours > 6 && pauseTotalTime < 30 * 60 * 1000) {
-        pauseTotalTime = 30 * 60 * 1000 // 30 Minuten
+      const pauseRaw = window.prompt(
+        `Pausenzeit für ${employeeName} in Minuten (0 wenn keine Pause):`,
+        '0'
+      )
+      if (pauseRaw === null) {
+        setClockingOut(null)
+        return
       }
+      const pauseMinutes = Number.parseInt(String(pauseRaw).trim(), 10)
+      if (Number.isNaN(pauseMinutes) || pauseMinutes < 0 || pauseMinutes > 24 * 60) {
+        toast.error('Bitte eine gültige Pausenzeit zwischen 0 und 1440 Minuten eingeben.')
+        setClockingOut(null)
+        return
+      }
+
+      const now = new Date()
+      const pauseTotalTime = pauseMinutes * 60 * 1000
 
       await DataService.updateTimeEntry(timeEntry.id, {
         clockOutTime: now,

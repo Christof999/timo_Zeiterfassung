@@ -332,18 +332,27 @@ class DataServiceClass {
   }
 
   async clockOutEmployee(
-    timeEntryId: string, 
-    notes: string, 
-    location: { lat: number | null; lng: number | null } | null
-  ): Promise<{ automaticBreak?: { duration: number; reason: string } }> {
+    timeEntryId: string,
+    notes: string,
+    location: { lat: number | null; lng: number | null } | null,
+    pauseTotalTimeMs: number
+  ): Promise<void> {
     await this.authReadyPromise
     try {
       if (!timeEntryId) {
         throw new Error('Keine gültige Zeiteintrag-ID angegeben')
       }
+      if (
+        typeof pauseTotalTimeMs !== 'number' ||
+        !Number.isFinite(pauseTotalTimeMs) ||
+        pauseTotalTimeMs < 0 ||
+        pauseTotalTimeMs > 24 * 60 * 60 * 1000
+      ) {
+        throw new Error('Ungültige Pausenzeit')
+      }
 
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
-      const automaticBreak = await runTransaction(db, async (transaction) => {
+      await runTransaction(db, async (transaction) => {
         const timeEntryDoc = await transaction.get(timeEntryRef)
         if (!timeEntryDoc.exists()) {
           throw new Error('Zeiteintrag nicht gefunden')
@@ -366,31 +375,11 @@ class DataServiceClass {
         }
 
         const clockOutTime = Timestamp.now()
-        const clockInTime = timeEntry.clockInTime instanceof Timestamp
-          ? timeEntry.clockInTime.toDate()
-          : new Date(timeEntry.clockInTime)
-
-        // Automatische Pausenberechnung nach deutschem Arbeitszeitgesetz
-        const workDurationMs = clockOutTime.toDate().getTime() - clockInTime.getTime()
-        const workDurationHours = workDurationMs / (1000 * 60 * 60)
-
-        let pauseTotalTime = 0
-        let calculatedBreak = undefined
-
-        if (workDurationHours > 9) {
-          // Bei mehr als 9 Stunden: 45 Minuten Pause
-          pauseTotalTime = 45 * 60 * 1000
-          calculatedBreak = { duration: 45, reason: 'Arbeitszeit über 9 Stunden' }
-        } else if (workDurationHours > 6) {
-          // Bei mehr als 6 Stunden: 30 Minuten Pause
-          pauseTotalTime = 30 * 60 * 1000
-          calculatedBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
-        }
 
         const updateData: any = {
           clockOutTime,
           notes: notes || timeEntry.notes || '',
-          pauseTotalTime
+          pauseTotalTime: Math.round(pauseTotalTimeMs)
         }
 
         if (location) {
@@ -407,11 +396,7 @@ class DataServiceClass {
             updatedAt: new Date()
           })
         }
-
-        return calculatedBreak
       })
-
-      return { automaticBreak }
     } catch (error) {
       console.error('Fehler beim Ausstempeln:', error)
       throw error

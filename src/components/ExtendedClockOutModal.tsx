@@ -9,6 +9,8 @@ import '../styles/Modal.css'
 
 interface ExtendedClockOutModalProps {
   timeEntry: TimeEntry
+  /** Gesamte Pausenzeit in Millisekunden (vom übergeordneten Formular, inkl. 0) */
+  pauseTotalTimeMs: number
   onClose: () => void
   onClockOutSuccess: () => void
 }
@@ -31,6 +33,7 @@ function createVehicleBookingRow(): VehicleBookingRow {
 
 const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   timeEntry,
+  pauseTotalTimeMs,
   onClose,
   onClockOutSuccess
 }) => {
@@ -72,6 +75,14 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (
+      typeof pauseTotalTimeMs !== 'number' ||
+      !Number.isFinite(pauseTotalTimeMs) ||
+      pauseTotalTimeMs < 0
+    ) {
+      toast.error('Ungültige Pausenzeit. Bitte schließen Sie das Fenster und tragen Sie die Pause erneut ein.')
+      return
+    }
     setIsSubmitting(true)
 
     try {
@@ -143,11 +154,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
       }
 
       // Clock out
-      const result = await DataService.clockOutEmployee(
-        timeEntry.id,
-        notes,
-        location
-      )
+      await DataService.clockOutEmployee(timeEntry.id, notes, location, pauseTotalTimeMs)
 
       // Update with documentation
       await DataService.updateTimeEntry(timeEntry.id, {
@@ -161,11 +168,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
           notes.trim() !== ''
       })
 
-      if (result.automaticBreak) {
-        toast.success(`Erfolgreich ausgestempelt mit Dokumentation! Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten (${result.automaticBreak.reason})`, 6000)
-      } else {
-        toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
-      }
+      toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
 
       onClockOutSuccess()
       onClose()
