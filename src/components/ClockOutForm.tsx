@@ -4,13 +4,14 @@ import type { TimeEntry, Project, Employee, Vehicle, VehicleUsage } from '../typ
 import VehicleBookingModal from './VehicleBookingModal'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
+import { toast } from './ToastContainer'
 import '../styles/ClockOutForm.css'
 
 interface ClockOutFormProps {
   timeEntry: TimeEntry
   project: Project | null
   clockInTime: Date | null
-  onSimpleClockOut: () => void
+  onSimpleClockOut: (pauseMinutes: number) => void
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
 }
@@ -27,6 +28,10 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const [showExtendedModal, setShowExtendedModal] = useState(false)
   const [showLiveDocModal, setShowLiveDocModal] = useState(false)
   const [vehicleBookings, setVehicleBookings] = useState<VehicleUsage[]>([])
+  /** Leer = noch nicht bestätigt; „0“ ist gültig */
+  const [pauseMinutesInput, setPauseMinutesInput] = useState('')
+  /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
+  const [pauseMsForExtendedModal, setPauseMsForExtendedModal] = useState<number | null>(null)
 
   const documentationUsers = ['mdorner', 'plauffer', 'csoergel']
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
@@ -102,6 +107,26 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
 
+  const parsePauseMinutes = (): number | null => {
+    const raw = pauseMinutesInput.trim()
+    if (raw === '') {
+      toast.error('Bitte geben Sie die Pausenzeit in Minuten ein (0, wenn keine Pause).')
+      return null
+    }
+    const n = Number.parseInt(raw, 10)
+    if (Number.isNaN(n) || n < 0 || n > 24 * 60) {
+      toast.error('Pausenzeit: bitte eine ganze Zahl zwischen 0 und 1440 Minuten.')
+      return null
+    }
+    return n
+  }
+
+  const handleSimpleClockOutClick = () => {
+    const minutes = parsePauseMinutes()
+    if (minutes === null) return
+    onSimpleClockOut(minutes)
+  }
+
   return (
     <div className="clock-out-form">
       <div className="active-project-info">
@@ -120,6 +145,28 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       <p className="clock-in-info">
         Eingestempelt seit: {formatTime(clockInTime)}
       </p>
+
+      <div className="pause-input-section">
+        <label htmlFor="clock-out-pause-minutes" className="pause-input-label">
+          Pausenzeit gesamt (Minuten) <span className="required-mark">*</span>
+        </label>
+        <input
+          id="clock-out-pause-minutes"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={1440}
+          step={1}
+          className="pause-minutes-input"
+          value={pauseMinutesInput}
+          onChange={(e) => setPauseMinutesInput(e.target.value)}
+          placeholder="z. B. 0 oder 30"
+          autoComplete="off"
+        />
+        <p className="pause-input-hint">
+          Pflichtangabe zum Ausstempeln. Ohne Pause: <strong>0</strong> eintragen.
+        </p>
+      </div>
 
       {vehicleBookings.length > 0 && (
         <div className="current-vehicle-bookings">
@@ -147,7 +194,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       )}
 
       <div className="clock-out-buttons">
-        <button onClick={onSimpleClockOut} className="btn secondary-btn">
+        <button type="button" onClick={handleSimpleClockOutClick} className="btn secondary-btn">
           Einfach Ausstempeln
         </button>
         <button 
@@ -163,8 +210,14 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           Dokumentation hinzufügen
         </button>
         {canUseDocumentation && (
-          <button 
-            onClick={() => setShowExtendedModal(true)} 
+          <button
+            type="button"
+            onClick={() => {
+              const minutes = parsePauseMinutes()
+              if (minutes === null) return
+              setPauseMsForExtendedModal(minutes * 60 * 1000)
+              setShowExtendedModal(true)
+            }}
             className="btn primary-btn"
           >
             Mit Dokumentation Ausstempeln
@@ -182,14 +235,19 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         />
       )}
 
-      {showExtendedModal && (
+      {showExtendedModal && pauseMsForExtendedModal !== null && (
         <ExtendedClockOutModal
           timeEntry={timeEntry}
+          pauseTotalTimeMs={pauseMsForExtendedModal}
           onClose={() => {
             setShowExtendedModal(false)
+            setPauseMsForExtendedModal(null)
             onUpdate()
           }}
-          onClockOutSuccess={onExtendedClockOutSuccess}
+          onClockOutSuccess={() => {
+            setPauseMsForExtendedModal(null)
+            onExtendedClockOutSuccess()
+          }}
         />
       )}
 

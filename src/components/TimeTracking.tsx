@@ -96,24 +96,21 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleSimpleClockOut = async () => {
+  const handleSimpleClockOut = async (pauseMinutes: number) => {
     if (!currentTimeEntry) return
 
     try {
       const location = await getCurrentLocation()
-      const result = await DataService.clockOutEmployee(
+      const pauseTotalTimeMs = pauseMinutes * 60 * 1000
+      await DataService.clockOutEmployee(
         currentTimeEntry.id,
         currentTimeEntry.notes || '',
-        location
+        location,
+        pauseTotalTimeMs
       )
 
       resetClockOutState()
-
-      if (result.automaticBreak) {
-        toast.success(`Erfolgreich ausgestempelt! Automatische Pause hinzugefügt: ${result.automaticBreak.duration} Minuten (${result.automaticBreak.reason})`, 6000)
-      } else {
-        toast.success('Sie wurden erfolgreich ausgestempelt!')
-      }
+      toast.success('Sie wurden erfolgreich ausgestempelt!')
     } catch (error: any) {
       toast.error('Fehler beim Ausstempeln: ' + error.message)
     }

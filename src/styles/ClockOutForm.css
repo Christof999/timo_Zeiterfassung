@@ -78,6 +78,52 @@
   gap: var(--spacing-sm);
 }
 
+.pause-input-section {
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.pause-input-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color);
+  margin-bottom: var(--spacing-sm);
+}
+
+.pause-input-label .required-mark {
+  color: var(--danger-color, #c62828);
+}
+
+.pause-minutes-input {
+  width: 100%;
+  max-width: 200px;
+  padding: 12px 14px;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  color: var(--text-color);
+  min-height: 48px;
+}
+
+.pause-minutes-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(74, 124, 89, 0.15);
+}
+
+.pause-input-hint {
+  margin: var(--spacing-sm) 0 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 /* Fahrzeugbuchungen */
 .current-vehicle-bookings {
   margin-bottom: var(--spacing-xl);
