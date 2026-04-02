@@ -20,6 +20,7 @@ interface ReportEntry {
   pauseMinutes: number
   pauseMs: number
   workHours: string
+  notes: string
   isEdited: boolean
 }
 
@@ -265,6 +266,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           pauseMinutes,
           pauseMs,
           workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
+          notes: (entry.notes || '').trim(),
           isEdited: false
         }
       })
@@ -309,6 +311,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         ...updated[index],
         projectName: getProjectName(original.projectId),
         clockIn, clockOut, pauseMinutes, pauseMs,
+        notes: (original.notes || '').trim(),
         workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
         isEdited: false
       }
@@ -802,6 +805,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <th>Kommen</th>
                         <th>Gehen</th>
                         <th>Pause</th>
+                        <th className="no-print">Kommentar</th>
                         <th>Arbeitszeit</th>
                         <th className="no-print">Akt.</th>
                       </tr>
@@ -814,6 +818,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                           <td><input type="time" value={entry.clockIn} onChange={(e) => handleFieldChange(index, 'clockIn', e.target.value)} className="inline-edit time-input" /></td>
                           <td><input type="time" value={entry.clockOut} onChange={(e) => handleFieldChange(index, 'clockOut', e.target.value)} className="inline-edit time-input" /></td>
                           <td><input type="number" min="0" value={entry.pauseMinutes} onChange={(e) => handleFieldChange(index, 'pauseMinutes', e.target.value)} className="inline-edit pause-input" /></td>
+                          <td className="no-print comment-cell">{entry.notes || '—'}</td>
                           <td className="hours-cell">{entry.workHours}</td>
                           <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">Zurück</button>}</td>
                         </tr>
@@ -821,7 +826,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     </tbody>
                     <tfoot>
                       <tr className="total-row">
-                        <td colSpan={5}><strong>Gesamt:</strong></td>
+                        <td colSpan={6}><strong>Gesamt:</strong></td>
                         <td className="hours-cell"><strong>{calculateTotalHours()}</strong></td>
                         <td className="no-print"></td>
                       </tr>
