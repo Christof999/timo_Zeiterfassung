@@ -14,6 +14,14 @@
   line-height: var(--line-height-tight);
 }
 
+.tab-hint.projects-archive-hint {
+  margin: -0.5rem 0 var(--spacing-lg) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-normal);
+  max-width: 48rem;
+}
+
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

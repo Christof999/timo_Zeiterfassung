@@ -11,7 +11,16 @@ import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
 import '../../styles/AdminDashboard.css'
 
-type TabType = 'overview' | 'notifications' | 'employees' | 'projects' | 'vehicles' | 'costing' | 'reports' | 'vacation'
+type TabType =
+  | 'overview'
+  | 'notifications'
+  | 'employees'
+  | 'projects'
+  | 'projectsArchived'
+  | 'vehicles'
+  | 'costing'
+  | 'reports'
+  | 'vacation'
 
 const AdminDashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('overview')
@@ -155,6 +164,7 @@ const AdminDashboard: React.FC = () => {
       : []),
     { id: 'employees' as TabType, label: 'Mitarbeiter' },
     { id: 'projects' as TabType, label: 'Projekte' },
+    { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
     { id: 'vehicles' as TabType, label: 'Fahrzeuge' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     { id: 'vacation' as TabType, label: 'Urlaub' },
@@ -308,7 +318,8 @@ const AdminDashboard: React.FC = () => {
 
           {currentTab === 'overview' && <OverviewTab />}
           {currentTab === 'employees' && <EmployeesTab />}
-          {currentTab === 'projects' && <ProjectsTab />}
+          {currentTab === 'projects' && <ProjectsTab variant="active" />}
+          {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
           {currentTab === 'vehicles' && <VehiclesTab />}
           {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {currentTab === 'vacation' && <VacationTab />}

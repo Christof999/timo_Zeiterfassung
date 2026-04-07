@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Project } from '../../../types'
+import { isProjectArchivedOrCompleted } from '../../../utils/projectArchive'
 import { toast } from '../../ToastContainer'
 import ProjectModal from '../ProjectModal'
 import ProjectDetailModal from '../ProjectDetailModal'
 import '../../../styles/AdminTabs.css'
 
-const ProjectsTab: React.FC = () => {
+export type ProjectsTabVariant = 'active' | 'archived'
+
+interface ProjectsTabProps {
+  variant?: ProjectsTabVariant
+}
+
+const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -14,14 +21,16 @@ const ProjectsTab: React.FC = () => {
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
 
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
   const loadProjects = async () => {
+    setIsLoading(true)
     try {
       const allProjects = await DataService.getAllProjects()
-      setProjects(allProjects)
+      const filtered = allProjects.filter((p) =>
+        variant === 'archived'
+          ? isProjectArchivedOrCompleted(p)
+          : !isProjectArchivedOrCompleted(p)
+      )
+      setProjects(filtered)
     } catch (error) {
       console.error('Fehler beim Laden der Projekte:', error)
       toast.error('Fehler beim Laden der Projekte')
@@ -29,6 +38,10 @@ const ProjectsTab: React.FC = () => {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadProjects()
+  }, [variant])
 
   const handleAdd = () => {
     setEditingProject(null)
@@ -66,14 +79,19 @@ const ProjectsTab: React.FC = () => {
   }
 
   const getStatusBadge = (status?: string) => {
-    switch (status) {
+    const normalized = String(status ?? '')
+      .toLowerCase()
+      .trim()
+    switch (normalized) {
       case 'planned':
         return <span className="status-badge planned">Geplant</span>
       case 'active':
+      case 'aktiv':
         return <span className="status-badge active">Aktiv</span>
       case 'completed':
         return <span className="status-badge completed">Abgeschlossen</span>
       case 'archived':
+      case 'inactive':
         return <span className="status-badge archived">Archiviert</span>
       default:
         return <span className="status-badge active">Aktiv</span>
@@ -81,20 +99,39 @@ const ProjectsTab: React.FC = () => {
   }
 
   if (isLoading) {
-    return <div className="loading">Lade Projekte...</div>
+    return (
+      <div className="loading">
+        {variant === 'archived' ? 'Lade archivierte Projekte...' : 'Lade Projekte...'}
+      </div>
+    )
   }
+
+  const title = variant === 'archived' ? 'Archivierte Projekte' : 'Projekte'
+  const emptyMessage =
+    variant === 'archived'
+      ? 'Keine archivierten oder abgeschlossenen Projekte'
+      : 'Keine Projekte vorhanden'
 
   return (
     <div className="projects-tab">
       <div className="tab-header">
-        <h3>Projekte</h3>
-        <button onClick={handleAdd} className="btn primary-btn">
-          Projekt hinzufügen
-        </button>
+        <h3>{title}</h3>
+        {variant === 'active' && (
+          <button onClick={handleAdd} className="btn primary-btn">
+            Projekt hinzufügen
+          </button>
+        )}
       </div>
 
+      {variant === 'archived' && (
+        <p className="tab-hint projects-archive-hint">
+          Hier erscheinen Projekte mit Status <strong>Abgeschlossen</strong> oder{' '}
+          <strong>Archiviert</strong> sowie über &quot;Archivieren&quot; verschobene Einträge.
+        </p>
+      )}
+
       {projects.length === 0 ? (
-        <p className="no-data">Keine Projekte vorhanden</p>
+        <p className="no-data">{emptyMessage}</p>
       ) : (
         <div className="data-table-container">
           <table className="data-table">
@@ -127,13 +164,15 @@ const ProjectsTab: React.FC = () => {
                     >
                       Bearbeiten
                     </button>
-                    <button 
-                      onClick={() => handleDelete(project.id!)} 
-                      className="action-btn delete-btn"
-                      aria-label="Archivieren"
-                    >
-                      Archivieren
-                    </button>
+                    {variant === 'active' && (
+                      <button 
+                        onClick={() => handleDelete(project.id!)} 
+                        className="action-btn delete-btn"
+                        aria-label="Archivieren"
+                      >
+                        Archivieren
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
