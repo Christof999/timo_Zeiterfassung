@@ -969,11 +969,16 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const projectsRef = collection(db, 'projects')
-      const docRef = await addDoc(projectsRef, {
+      const raw = {
         ...projectData,
         isActive: projectData.isActive !== false,
         status: projectData.status || 'active'
-      })
+      }
+      // Firestore verwirft Schreibvorgänge mit undefined-Feldern — optionale Daten weglassen
+      const payload = Object.fromEntries(
+        Object.entries(raw).filter(([, value]) => value !== undefined)
+      )
+      const docRef = await addDoc(projectsRef, payload)
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Projekts:', error)
@@ -981,7 +986,10 @@ class DataServiceClass {
     }
   }
 
-  async updateProject(id: string, projectData: Partial<Project>): Promise<void> {
+  async updateProject(
+    id: string,
+    projectData: Partial<Project> & Record<string, unknown>
+  ): Promise<void> {
     await this.authReadyPromise
     try {
       if (!id) {
@@ -989,7 +997,10 @@ class DataServiceClass {
       }
 
       const projectRef = doc(db, 'projects', id)
-      await updateDoc(projectRef, projectData)
+      const payload = Object.fromEntries(
+        Object.entries(projectData).filter(([, value]) => value !== undefined)
+      )
+      await updateDoc(projectRef, payload)
     } catch (error) {
       console.error(`Fehler beim Aktualisieren des Projekts ${id}:`, error)
       throw error
