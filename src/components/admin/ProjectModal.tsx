@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { deleteField, type FieldValue } from 'firebase/firestore'
 import { DataService } from '../../services/dataService'
 import type { Project } from '../../types'
 import { toast } from '../ToastContainer'
@@ -54,15 +55,28 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
     setIsLoading(true)
 
     try {
-      const projectData: Partial<Project> & { address?: string } = {
+      type ProjectWrite = Partial<Project> & {
+        address?: string
+        startDate?: Date | FieldValue
+        endDate?: Date | FieldValue
+      }
+      const projectData: ProjectWrite = {
         name: formData.name,
         client: formData.client,
         description: formData.description,
         address: formData.address,
         status: formData.status,
-        isActive: formData.status === 'active',
-        startDate: formData.startDate ? new Date(formData.startDate) : undefined,
-        endDate: formData.endDate ? new Date(formData.endDate) : undefined
+        isActive: formData.status === 'active'
+      }
+      if (formData.startDate) {
+        projectData.startDate = new Date(formData.startDate)
+      } else if (project?.id) {
+        projectData.startDate = deleteField()
+      }
+      if (formData.endDate) {
+        projectData.endDate = new Date(formData.endDate)
+      } else if (project?.id) {
+        projectData.endDate = deleteField()
       }
 
       if (project?.id) {
