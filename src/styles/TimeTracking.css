@@ -3,21 +3,23 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--light-color);
+  background: linear-gradient(180deg, var(--light-color) 0%, #EEF2FF 100%);
 }
 
-/* Header - Kompakter für Mobile */
+/* Header - Modern und Clean */
 .time-tracking-header {
-  background: var(--card-background);
-  padding: var(--spacing-md) var(--spacing-md) var(--spacing-lg);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  padding: var(--spacing-lg) var(--spacing-md);
   text-align: center;
-  border-bottom: 0.5px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 100;
   /* Safe Area Support */
-  padding-top: max(var(--spacing-md), env(safe-area-inset-top));
+  padding-top: max(var(--spacing-lg), env(safe-area-inset-top));
 }
 
 .logo {
@@ -28,57 +30,68 @@
 }
 
 .logo-image {
-  width: clamp(60px, 12vw, 80px);
-  height: clamp(60px, 12vw, 80px);
+  width: clamp(56px, 10vw, 72px);
+  height: clamp(56px, 10vw, 72px);
   object-fit: contain;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
   padding: var(--spacing-sm);
+  box-shadow: var(--shadow);
+  transition: transform var(--transition-base);
+}
+
+.logo-image:hover {
+  transform: scale(1.02);
 }
 
 .logo h1 {
-  font-size: clamp(1.25rem, 4vw, 1.5rem);
+  font-size: clamp(1.125rem, 3.5vw, 1.375rem);
   margin: 0;
   font-weight: 700;
   color: var(--text-color);
+  letter-spacing: -0.02em;
 }
 
 .logo p {
-  font-size: clamp(0.75rem, 2vw, 0.875rem);
-  opacity: 0.7;
+  font-size: clamp(0.75rem, 2vw, 0.8125rem);
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* Main Content */
 .time-tracking-main {
   flex: 1;
-  padding: var(--spacing-md);
-  max-width: 600px;
+  padding: var(--spacing-lg);
+  max-width: 540px;
   margin: 0 auto;
   width: 100%;
-  padding-bottom: calc(var(--spacing-xl) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
 }
 
-/* User Info Section - Mobile optimiert */
+/* User Info Section - Kompakt und elegant */
 .user-info-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-lg);
-  padding: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   background: var(--card-background);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
-  border: 0.5px solid var(--border-color);
+  border: 1px solid var(--border-light);
   gap: var(--spacing-md);
+  animation: slideUp 0.4s var(--transition-base) backwards;
 }
 
 .user-info-section p {
   margin: 0;
   font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
   flex: 1;
-  min-width: 0; /* Prevent overflow */
+  min-width: 0;
+  color: var(--text-secondary);
 }
 
 .user-info-section strong {
@@ -86,19 +99,20 @@
   font-weight: 600;
 }
 
-/* Time Status Card - Prominent für Mobile */
+/* Time Status Card - Prominenter Hero-Bereich */
 .time-status-section {
-  background: linear-gradient(135deg, var(--card-background) 0%, var(--primary-light) 100%);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
-  margin-bottom: var(--spacing-lg);
-  box-shadow: var(--shadow);
-  border: 0.5px solid var(--border-color);
+  background: var(--card-background);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-2xl) var(--spacing-xl);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
   text-align: center;
   position: relative;
   overflow: hidden;
+  animation: slideUp 0.5s var(--transition-base) 0.1s backwards;
 }
 
+/* Dekorativer Gradient-Streifen oben */
 .time-status-section::before {
   content: '';
   position: absolute;
@@ -106,62 +120,113 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+  background: var(--primary-gradient);
+}
+
+/* Dezente Hintergrund-Dekoration */
+.time-status-section::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -30%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, var(--primary-light) 0%, transparent 70%);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .time-status-section h2 {
-  margin-bottom: var(--spacing-md);
-  font-size: clamp(1rem, 3vw, 1.125rem);
+  margin-bottom: var(--spacing-lg);
+  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
+/* Status Badges - Klar erkennbar */
 .status-clocked-in {
-  color: var(--primary-color);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--success-color);
   font-weight: 700;
-  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
-  display: inline-block;
-  padding: var(--spacing-xs) var(--spacing-md);
-  background: rgba(52, 199, 89, 0.1);
+  font-size: clamp(0.9375rem, 3vw, 1rem);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--success-light);
   border-radius: var(--radius-full);
+  text-transform: none;
+  letter-spacing: normal;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-clocked-in::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: var(--success-color);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .status-clocked-out {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
   color: var(--text-secondary);
   font-weight: 600;
-  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
+  font-size: clamp(0.9375rem, 3vw, 1rem);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--border-light);
+  border-radius: var(--radius-full);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-/* Clock Display - Große, lesbare Anzeige */
+.status-clocked-out::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: var(--medium-gray);
+  border-radius: 50%;
+}
+
+/* Clock Display - Große, prominente Anzeige */
 .clock {
-  font-size: clamp(2.5rem, 12vw, 4rem);
+  font-size: clamp(3rem, 14vw, 4.5rem);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text-color);
-  margin-top: var(--spacing-md);
-  letter-spacing: -0.02em;
+  margin-top: var(--spacing-lg);
+  letter-spacing: -0.03em;
   line-height: 1;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+  z-index: 1;
+}
+
+.clock span {
+  background: linear-gradient(135deg, var(--text-color) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* Responsive Design */
 @media (max-width: 480px) {
   .time-tracking-main {
-    padding: var(--spacing-sm);
+    padding: var(--spacing-md);
+    gap: var(--spacing-md);
   }
-  
+
   .time-status-section {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-xl) var(--spacing-lg);
+    border-radius: var(--radius-lg);
   }
-  
+
   .user-info-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
-  }
-  
-  .user-info-section p {
-    width: 100%;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-lg);
   }
 }
 
@@ -170,37 +235,51 @@
   .time-tracking-header {
     padding: var(--spacing-sm) var(--spacing-md);
   }
-  
+
   .logo-image {
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
   }
-  
+
   .logo h1 {
-    font-size: 1.125rem;
+    font-size: 1rem;
   }
-  
+
   .logo p {
     display: none;
   }
-  
+
   .time-status-section {
-    padding: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
   }
-  
+
   .clock {
-    font-size: 2rem;
+    font-size: 2.5rem;
+    margin-top: var(--spacing-sm);
   }
 }
 
-/* Dark Mode Support (optional) */
+/* Dark Mode Support */
 @media (prefers-color-scheme: dark) {
   :root {
-    --light-color: #1C1C1E;
-    --card-background: #2C2C2E;
-    --text-color: #FFFFFF;
-    --text-secondary: #98989D;
-    --border-color: #38383A;
-    --background-color: #000000;
+    --light-color: #0F172A;
+    --card-background: #1E293B;
+    --text-color: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --border-color: #334155;
+    --border-light: #1E293B;
+    --background-color: #0F172A;
+    --glass-bg: rgba(30, 41, 59, 0.85);
+    --glass-border: rgba(51, 65, 85, 0.5);
+    --primary-light: rgba(16, 185, 129, 0.15);
+    --success-light: rgba(16, 185, 129, 0.15);
+    --danger-light: rgba(239, 68, 68, 0.15);
+    --warning-light: rgba(245, 158, 11, 0.15);
+    --accent-light: rgba(59, 130, 246, 0.15);
+  }
+
+  .time-tracking-container {
+    background: linear-gradient(180deg, var(--light-color) 0%, #1E1B4B 100%);
   }
 }
