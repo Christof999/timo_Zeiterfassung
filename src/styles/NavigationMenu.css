@@ -7,15 +7,22 @@
   cursor: pointer;
   padding: var(--spacing-sm);
   gap: 5px;
-  z-index: 1001;
+  z-index: 998;
   border-radius: var(--radius-lg);
   min-width: var(--touch-target-min);
   min-height: var(--touch-target-min);
   justify-content: center;
   align-items: center;
-  transition: all var(--transition-base);
+  transition: opacity var(--transition-base), visibility var(--transition-base), transform var(--transition-base);
   -webkit-tap-highlight-color: transparent;
   box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.nav-toggle.nav-toggle--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .nav-toggle:hover {
@@ -48,7 +55,8 @@
   display: none;
   position: absolute;
   top: var(--spacing-lg);
-  right: var(--spacing-lg);
+  left: var(--spacing-lg);
+  right: auto;
   background: var(--light-color);
   border: 1px solid var(--border-color);
   font-size: 20px;
@@ -97,36 +105,38 @@
     display: flex;
   }
 
-  .nav-menu {
+  .nav-menu.nav-menu--employee {
     position: fixed;
     top: 0;
-    right: -100%;
+    left: -100%;
+    right: auto;
     width: min(320px, 85vw);
     height: 100vh;
     height: 100dvh;
     background: var(--card-background);
     box-shadow: var(--shadow-xl);
-    transition: right var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+    transition: left var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
     padding: calc(var(--spacing-3xl) + env(safe-area-inset-top)) var(--spacing-lg) var(--spacing-lg);
+    padding-left: calc(var(--spacing-lg) + env(safe-area-inset-left));
     z-index: 1000;
-    border-left: 4px solid var(--primary-color);
+    border-right: 4px solid var(--primary-color);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
 
-  .nav-menu.active {
-    right: 0;
+  .nav-menu.nav-menu--employee.active {
+    left: 0;
   }
 
   .nav-menu.active .nav-menu-close {
     display: flex;
   }
 
-  /* Menu Header */
-  .nav-menu::before {
+  /* Menu Header (Platz für Schließen-Button links) */
+  .nav-menu.nav-menu--employee::before {
     content: 'Menü';
     display: block;
     font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
@@ -136,6 +146,7 @@
     letter-spacing: 0.1em;
     margin-bottom: var(--spacing-lg);
     padding-bottom: var(--spacing-md);
+    padding-left: calc(var(--touch-target-min) + var(--spacing-sm));
     border-bottom: 1px solid var(--border-light);
   }
 
@@ -186,7 +197,7 @@
     width: 100%;
     height: 100%;
     height: 100dvh;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     z-index: 999;
