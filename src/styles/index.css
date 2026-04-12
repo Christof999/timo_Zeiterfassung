@@ -291,24 +291,31 @@ p {
   color: var(--primary-dark);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --light-color: #0F172A;
-    --card-background: #1E293B;
-    --text-color: #F1F5F9;
-    --text-secondary: #94A3B8;
-    --text-muted: #64748B;
-    --border-color: #334155;
-    --border-light: #1E293B;
-    --background-color: #0F172A;
-    --glass-bg: rgba(30, 41, 59, 0.85);
-    --glass-border: rgba(51, 65, 85, 0.5);
-    --primary-light: rgba(16, 185, 129, 0.15);
-    --success-light: rgba(16, 185, 129, 0.15);
-    --danger-light: rgba(239, 68, 68, 0.15);
-    --warning-light: rgba(245, 158, 11, 0.15);
-    --accent-light: rgba(59, 130, 246, 0.15);
-  }
+/* Manueller Dark Mode (Schalter in der App); prefers-color-scheme absichtlich nicht mehr gemischt */
+:root[data-theme='dark'] {
+  --light-color: #0f172a;
+  --card-background: #1e293b;
+  --text-color: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #334155;
+  --border-light: #1e293b;
+  --background-color: #0f172a;
+  --medium-gray: #64748b;
+  --dark-color: #f8fafc;
+  --glass-bg: rgba(30, 41, 59, 0.85);
+  --glass-border: rgba(51, 65, 85, 0.5);
+  --primary-light: rgba(16, 185, 129, 0.18);
+  --success-light: rgba(16, 185, 129, 0.18);
+  --danger-light: rgba(239, 68, 68, 0.18);
+  --warning-light: rgba(245, 158, 11, 0.18);
+  --accent-light: rgba(59, 130, 246, 0.18);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.42);
+  --shadow-xl: 0 18px 36px rgba(0, 0, 0, 0.48);
 }
 
 @media (prefers-reduced-motion: reduce) {

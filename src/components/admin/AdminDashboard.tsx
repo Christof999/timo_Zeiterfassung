@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
+import ThemeToggle from '../ThemeToggle'
 import OverviewTab from './tabs/OverviewTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
@@ -281,6 +282,7 @@ const AdminDashboard: React.FC = () => {
             <span className="admin-hamburger-line"></span>
           </button>
           <div className="admin-controls">
+            <ThemeToggle variant="icon" />
             <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
             <button onClick={handleLogout} className="btn secondary-btn">
               Abmelden

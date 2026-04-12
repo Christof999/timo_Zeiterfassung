@@ -10,6 +10,8 @@ import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
+import ThemeToggle from './ThemeToggle'
+import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import '../styles/TimeTracking.css'
 
 const TimeTracking: React.FC = () => {
@@ -182,8 +184,13 @@ const TimeTracking: React.FC = () => {
 
       <main className="time-tracking-main">
         <div className="user-info-section">
-          <p>Angemeldet als: <strong>{currentUser.firstName} {currentUser.lastName}</strong></p>
-          <NavigationMenu onLogout={handleLogout} />
+          <div className="user-info-row">
+            <NavigationMenu onLogout={handleLogout} />
+            <p className="user-info-greeting">
+              Angemeldet als: <strong>{getEmployeeDisplayName(currentUser)}</strong>
+            </p>
+            <ThemeToggle variant="icon" className="user-info-theme-toggle" />
+          </div>
         </div>
 
         {canManualTimeEntry && (

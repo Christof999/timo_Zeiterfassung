@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import { toast } from './ToastContainer'
+import ThemeToggle from './ThemeToggle'
 import '../styles/Login.css'
 
 const Login: React.FC = () => {
@@ -50,6 +51,7 @@ const Login: React.FC = () => {
   return (
     <div className="login-container">
       <header className="login-header">
+        <ThemeToggle variant="icon" className="login-theme-toggle" />
         <div className="login-logo">
           <img 
             src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 

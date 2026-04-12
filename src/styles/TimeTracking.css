@@ -72,27 +72,62 @@
 
 /* User Info Section - Kompakt und elegant */
 .user-info-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--card-background);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-light);
-  gap: var(--spacing-md);
   animation: slideUp 0.4s var(--transition-base) backwards;
 }
 
-.user-info-section p {
-  margin: 0;
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
-  flex: 1;
+.user-info-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
   min-width: 0;
-  color: var(--text-secondary);
 }
 
-.user-info-section strong {
+.user-info-greeting {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.user-info-theme-toggle {
+  flex-shrink: 0;
+}
+
+@media (min-width: 769px) {
+  .user-info-row .nav-menu {
+    order: -1;
+  }
+
+  .user-info-greeting {
+    text-align: left;
+  }
+}
+
+@media (max-width: 400px) {
+  .user-info-row {
+    flex-wrap: wrap;
+  }
+
+  .user-info-greeting {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .user-info-theme-toggle {
+    margin-left: auto;
+  }
+}
+
+.user-info-greeting strong {
   color: var(--text-color);
   font-weight: 600;
 }
