@@ -80,7 +80,6 @@ const AdminLogin: React.FC = () => {
                 required
                 autoComplete="username"
                 disabled={isLoading}
-                placeholder="admin"
               />
             </div>
 
@@ -94,7 +93,6 @@ const AdminLogin: React.FC = () => {
                 required
                 autoComplete="current-password"
                 disabled={isLoading}
-                placeholder="admin123"
               />
             </div>
 

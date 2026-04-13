@@ -262,16 +262,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="admin-dashboard-container">
       <header className="admin-dashboard-header">
-        <div className="admin-logo">
-          <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
-            className="admin-logo-image"
-          />
-          <h1>Lauffer Zeiterfassung</h1>
-          <p>Admin Panel</p>
-        </div>
-        <div className="admin-header-controls">
+        <div className="admin-header-start">
           <button 
             className="admin-nav-toggle"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -281,6 +272,17 @@ const AdminDashboard: React.FC = () => {
             <span className="admin-hamburger-line"></span>
             <span className="admin-hamburger-line"></span>
           </button>
+        </div>
+        <div className="admin-logo">
+          <img 
+            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
+            alt="Lauffer Logo" 
+            className="admin-logo-image"
+          />
+          <h1>Lauffer Zeiterfassung</h1>
+          <p className="admin-logo-subtitle">Admin Panel</p>
+        </div>
+        <div className="admin-header-controls">
           <div className="admin-controls">
             <ThemeToggle variant="icon" />
             <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
