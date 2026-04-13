@@ -20,8 +20,42 @@ import {
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
 import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
+import { formatDateForInputLocal } from '../utils/dateUtils'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
+
+/** IDs aus verschachtelten Arrays/Objekten (sitePhotos, liveDocumentation, …) — nur id-ähnliche Felder, kein Volltext. */
+function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): void {
+  if (depth > 14) return
+  if (value == null) return
+  if (typeof value === 'string') {
+    const t = value.trim()
+    if (t.length >= 8 && t.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(t)) into.add(t)
+    return
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    into.add(String(value))
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectFileReferenceIds(item, into, depth + 1))
+    return
+  }
+  if (typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    for (const key of ['id', 'fileId', 'uploadId', 'docId', 'fileUploadId']) {
+      const v = o[key]
+      if (typeof v === 'string' && v.trim()) into.add(v.trim())
+      if (typeof v === 'number' && Number.isFinite(v)) into.add(String(v))
+    }
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'notes' || k === 'imageComment' || k === 'addedByName' || k === 'base64Data' || k === 'mimeType') {
+        continue
+      }
+      if (v !== null && typeof v === 'object') collectFileReferenceIds(v, into, depth + 1)
+    }
+  }
+}
 
 class DataServiceClass {
   private authReadyPromise: Promise<void>
@@ -451,59 +485,33 @@ class DataServiceClass {
     }
 
     const clockIn = this.convertToDate(entry.clockInTime)
-    const workDayKey = `${clockIn.getFullYear()}-${String(clockIn.getMonth() + 1).padStart(2, '0')}-${String(clockIn.getDate()).padStart(2, '0')}`
+    const clockOut = this.convertToDate(entry.clockOutTime)
+    const workDayKey = formatDateForInputLocal(clockIn)
 
     const fileIdSet = new Set<string>()
-    const addId = (id: unknown) => {
-      if (id != null && (typeof id === 'string' || typeof id === 'number')) {
-        const s = String(id).trim()
-        if (s) fileIdSet.add(s)
-      }
+    ;(entry.sitePhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    ;(entry.documentPhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    collectFileReferenceIds(entry.photos, fileIdSet)
+    collectFileReferenceIds(entry.sitePhotos, fileIdSet)
+    collectFileReferenceIds(entry.documents, fileIdSet)
+    collectFileReferenceIds(entry.liveDocumentation, fileIdSet)
+    fileIdSet.delete(timeEntryId)
+    if (entry.employeeId) fileIdSet.delete(String(entry.employeeId))
+
+    const uploadInWorkWindow = (uploadTime: unknown): boolean => {
+      const d = this.convertToDate(uploadTime)
+      const t = d.getTime()
+      return t >= clockIn.getTime() && t <= clockOut.getTime()
     }
 
-    ;(entry.sitePhotoUploads || []).forEach(addId)
-    ;(entry.documentPhotoUploads || []).forEach(addId)
-    if (entry.photos && Array.isArray(entry.photos)) {
-      entry.photos.forEach((p: unknown) => {
-        if (typeof p === 'string' || typeof p === 'number') addId(p)
-      })
-    }
-    if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
-      entry.sitePhotos.forEach((photo: any) => {
-        if (photo?.id) addId(photo.id)
-      })
-    }
-    if (entry.documents && Array.isArray(entry.documents)) {
-      entry.documents.forEach((doc: any) => {
-        if (doc?.id) addId(doc.id)
-        if (typeof doc === 'string' || typeof doc === 'number') addId(doc)
-      })
-    }
-
-    // Live-Dokumentation (während der Schicht): Bilder/Dokumente in images[] / documents[] — oft nur hier, nicht in sitePhotoUploads
-    if (entry.liveDocumentation && Array.isArray(entry.liveDocumentation)) {
-      for (const block of entry.liveDocumentation) {
-        if (!block || typeof block !== 'object') continue
-        const imgs = (block as any).images
-        if (Array.isArray(imgs)) {
-          imgs.forEach((img: any) => {
-            if (img && typeof img === 'object') {
-              addId(img.id)
-              addId(img.fileId)
-            }
-          })
-        }
-        const docs = (block as any).documents
-        if (Array.isArray(docs)) {
-          docs.forEach((d: any) => {
-            if (d && typeof d === 'object') {
-              addId(d.id)
-              addId(d.fileId)
-            }
-          })
-        }
+    const mergeFileUploadsForEntry = async (): Promise<void> => {
+      const uploads = await this.getFileUploads(sourceProjectId)
+      for (const u of uploads) {
+        if (!u.id || u.employeeId !== entry.employeeId) continue
+        if (uploadInWorkWindow(u.uploadTime)) fileIdSet.add(u.id)
       }
     }
+    await mergeFileUploadsForEntry()
 
     const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
       if (!items || !Array.isArray(items)) return items
@@ -564,8 +572,6 @@ class DataServiceClass {
       Object.entries(timeEntryUpdate).filter(([, v]) => v !== undefined)
     ) as Partial<TimeEntry>
 
-    await this.updateTimeEntry(timeEntryId, cleanedUpdate)
-
     const fileIds = [...fileIdSet]
     const maxBatch = 400
     for (let i = 0; i < fileIds.length; i += maxBatch) {
@@ -577,19 +583,21 @@ class DataServiceClass {
       await batch.commit()
     }
 
-    const projectUsages = await this.getVehicleUsagesByProject(sourceProjectId)
-    const usageIdsToMove: string[] = []
-    for (const usage of projectUsages) {
-      if (usage.employeeId !== entry.employeeId || !usage.id) continue
-      const rawDate = usage.date as any
-      let dayKey = ''
+    await this.updateTimeEntry(timeEntryId, cleanedUpdate)
+
+    const usageDayKey = (rawDate: any): string => {
       if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
-        dayKey = rawDate.slice(0, 10)
-      } else {
-        const d = this.convertToDate(rawDate)
-        dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        return rawDate.slice(0, 10)
       }
-      if (dayKey === workDayKey) {
+      const d = this.convertToDate(rawDate)
+      return formatDateForInputLocal(d)
+    }
+
+    const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
+    const usageIdsToMove: string[] = []
+    for (const usage of employeeUsages) {
+      if (!usage.id || usage.projectId !== sourceProjectId) continue
+      if (usageDayKey(usage.date) === workDayKey) {
         usageIdsToMove.push(usage.id)
       }
     }
@@ -855,6 +863,20 @@ class DataServiceClass {
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
     } catch (error) {
       console.error('Fehler beim Abrufen der Fahrzeugnutzungen:', error)
+      return []
+    }
+  }
+
+  async getVehicleUsagesByEmployeeId(employeeId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!employeeId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('employeeId', '==', employeeId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Mitarbeiter):', error)
       return []
     }
   }
