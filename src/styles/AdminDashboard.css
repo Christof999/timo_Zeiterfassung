@@ -6,25 +6,36 @@
 }
 
 .admin-dashboard-header {
-  padding: 12px var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  padding-bottom: calc(var(--spacing-md) + 2px);
   background: var(--card-background);
   border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  flex-wrap: wrap;
   gap: var(--spacing-md);
-  position: relative;
+  min-height: 5.5rem;
+  box-sizing: border-box;
+}
+
+.admin-header-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
 .admin-dashboard-header .admin-logo {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  position: relative;
+  left: auto;
+  transform: none;
+  justify-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  padding: var(--spacing-xs) 0;
+  max-width: min(100%, 22rem);
 }
 
 .admin-logo-image {
@@ -44,14 +55,21 @@
   letter-spacing: -0.01em;
 }
 
-.admin-logo p {
+.admin-logo-subtitle {
   margin: 0;
+  margin-top: 2px;
+  padding-bottom: 2px;
   color: var(--text-muted);
   font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .admin-dashboard-header .admin-header-controls {
-  margin-left: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+  justify-self: end;
 }
 
 .admin-header-controls {
@@ -307,20 +325,31 @@
   }
 
   .admin-dashboard-header {
-    flex-direction: column;
-    align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+    min-height: 0;
+    padding-bottom: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .admin-header-start {
+    flex: 0 0 auto;
+    order: 1;
   }
 
   .admin-dashboard-header .admin-logo {
-    position: static;
-    transform: none;
-    margin-bottom: var(--spacing-md);
+    order: 2;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+    padding: var(--spacing-sm) 0 var(--spacing-md);
   }
 
   .admin-dashboard-header .admin-header-controls {
-    margin-left: 0;
-    justify-content: space-between;
+    order: 3;
+    flex: 1 1 auto;
     width: 100%;
+    justify-content: space-between;
   }
 
   .dashboard-tabs {
