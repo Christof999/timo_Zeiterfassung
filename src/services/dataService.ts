@@ -77,6 +77,53 @@ class DataServiceClass {
     this.authReadyPromise = this.initAuth()
   }
 
+  /** Einheitliche Abbildung fileUploads-Dokument → FileUpload (gleiche Base64-/URL-Logik wie getFileUploads). */
+  private fileUploadFromDocData(
+    docId: string,
+    data: Record<string, unknown>,
+    opts?: { projectIdFallback?: string; fileTypeFallback?: string }
+  ): FileUpload {
+    const uploadTimeRaw = data.uploadTime
+    const uploadTime =
+      uploadTimeRaw instanceof Timestamp
+        ? uploadTimeRaw.toDate()
+        : uploadTimeRaw instanceof Date
+          ? uploadTimeRaw
+          : (uploadTimeRaw as any)?.toDate?.() || new Date((uploadTimeRaw as any) || Date.now())
+
+    let base64 = String(data.base64Data || data.base64String || data.base64 || '')
+    let fileUrl = String(data.url || data.filePath || '')
+    if (fileUrl.startsWith('data:')) {
+      const parts = fileUrl.split(',')
+      if (parts.length > 1) base64 = parts[1]
+    }
+    if (!base64 && typeof data.mimeType === 'string' && data.mimeType.includes(',')) {
+      const parts = data.mimeType.split(',')
+      if (parts.length > 1) base64 = parts[1]
+    }
+
+    let mimeType = String(data.mimeType || data.contentType || '')
+    if (mimeType.startsWith('data:')) {
+      const match = mimeType.match(/^data:([^;,]+)/)
+      if (match) mimeType = match[1]
+    }
+
+    return {
+      id: docId,
+      fileName: String(data.fileName || data.name || ''),
+      filePath: fileUrl,
+      fileType: String(data.fileType || data.type || opts?.fileTypeFallback || 'construction_site'),
+      projectId: String(data.projectId || opts?.projectIdFallback || ''),
+      employeeId: String(data.employeeId || ''),
+      timeEntryId: String(data.timeEntryId || ''),
+      uploadTime: uploadTime || new Date(),
+      notes: String(data.notes || data.comment || ''),
+      imageComment: String(data.imageComment || data.comment || ''),
+      base64Data: base64,
+      mimeType
+    } as FileUpload
+  }
+
   /** Nur IDs, für die ein fileUploads-Dokument existiert (vermeidet Fehler bei Platzhalter-/Offline-IDs). */
   private async filterExistingFileUploadDocIds(ids: string[]): Promise<string[]> {
     const out: string[] = []
@@ -1691,27 +1738,13 @@ class DataServiceClass {
           const chunkSnapshot = await getDocs(chunkQuery)
 
           chunkSnapshot.forEach((fileDoc) => {
-            const data = fileDoc.data() as any
-            const uploadTime = data.uploadTime instanceof Timestamp
-              ? data.uploadTime.toDate()
-              : (data.uploadTime instanceof Date
-                  ? data.uploadTime
-                  : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now()))
-
-            files.push({
-              id: fileDoc.id,
-              fileName: data.fileName || '',
-              filePath: data.filePath || '',
-              fileType: data.fileType || normalizedType,
-              projectId: data.projectId || projectId,
-              employeeId: data.employeeId || '',
-              timeEntryId: data.timeEntryId || '',
-              uploadTime: uploadTime || new Date(),
-              notes: data.notes || '',
-              imageComment: data.imageComment || '',
-              base64Data: data.base64Data,
-              mimeType: data.mimeType
-            } as FileUpload)
+            const data = fileDoc.data() as Record<string, unknown>
+            files.push(
+              this.fileUploadFromDocData(fileDoc.id, data, {
+                projectIdFallback: projectId,
+                fileTypeFallback: normalizedType
+              })
+            )
           })
 
           if (isDevMode && chunkSnapshot.size < chunk.length) {
@@ -1897,26 +1930,10 @@ class DataServiceClass {
         const q = query(fileUploadsRef, where('timeEntryId', 'in', chunk))
         const snapshot = await getDocs(q)
         snapshot.docs.forEach((fileDoc) => {
-          const data = fileDoc.data() as any
-          const uploadTime = data.uploadTime instanceof Timestamp
-            ? data.uploadTime.toDate()
-            : data.uploadTime instanceof Date
-              ? data.uploadTime
-              : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now())
-          out.push({
-            id: fileDoc.id,
-            fileName: data.fileName || '',
-            filePath: data.filePath || '',
-            fileType: data.fileType || 'construction_site',
-            projectId: data.projectId || '',
-            employeeId: data.employeeId || '',
-            timeEntryId: data.timeEntryId || '',
-            uploadTime: uploadTime || new Date(),
-            notes: data.notes || '',
-            imageComment: data.imageComment || '',
-            base64Data: data.base64Data,
-            mimeType: data.mimeType
-          } as FileUpload)
+          const data = fileDoc.data() as Record<string, unknown>
+          out.push(
+            this.fileUploadFromDocData(fileDoc.id, data, { fileTypeFallback: 'construction_site' })
+          )
         })
       } catch (e) {
         console.error('getFileUploadsByTimeEntryIds:', e)
@@ -1937,64 +1954,26 @@ class DataServiceClass {
       
       const snapshot = await getDocs(q)
       let uploads = snapshot.docs.map((doc, index) => {
-        const data = doc.data() as any
-        const uploadTime = data.uploadTime instanceof Timestamp
-          ? data.uploadTime.toDate()
-          : (data.uploadTime as Date | undefined)
-        
+        const data = doc.data() as Record<string, unknown>
+
         // Debug: Zeige die ersten 3 Firestore-Dokumente KOMPLETT als JSON
         if (isDevMode && index < 1) {
-          // Finde Felder, die groß sind (könnten base64 sein)
-          const largeFields = Object.keys(data).filter(key => {
+          const largeFields = Object.keys(data).filter((key) => {
             const val = data[key]
             return typeof val === 'string' && val.length > 1000
           })
-          
-          // Erstelle eine Kopie mit gekürzten großen Feldern für das Log
           const dataCopy = { ...data }
-          largeFields.forEach(key => {
-            dataCopy[key] = `[${data[key].length} Zeichen] ${data[key].substring(0, 50)}...`
+          largeFields.forEach((key) => {
+            const v = data[key]
+            dataCopy[key] =
+              typeof v === 'string' ? `[${v.length} Zeichen] ${v.substring(0, 50)}...` : v
           })
-          
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - ALLE KEYS: ${Object.keys(data).join(', ')}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - GROSSE FELDER: ${largeFields.length > 0 ? largeFields.join(', ') : 'KEINE!'}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - DATEN:`, JSON.stringify(dataCopy, null, 2))
         }
-        
-        // Suche nach base64-Daten in verschiedenen möglichen Feldern
-        let base64 = data.base64Data || data.base64String || data.base64 || ''
-        let fileUrl = data.url || data.filePath || ''
-        
-        // Falls url eine data URL ist, extrahiere base64 daraus
-        if (fileUrl && fileUrl.startsWith('data:')) {
-          const parts = fileUrl.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        // Falls mimeType ein data URL ist, könnte base64 direkt darin sein
-        if (!base64 && data.mimeType && data.mimeType.includes(',')) {
-          const parts = data.mimeType.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        return { 
-          id: doc.id,
-          fileName: data.fileName || data.name || '',
-          filePath: fileUrl,
-          fileType: data.fileType || data.type || data.contentType || '',
-          projectId: data.projectId || '',
-          employeeId: data.employeeId || '',
-          timeEntryId: data.timeEntryId || '',
-          uploadTime: uploadTime || new Date(),
-          notes: data.notes || data.comment || '',
-          imageComment: data.imageComment || data.comment || '',
-          base64Data: base64,
-          mimeType: data.mimeType || data.contentType || ''
-        } as FileUpload
+
+        return this.fileUploadFromDocData(doc.id, data)
       })
       
       if (type) {
