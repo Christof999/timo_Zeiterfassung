@@ -508,10 +508,18 @@ class DataServiceClass {
       const uploads = await this.getFileUploads(sourceProjectId)
       for (const u of uploads) {
         if (!u.id || u.employeeId !== entry.employeeId) continue
-        if (uploadInWorkWindow(u.uploadTime)) fileIdSet.add(u.id)
+        const dayOfUpload = formatDateForInputLocal(this.convertToDate(u.uploadTime))
+        if (uploadInWorkWindow(u.uploadTime) || dayOfUpload === workDayKey) {
+          fileIdSet.add(u.id)
+        }
       }
     }
     await mergeFileUploadsForEntry()
+
+    const byTimeEntryLink = await this.getFileUploadsByTimeEntryIds([timeEntryId])
+    for (const u of byTimeEntryLink) {
+      if (u.id) fileIdSet.add(u.id)
+    }
 
     const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
       if (!items || !Array.isArray(items)) return items
@@ -578,7 +586,10 @@ class DataServiceClass {
       const batch = writeBatch(db)
       const chunk = fileIds.slice(i, i + maxBatch)
       for (const fid of chunk) {
-        batch.update(doc(db, 'fileUploads', fid), { projectId: targetProjectId })
+        batch.update(doc(db, 'fileUploads', fid), {
+          projectId: targetProjectId,
+          timeEntryId: timeEntryId
+        })
       }
       await batch.commit()
     }
@@ -593,14 +604,25 @@ class DataServiceClass {
       return formatDateForInputLocal(d)
     }
 
-    const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
-    const usageIdsToMove: string[] = []
-    for (const usage of employeeUsages) {
-      if (!usage.id || usage.projectId !== sourceProjectId) continue
-      if (usageDayKey(usage.date) === workDayKey) {
-        usageIdsToMove.push(usage.id)
+    const usageIdsToMoveSet = new Set<string>()
+
+    const linkedUsages = await this.getVehicleUsagesByTimeEntryId(timeEntryId)
+    for (const usage of linkedUsages) {
+      if (usage.id && usage.projectId === sourceProjectId) {
+        usageIdsToMoveSet.add(usage.id)
       }
     }
+
+    const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
+    for (const usage of employeeUsages) {
+      if (!usage.id || usage.projectId !== sourceProjectId) continue
+      if (usage.timeEntryId && usage.timeEntryId !== timeEntryId) continue
+      if (usageDayKey(usage.date) === workDayKey) {
+        usageIdsToMoveSet.add(usage.id)
+      }
+    }
+
+    const usageIdsToMove = [...usageIdsToMoveSet]
     for (let i = 0; i < usageIdsToMove.length; i += maxBatch) {
       const batch = writeBatch(db)
       for (const uid of usageIdsToMove.slice(i, i + maxBatch)) {
@@ -644,7 +666,8 @@ class DataServiceClass {
     employeeId: string,
     type: string = 'construction_site',
     notes: string = '',
-    comment: string = ''
+    comment: string = '',
+    options?: { timeEntryId?: string }
   ): Promise<FileUpload> {
     await this.authReadyPromise
     try {
@@ -658,7 +681,7 @@ class DataServiceClass {
 
       // Speichere in Firestore
       const fileUploadsRef = collection(db, 'fileUploads')
-      const uploadData = {
+      const uploadDataRaw: Record<string, unknown> = {
         fileName: file.name,
         fileType: type,
         projectId,
@@ -669,6 +692,12 @@ class DataServiceClass {
         imageComment: comment,
         uploadTime: serverTimestamp()
       }
+      if (options?.timeEntryId) {
+        uploadDataRaw.timeEntryId = options.timeEntryId
+      }
+      const uploadData = Object.fromEntries(
+        Object.entries(uploadDataRaw).filter(([, v]) => v !== undefined)
+      )
 
       const docRef = await addDoc(fileUploadsRef, uploadData)
       const uploadDoc = await getDoc(docRef)
@@ -680,6 +709,7 @@ class DataServiceClass {
         fileType: type,
         projectId,
         employeeId,
+        timeEntryId: options?.timeEntryId,
         uploadTime: uploadDoc.data()?.uploadTime || new Date(),
         notes,
         imageComment: comment
@@ -877,6 +907,20 @@ class DataServiceClass {
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
     } catch (error) {
       console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Mitarbeiter):', error)
+      return []
+    }
+  }
+
+  async getVehicleUsagesByTimeEntryId(timeEntryId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!timeEntryId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('timeEntryId', '==', timeEntryId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Zeiteintrag):', error)
       return []
     }
   }
@@ -1587,6 +1631,15 @@ class DataServiceClass {
         }
       })
 
+      // Alle Uploads mit timeEntryId zu Stempelsätzen dieses Projekts (falls Arrays im Eintrag unvollständig sind)
+      const entryIdsForProject = timeEntries.map((e) => e.id).filter(Boolean) as string[]
+      if (entryIdsForProject.length > 0) {
+        const linkedByTimeEntry = await this.getFileUploadsByTimeEntryIds(entryIdsForProject)
+        for (const u of linkedByTimeEntry) {
+          if (u.id) fileIds.push(u.id)
+        }
+      }
+
       // Entferne Duplikate
       fileIds = [...new Set(fileIds)]
 
@@ -1621,6 +1674,7 @@ class DataServiceClass {
               fileType: data.fileType || normalizedType,
               projectId: data.projectId || projectId,
               employeeId: data.employeeId || '',
+              timeEntryId: data.timeEntryId || '',
               uploadTime: uploadTime || new Date(),
               notes: data.notes || '',
               imageComment: data.imageComment || '',
@@ -1798,6 +1852,48 @@ class DataServiceClass {
     }
   }
 
+  /** Alle fileUploads, die explizit an einen Stempelsatz gebunden sind (auch wenn projectId/Arrays abweichen). */
+  async getFileUploadsByTimeEntryIds(timeEntryIds: string[]): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    if (!timeEntryIds || timeEntryIds.length === 0) return []
+    const out: FileUpload[] = []
+    const chunkSize = 10
+    for (let i = 0; i < timeEntryIds.length; i += chunkSize) {
+      const chunk = timeEntryIds.slice(i, i + chunkSize).filter((id) => !!id)
+      if (chunk.length === 0) continue
+      try {
+        const fileUploadsRef = collection(db, 'fileUploads')
+        const q = query(fileUploadsRef, where('timeEntryId', 'in', chunk))
+        const snapshot = await getDocs(q)
+        snapshot.docs.forEach((fileDoc) => {
+          const data = fileDoc.data() as any
+          const uploadTime = data.uploadTime instanceof Timestamp
+            ? data.uploadTime.toDate()
+            : data.uploadTime instanceof Date
+              ? data.uploadTime
+              : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now())
+          out.push({
+            id: fileDoc.id,
+            fileName: data.fileName || '',
+            filePath: data.filePath || '',
+            fileType: data.fileType || 'construction_site',
+            projectId: data.projectId || '',
+            employeeId: data.employeeId || '',
+            timeEntryId: data.timeEntryId || '',
+            uploadTime: uploadTime || new Date(),
+            notes: data.notes || '',
+            imageComment: data.imageComment || '',
+            base64Data: data.base64Data,
+            mimeType: data.mimeType
+          } as FileUpload)
+        })
+      } catch (e) {
+        console.error('getFileUploadsByTimeEntryIds:', e)
+      }
+    }
+    return out
+  }
+
   async getFileUploads(projectId?: string, type?: string): Promise<FileUpload[]> {
     await this.authReadyPromise
     try {
@@ -1861,6 +1957,7 @@ class DataServiceClass {
           fileType: data.fileType || data.type || data.contentType || '',
           projectId: data.projectId || '',
           employeeId: data.employeeId || '',
+          timeEntryId: data.timeEntryId || '',
           uploadTime: uploadTime || new Date(),
           notes: data.notes || data.comment || '',
           imageComment: data.imageComment || data.comment || '',

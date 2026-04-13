@@ -35,7 +35,8 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
           timeEntry.employeeId,
           'construction_site',
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         sitePhotoObjects.push(upload)
       }
@@ -52,7 +53,8 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
           timeEntry.employeeId,
           documentType,
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         documentPhotoObjects.push(upload)
       }
