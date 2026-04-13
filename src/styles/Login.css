@@ -28,6 +28,13 @@
   z-index: 1;
 }
 
+.login-theme-toggle {
+  position: absolute;
+  top: max(var(--spacing-md), env(safe-area-inset-top));
+  right: max(var(--spacing-md), env(safe-area-inset-right));
+  z-index: 2;
+}
+
 .login-logo {
   display: flex;
   flex-direction: column;

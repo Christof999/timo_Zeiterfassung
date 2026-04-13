@@ -1,0 +1,38 @@
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+  color: var(--text-color);
+  cursor: pointer;
+  font: inherit;
+  box-shadow: var(--shadow-xs);
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.theme-toggle:hover {
+  background: var(--light-color);
+  border-color: var(--primary-color);
+}
+
+.theme-toggle--labeled {
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+  min-width: auto;
+}
+
+.theme-toggle-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.theme-toggle-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}

@@ -6,7 +6,8 @@ import {
   addDoc, 
   setDoc,
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
+  writeBatch,
   query, 
   where, 
   limit,
@@ -19,14 +20,125 @@ import {
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
 import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
+import { formatDateForInputLocal } from '../utils/dateUtils'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
+
+/** Keine Firestore-Dokumente (Platzhalter aus alter Offline-/Client-Logik). */
+function isPlaceholderFileUploadId(id: string): boolean {
+  const t = id.trim().toLowerCase()
+  return (
+    t.startsWith('local_') ||
+    t.startsWith('temp_') ||
+    t.startsWith('mock_') ||
+    t.startsWith('fake_')
+  )
+}
+
+/** IDs aus verschachtelten Arrays/Objekten (sitePhotos, liveDocumentation, …) — nur id-ähnliche Felder, kein Volltext. */
+function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): void {
+  if (depth > 14) return
+  if (value == null) return
+  if (typeof value === 'string') {
+    const t = value.trim()
+    if (t.length >= 8 && t.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(t) && !isPlaceholderFileUploadId(t)) {
+      into.add(t)
+    }
+    return
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    into.add(String(value))
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectFileReferenceIds(item, into, depth + 1))
+    return
+  }
+  if (typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    for (const key of ['id', 'fileId', 'uploadId', 'docId', 'fileUploadId']) {
+      const v = o[key]
+      if (typeof v === 'string' && v.trim() && !isPlaceholderFileUploadId(v.trim())) into.add(v.trim())
+      if (typeof v === 'number' && Number.isFinite(v)) into.add(String(v))
+    }
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'notes' || k === 'imageComment' || k === 'addedByName' || k === 'base64Data' || k === 'mimeType') {
+        continue
+      }
+      if (v !== null && typeof v === 'object') collectFileReferenceIds(v, into, depth + 1)
+    }
+  }
+}
 
 class DataServiceClass {
   private authReadyPromise: Promise<void>
 
   constructor() {
     this.authReadyPromise = this.initAuth()
+  }
+
+  /** Einheitliche Abbildung fileUploads-Dokument → FileUpload (gleiche Base64-/URL-Logik wie getFileUploads). */
+  private fileUploadFromDocData(
+    docId: string,
+    data: Record<string, unknown>,
+    opts?: { projectIdFallback?: string; fileTypeFallback?: string }
+  ): FileUpload {
+    const uploadTimeRaw = data.uploadTime
+    const uploadTime =
+      uploadTimeRaw instanceof Timestamp
+        ? uploadTimeRaw.toDate()
+        : uploadTimeRaw instanceof Date
+          ? uploadTimeRaw
+          : (uploadTimeRaw as any)?.toDate?.() || new Date((uploadTimeRaw as any) || Date.now())
+
+    let base64 = String(data.base64Data || data.base64String || data.base64 || '')
+    let fileUrl = String(data.url || data.filePath || '')
+    if (fileUrl.startsWith('data:')) {
+      const parts = fileUrl.split(',')
+      if (parts.length > 1) base64 = parts[1]
+    }
+    if (!base64 && typeof data.mimeType === 'string' && data.mimeType.includes(',')) {
+      const parts = data.mimeType.split(',')
+      if (parts.length > 1) base64 = parts[1]
+    }
+
+    let mimeType = String(data.mimeType || data.contentType || '')
+    if (mimeType.startsWith('data:')) {
+      const match = mimeType.match(/^data:([^;,]+)/)
+      if (match) mimeType = match[1]
+    }
+
+    return {
+      id: docId,
+      fileName: String(data.fileName || data.name || ''),
+      filePath: fileUrl,
+      fileType: String(data.fileType || data.type || opts?.fileTypeFallback || 'construction_site'),
+      projectId: String(data.projectId || opts?.projectIdFallback || ''),
+      employeeId: String(data.employeeId || ''),
+      timeEntryId: String(data.timeEntryId || ''),
+      uploadTime: uploadTime || new Date(),
+      notes: String(data.notes || data.comment || ''),
+      imageComment: String(data.imageComment || data.comment || ''),
+      base64Data: base64,
+      mimeType
+    } as FileUpload
+  }
+
+  /** Nur IDs, für die ein fileUploads-Dokument existiert (vermeidet Fehler bei Platzhalter-/Offline-IDs). */
+  private async filterExistingFileUploadDocIds(ids: string[]): Promise<string[]> {
+    const out: string[] = []
+    for (const rawId of ids) {
+      const id = rawId?.trim()
+      if (!id || isPlaceholderFileUploadId(id)) continue
+      try {
+        const ref = doc(db, 'fileUploads', id)
+        const snap = await getDoc(ref)
+        if (snap.exists()) out.push(id)
+      } catch {
+        /* skip */
+      }
+    }
+    return out
   }
 
   private initAuth(): Promise<void> {
@@ -414,6 +526,190 @@ class DataServiceClass {
     }
   }
 
+  /**
+   * Zeiteintrag inkl. verknüpfter Dokumente (fileUploads) und Fahrzeugbuchungen am Arbeitstag
+   * auf ein anderes Projekt umhängen (Admin-Korrektur falscher Projektwahl).
+   */
+  async moveTimeEntryToProject(
+    timeEntryId: string,
+    targetProjectId: string,
+    options?: { sourceProjectName?: string; targetProjectName?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+    if (!timeEntryId?.trim() || !targetProjectId?.trim()) {
+      throw new Error('Zeiteintrag und Zielprojekt sind erforderlich')
+    }
+
+    const entry = await this.getTimeEntryById(timeEntryId)
+    if (!entry) {
+      throw new Error('Zeiteintrag nicht gefunden')
+    }
+
+    const sourceProjectId = entry.projectId
+    if (sourceProjectId === targetProjectId) {
+      throw new Error('Der Eintrag liegt bereits in diesem Projekt')
+    }
+
+    if (entry.clockOutTime == null || entry.clockOutTime === undefined) {
+      throw new Error(
+        'Einstempel-Einträge können nicht umgezogen werden. Bitte zuerst ausstempeln oder den aktiven Eintrag beenden.'
+      )
+    }
+
+    const targetProject = await this.getProjectById(targetProjectId)
+    if (!targetProject) {
+      throw new Error('Zielprojekt nicht gefunden')
+    }
+
+    const clockIn = this.convertToDate(entry.clockInTime)
+    const clockOut = this.convertToDate(entry.clockOutTime)
+    const workDayKey = formatDateForInputLocal(clockIn)
+
+    const fileIdSet = new Set<string>()
+    ;(entry.sitePhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    ;(entry.documentPhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    collectFileReferenceIds(entry.photos, fileIdSet)
+    collectFileReferenceIds(entry.sitePhotos, fileIdSet)
+    collectFileReferenceIds(entry.documents, fileIdSet)
+    collectFileReferenceIds(entry.liveDocumentation, fileIdSet)
+    fileIdSet.delete(timeEntryId)
+    if (entry.employeeId) fileIdSet.delete(String(entry.employeeId))
+
+    const uploadInWorkWindow = (uploadTime: unknown): boolean => {
+      const d = this.convertToDate(uploadTime)
+      const t = d.getTime()
+      return t >= clockIn.getTime() && t <= clockOut.getTime()
+    }
+
+    const mergeFileUploadsForEntry = async (): Promise<void> => {
+      const uploads = await this.getFileUploads(sourceProjectId)
+      for (const u of uploads) {
+        if (!u.id || u.employeeId !== entry.employeeId) continue
+        const dayOfUpload = formatDateForInputLocal(this.convertToDate(u.uploadTime))
+        if (uploadInWorkWindow(u.uploadTime) || dayOfUpload === workDayKey) {
+          fileIdSet.add(u.id)
+        }
+      }
+    }
+    await mergeFileUploadsForEntry()
+
+    const byTimeEntryLink = await this.getFileUploadsByTimeEntryIds([timeEntryId])
+    for (const u of byTimeEntryLink) {
+      if (u.id) fileIdSet.add(u.id)
+    }
+
+    const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
+      if (!items || !Array.isArray(items)) return items
+      return items.map((item) => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          return { ...item, projectId: targetProjectId }
+        }
+        return item
+      })
+    }
+
+    const patchLiveDocumentationProject = (live: unknown, targetId: string): unknown[] | undefined => {
+      if (!live || !Array.isArray(live)) return undefined
+      return live.map((block: any) => {
+        if (!block || typeof block !== 'object') return block
+        const next = { ...block }
+        if (Array.isArray(next.images)) {
+          next.images = next.images.map((img: any) =>
+            img && typeof img === 'object' ? { ...img, projectId: targetId } : img
+          )
+        }
+        if (Array.isArray(next.documents)) {
+          next.documents = next.documents.map((d: any) =>
+            d && typeof d === 'object' ? { ...d, projectId: targetId } : d
+          )
+        }
+        return next
+      })
+    }
+
+    const auditLine = `Projekt geändert: ${options?.sourceProjectName || sourceProjectId} → ${options?.targetProjectName || targetProject.name || targetProjectId}`
+    const newNotes = (entry.notes || '').trim()
+      ? `${(entry.notes || '').trim()} | ${auditLine}`
+      : auditLine
+
+    const timeEntryUpdate: Record<string, unknown> = {
+      projectId: targetProjectId,
+      notes: newNotes,
+      sitePhotos: patchNestedProject(entry.sitePhotos as any[]),
+      documents: patchNestedProject(entry.documents as any[])
+    }
+
+    if (
+      entry.photos &&
+      Array.isArray(entry.photos) &&
+      entry.photos.length > 0 &&
+      typeof (entry.photos as any[])[0] === 'object'
+    ) {
+      timeEntryUpdate.photos = patchNestedProject(entry.photos as any[])
+    }
+
+    const patchedLive = patchLiveDocumentationProject(entry.liveDocumentation, targetProjectId)
+    if (patchedLive) {
+      timeEntryUpdate.liveDocumentation = patchedLive
+    }
+
+    const cleanedUpdate = Object.fromEntries(
+      Object.entries(timeEntryUpdate).filter(([, v]) => v !== undefined)
+    ) as Partial<TimeEntry>
+
+    const fileIdsRaw = [...fileIdSet].filter((id) => id && !isPlaceholderFileUploadId(id))
+    const fileIds = await this.filterExistingFileUploadDocIds(fileIdsRaw)
+    const maxBatch = 400
+    for (let i = 0; i < fileIds.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      const chunk = fileIds.slice(i, i + maxBatch)
+      for (const fid of chunk) {
+        batch.update(doc(db, 'fileUploads', fid), {
+          projectId: targetProjectId,
+          timeEntryId: timeEntryId
+        })
+      }
+      await batch.commit()
+    }
+
+    await this.updateTimeEntry(timeEntryId, cleanedUpdate)
+
+    const usageDayKey = (rawDate: any): string => {
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+        return rawDate.slice(0, 10)
+      }
+      const d = this.convertToDate(rawDate)
+      return formatDateForInputLocal(d)
+    }
+
+    const usageIdsToMoveSet = new Set<string>()
+
+    const linkedUsages = await this.getVehicleUsagesByTimeEntryId(timeEntryId)
+    for (const usage of linkedUsages) {
+      if (usage.id && usage.projectId === sourceProjectId) {
+        usageIdsToMoveSet.add(usage.id)
+      }
+    }
+
+    const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
+    for (const usage of employeeUsages) {
+      if (!usage.id || usage.projectId !== sourceProjectId) continue
+      if (usage.timeEntryId && usage.timeEntryId !== timeEntryId) continue
+      if (usageDayKey(usage.date) === workDayKey) {
+        usageIdsToMoveSet.add(usage.id)
+      }
+    }
+
+    const usageIdsToMove = [...usageIdsToMoveSet]
+    for (let i = 0; i < usageIdsToMove.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      for (const uid of usageIdsToMove.slice(i, i + maxBatch)) {
+        batch.update(doc(db, 'vehicleUsages', uid), { projectId: targetProjectId })
+      }
+      await batch.commit()
+    }
+  }
+
   async deleteTimeEntry(timeEntryId: string): Promise<void> {
     await this.authReadyPromise
     try {
@@ -448,7 +744,8 @@ class DataServiceClass {
     employeeId: string,
     type: string = 'construction_site',
     notes: string = '',
-    comment: string = ''
+    comment: string = '',
+    options?: { timeEntryId?: string }
   ): Promise<FileUpload> {
     await this.authReadyPromise
     try {
@@ -462,7 +759,7 @@ class DataServiceClass {
 
       // Speichere in Firestore
       const fileUploadsRef = collection(db, 'fileUploads')
-      const uploadData = {
+      const uploadDataRaw: Record<string, unknown> = {
         fileName: file.name,
         fileType: type,
         projectId,
@@ -473,6 +770,12 @@ class DataServiceClass {
         imageComment: comment,
         uploadTime: serverTimestamp()
       }
+      if (options?.timeEntryId) {
+        uploadDataRaw.timeEntryId = options.timeEntryId
+      }
+      const uploadData = Object.fromEntries(
+        Object.entries(uploadDataRaw).filter(([, v]) => v !== undefined)
+      )
 
       const docRef = await addDoc(fileUploadsRef, uploadData)
       const uploadDoc = await getDoc(docRef)
@@ -484,6 +787,7 @@ class DataServiceClass {
         fileType: type,
         projectId,
         employeeId,
+        timeEntryId: options?.timeEntryId,
         uploadTime: uploadDoc.data()?.uploadTime || new Date(),
         notes,
         imageComment: comment
@@ -667,6 +971,34 @@ class DataServiceClass {
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
     } catch (error) {
       console.error('Fehler beim Abrufen der Fahrzeugnutzungen:', error)
+      return []
+    }
+  }
+
+  async getVehicleUsagesByEmployeeId(employeeId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!employeeId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('employeeId', '==', employeeId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Mitarbeiter):', error)
+      return []
+    }
+  }
+
+  async getVehicleUsagesByTimeEntryId(timeEntryId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!timeEntryId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('timeEntryId', '==', timeEntryId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Zeiteintrag):', error)
       return []
     }
   }
@@ -969,11 +1301,16 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const projectsRef = collection(db, 'projects')
-      const docRef = await addDoc(projectsRef, {
+      const raw = {
         ...projectData,
         isActive: projectData.isActive !== false,
         status: projectData.status || 'active'
-      })
+      }
+      // Firestore verwirft Schreibvorgänge mit undefined-Feldern — optionale Daten weglassen
+      const payload = Object.fromEntries(
+        Object.entries(raw).filter(([, value]) => value !== undefined)
+      )
+      const docRef = await addDoc(projectsRef, payload)
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Projekts:', error)
@@ -981,7 +1318,10 @@ class DataServiceClass {
     }
   }
 
-  async updateProject(id: string, projectData: Partial<Project>): Promise<void> {
+  async updateProject(
+    id: string,
+    projectData: Partial<Project> & Record<string, unknown>
+  ): Promise<void> {
     await this.authReadyPromise
     try {
       if (!id) {
@@ -989,7 +1329,10 @@ class DataServiceClass {
       }
 
       const projectRef = doc(db, 'projects', id)
-      await updateDoc(projectRef, projectData)
+      const payload = Object.fromEntries(
+        Object.entries(projectData).filter(([, value]) => value !== undefined)
+      )
+      await updateDoc(projectRef, payload)
     } catch (error) {
       console.error(`Fehler beim Aktualisieren des Projekts ${id}:`, error)
       throw error
@@ -1366,6 +1709,15 @@ class DataServiceClass {
         }
       })
 
+      // Alle Uploads mit timeEntryId zu Stempelsätzen dieses Projekts (falls Arrays im Eintrag unvollständig sind)
+      const entryIdsForProject = timeEntries.map((e) => e.id).filter(Boolean) as string[]
+      if (entryIdsForProject.length > 0) {
+        const linkedByTimeEntry = await this.getFileUploadsByTimeEntryIds(entryIdsForProject)
+        for (const u of linkedByTimeEntry) {
+          if (u.id) fileIds.push(u.id)
+        }
+      }
+
       // Entferne Duplikate
       fileIds = [...new Set(fileIds)]
 
@@ -1386,26 +1738,13 @@ class DataServiceClass {
           const chunkSnapshot = await getDocs(chunkQuery)
 
           chunkSnapshot.forEach((fileDoc) => {
-            const data = fileDoc.data() as any
-            const uploadTime = data.uploadTime instanceof Timestamp
-              ? data.uploadTime.toDate()
-              : (data.uploadTime instanceof Date
-                  ? data.uploadTime
-                  : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now()))
-
-            files.push({
-              id: fileDoc.id,
-              fileName: data.fileName || '',
-              filePath: data.filePath || '',
-              fileType: data.fileType || normalizedType,
-              projectId: data.projectId || projectId,
-              employeeId: data.employeeId || '',
-              uploadTime: uploadTime || new Date(),
-              notes: data.notes || '',
-              imageComment: data.imageComment || '',
-              base64Data: data.base64Data,
-              mimeType: data.mimeType
-            } as FileUpload)
+            const data = fileDoc.data() as Record<string, unknown>
+            files.push(
+              this.fileUploadFromDocData(fileDoc.id, data, {
+                projectIdFallback: projectId,
+                fileTypeFallback: normalizedType
+              })
+            )
           })
 
           if (isDevMode && chunkSnapshot.size < chunk.length) {
@@ -1577,6 +1916,32 @@ class DataServiceClass {
     }
   }
 
+  /** Alle fileUploads, die explizit an einen Stempelsatz gebunden sind (auch wenn projectId/Arrays abweichen). */
+  async getFileUploadsByTimeEntryIds(timeEntryIds: string[]): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    if (!timeEntryIds || timeEntryIds.length === 0) return []
+    const out: FileUpload[] = []
+    const chunkSize = 10
+    for (let i = 0; i < timeEntryIds.length; i += chunkSize) {
+      const chunk = timeEntryIds.slice(i, i + chunkSize).filter((id) => !!id)
+      if (chunk.length === 0) continue
+      try {
+        const fileUploadsRef = collection(db, 'fileUploads')
+        const q = query(fileUploadsRef, where('timeEntryId', 'in', chunk))
+        const snapshot = await getDocs(q)
+        snapshot.docs.forEach((fileDoc) => {
+          const data = fileDoc.data() as Record<string, unknown>
+          out.push(
+            this.fileUploadFromDocData(fileDoc.id, data, { fileTypeFallback: 'construction_site' })
+          )
+        })
+      } catch (e) {
+        console.error('getFileUploadsByTimeEntryIds:', e)
+      }
+    }
+    return out
+  }
+
   async getFileUploads(projectId?: string, type?: string): Promise<FileUpload[]> {
     await this.authReadyPromise
     try {
@@ -1589,63 +1954,26 @@ class DataServiceClass {
       
       const snapshot = await getDocs(q)
       let uploads = snapshot.docs.map((doc, index) => {
-        const data = doc.data() as any
-        const uploadTime = data.uploadTime instanceof Timestamp
-          ? data.uploadTime.toDate()
-          : (data.uploadTime as Date | undefined)
-        
+        const data = doc.data() as Record<string, unknown>
+
         // Debug: Zeige die ersten 3 Firestore-Dokumente KOMPLETT als JSON
         if (isDevMode && index < 1) {
-          // Finde Felder, die groß sind (könnten base64 sein)
-          const largeFields = Object.keys(data).filter(key => {
+          const largeFields = Object.keys(data).filter((key) => {
             const val = data[key]
             return typeof val === 'string' && val.length > 1000
           })
-          
-          // Erstelle eine Kopie mit gekürzten großen Feldern für das Log
           const dataCopy = { ...data }
-          largeFields.forEach(key => {
-            dataCopy[key] = `[${data[key].length} Zeichen] ${data[key].substring(0, 50)}...`
+          largeFields.forEach((key) => {
+            const v = data[key]
+            dataCopy[key] =
+              typeof v === 'string' ? `[${v.length} Zeichen] ${v.substring(0, 50)}...` : v
           })
-          
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - ALLE KEYS: ${Object.keys(data).join(', ')}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - GROSSE FELDER: ${largeFields.length > 0 ? largeFields.join(', ') : 'KEINE!'}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - DATEN:`, JSON.stringify(dataCopy, null, 2))
         }
-        
-        // Suche nach base64-Daten in verschiedenen möglichen Feldern
-        let base64 = data.base64Data || data.base64String || data.base64 || ''
-        let fileUrl = data.url || data.filePath || ''
-        
-        // Falls url eine data URL ist, extrahiere base64 daraus
-        if (fileUrl && fileUrl.startsWith('data:')) {
-          const parts = fileUrl.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        // Falls mimeType ein data URL ist, könnte base64 direkt darin sein
-        if (!base64 && data.mimeType && data.mimeType.includes(',')) {
-          const parts = data.mimeType.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        return { 
-          id: doc.id,
-          fileName: data.fileName || data.name || '',
-          filePath: fileUrl,
-          fileType: data.fileType || data.type || data.contentType || '',
-          projectId: data.projectId || '',
-          employeeId: data.employeeId || '',
-          uploadTime: uploadTime || new Date(),
-          notes: data.notes || data.comment || '',
-          imageComment: data.imageComment || data.comment || '',
-          base64Data: base64,
-          mimeType: data.mimeType || data.contentType || ''
-        } as FileUpload
+
+        return this.fileUploadFromDocData(doc.id, data)
       })
       
       if (type) {

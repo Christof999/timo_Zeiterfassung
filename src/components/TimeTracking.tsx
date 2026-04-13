@@ -5,10 +5,13 @@ import type { Employee, Project, TimeEntry } from '../types'
 import ClockInForm from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
+import RetroactiveDocumentationListModal from './RetroactiveDocumentationListModal'
 import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
+import ThemeToggle from './ThemeToggle'
+import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import '../styles/TimeTracking.css'
 
 const TimeTracking: React.FC = () => {
@@ -19,6 +22,7 @@ const TimeTracking: React.FC = () => {
   const [elapsedTime, setElapsedTime] = useState('00:00:00')
   const [isLoading, setIsLoading] = useState(true)
   const [showManualEntryModal, setShowManualEntryModal] = useState(false)
+  const [showRetroDocListModal, setShowRetroDocListModal] = useState(false)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
   const navigate = useNavigate()
 
@@ -180,22 +184,37 @@ const TimeTracking: React.FC = () => {
 
       <main className="time-tracking-main">
         <div className="user-info-section">
-          <p>Angemeldet als: <strong>{currentUser.firstName} {currentUser.lastName}</strong></p>
-          <NavigationMenu onLogout={handleLogout} />
+          <div className="user-info-row">
+            <NavigationMenu onLogout={handleLogout} />
+            <p className="user-info-greeting">
+              Angemeldet als: <strong>{getEmployeeDisplayName(currentUser)}</strong>
+            </p>
+            <ThemeToggle variant="icon" className="user-info-theme-toggle" />
+          </div>
         </div>
 
         {canManualTimeEntry && (
           <div className="manual-time-entry-banner">
             <p className="manual-time-entry-banner-text">
-              Sie können vergessene Stempelzeiten für sich oder andere Mitarbeiter nachtragen.
+              Sie können vergessene Stempelzeiten für sich oder andere Mitarbeiter nachtragen sowie
+              Dokumentation zu bereits abgeschlossenen Tagen ergänzen.
             </p>
-            <button
-              type="button"
-              className="manual-time-entry-open-btn"
-              onClick={() => setShowManualEntryModal(true)}
-            >
-              Stempelzeit nachtragen
-            </button>
+            <div className="manual-time-entry-actions">
+              <button
+                type="button"
+                className="manual-time-entry-open-btn"
+                onClick={() => setShowManualEntryModal(true)}
+              >
+                Stempelzeit nachtragen
+              </button>
+              <button
+                type="button"
+                className="manual-time-entry-secondary-btn"
+                onClick={() => setShowRetroDocListModal(true)}
+              >
+                Bericht nachtragen
+              </button>
+            </div>
           </div>
         )}
 
@@ -246,6 +265,14 @@ const TimeTracking: React.FC = () => {
             addedBy={currentUser}
             onClose={() => setShowManualEntryModal(false)}
             onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
+
+        {showRetroDocListModal && currentUser && (
+          <RetroactiveDocumentationListModal
+            employee={currentUser}
+            onClose={() => setShowRetroDocListModal(false)}
+            onDocumentationSaved={() => setActivitiesRefreshKey((k) => k + 1)}
           />
         )}
       </main>

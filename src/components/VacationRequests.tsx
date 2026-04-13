@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, LeaveRequest } from '../types'
 import { toast } from './ToastContainer'
+import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 
@@ -210,6 +211,7 @@ const VacationRequests: React.FC = () => {
           Zurück
         </button>
         <h1>Urlaubsanträge</h1>
+        <ThemeToggle variant="icon" className="vacation-header-theme-toggle" />
       </header>
 
       {/* Urlaubskonto */}

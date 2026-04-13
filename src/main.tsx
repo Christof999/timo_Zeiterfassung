@@ -1,7 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { initThemeFromStorage } from './utils/theme'
 import './styles/index.css'
+
+initThemeFromStorage()
 
 // Service Worker für PWA/Push registrieren
 if ('serviceWorker' in navigator) {

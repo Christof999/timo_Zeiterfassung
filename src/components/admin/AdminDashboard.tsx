@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
+import ThemeToggle from '../ThemeToggle'
 import OverviewTab from './tabs/OverviewTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
@@ -11,7 +12,16 @@ import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
 import '../../styles/AdminDashboard.css'
 
-type TabType = 'overview' | 'notifications' | 'employees' | 'projects' | 'vehicles' | 'costing' | 'reports' | 'vacation'
+type TabType =
+  | 'overview'
+  | 'notifications'
+  | 'employees'
+  | 'projects'
+  | 'projectsArchived'
+  | 'vehicles'
+  | 'costing'
+  | 'reports'
+  | 'vacation'
 
 const AdminDashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('overview')
@@ -155,6 +165,7 @@ const AdminDashboard: React.FC = () => {
       : []),
     { id: 'employees' as TabType, label: 'Mitarbeiter' },
     { id: 'projects' as TabType, label: 'Projekte' },
+    { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
     { id: 'vehicles' as TabType, label: 'Fahrzeuge' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     { id: 'vacation' as TabType, label: 'Urlaub' },
@@ -251,16 +262,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="admin-dashboard-container">
       <header className="admin-dashboard-header">
-        <div className="admin-logo">
-          <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
-            className="admin-logo-image"
-          />
-          <h1>Lauffer Zeiterfassung</h1>
-          <p>Admin Panel</p>
-        </div>
-        <div className="admin-header-controls">
+        <div className="admin-header-start">
           <button 
             className="admin-nav-toggle"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -270,7 +272,19 @@ const AdminDashboard: React.FC = () => {
             <span className="admin-hamburger-line"></span>
             <span className="admin-hamburger-line"></span>
           </button>
+        </div>
+        <div className="admin-logo">
+          <img 
+            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
+            alt="Lauffer Logo" 
+            className="admin-logo-image"
+          />
+          <h1>Lauffer Zeiterfassung</h1>
+          <p className="admin-logo-subtitle">Admin Panel</p>
+        </div>
+        <div className="admin-header-controls">
           <div className="admin-controls">
+            <ThemeToggle variant="icon" />
             <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
             <button onClick={handleLogout} className="btn secondary-btn">
               Abmelden
@@ -308,7 +322,8 @@ const AdminDashboard: React.FC = () => {
 
           {currentTab === 'overview' && <OverviewTab />}
           {currentTab === 'employees' && <EmployeesTab />}
-          {currentTab === 'projects' && <ProjectsTab />}
+          {currentTab === 'projects' && <ProjectsTab variant="active" />}
+          {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
           {currentTab === 'vehicles' && <VehiclesTab />}
           {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {currentTab === 'vacation' && <VacationTab />}
