@@ -24,13 +24,26 @@ import { formatDateForInputLocal } from '../utils/dateUtils'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
 
+/** Keine Firestore-Dokumente (Platzhalter aus alter Offline-/Client-Logik). */
+function isPlaceholderFileUploadId(id: string): boolean {
+  const t = id.trim().toLowerCase()
+  return (
+    t.startsWith('local_') ||
+    t.startsWith('temp_') ||
+    t.startsWith('mock_') ||
+    t.startsWith('fake_')
+  )
+}
+
 /** IDs aus verschachtelten Arrays/Objekten (sitePhotos, liveDocumentation, …) — nur id-ähnliche Felder, kein Volltext. */
 function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): void {
   if (depth > 14) return
   if (value == null) return
   if (typeof value === 'string') {
     const t = value.trim()
-    if (t.length >= 8 && t.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(t)) into.add(t)
+    if (t.length >= 8 && t.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(t) && !isPlaceholderFileUploadId(t)) {
+      into.add(t)
+    }
     return
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -45,7 +58,7 @@ function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): 
     const o = value as Record<string, unknown>
     for (const key of ['id', 'fileId', 'uploadId', 'docId', 'fileUploadId']) {
       const v = o[key]
-      if (typeof v === 'string' && v.trim()) into.add(v.trim())
+      if (typeof v === 'string' && v.trim() && !isPlaceholderFileUploadId(v.trim())) into.add(v.trim())
       if (typeof v === 'number' && Number.isFinite(v)) into.add(String(v))
     }
     for (const [k, v] of Object.entries(o)) {
@@ -62,6 +75,23 @@ class DataServiceClass {
 
   constructor() {
     this.authReadyPromise = this.initAuth()
+  }
+
+  /** Nur IDs, für die ein fileUploads-Dokument existiert (vermeidet Fehler bei Platzhalter-/Offline-IDs). */
+  private async filterExistingFileUploadDocIds(ids: string[]): Promise<string[]> {
+    const out: string[] = []
+    for (const rawId of ids) {
+      const id = rawId?.trim()
+      if (!id || isPlaceholderFileUploadId(id)) continue
+      try {
+        const ref = doc(db, 'fileUploads', id)
+        const snap = await getDoc(ref)
+        if (snap.exists()) out.push(id)
+      } catch {
+        /* skip */
+      }
+    }
+    return out
   }
 
   private initAuth(): Promise<void> {
@@ -580,7 +610,8 @@ class DataServiceClass {
       Object.entries(timeEntryUpdate).filter(([, v]) => v !== undefined)
     ) as Partial<TimeEntry>
 
-    const fileIds = [...fileIdSet]
+    const fileIdsRaw = [...fileIdSet].filter((id) => id && !isPlaceholderFileUploadId(id))
+    const fileIds = await this.filterExistingFileUploadDocIds(fileIdsRaw)
     const maxBatch = 400
     for (let i = 0; i < fileIds.length; i += maxBatch) {
       const batch = writeBatch(db)
