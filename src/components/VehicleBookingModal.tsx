@@ -48,6 +48,7 @@ const VehicleBookingModal: React.FC<VehicleBookingModalProps> = ({ timeEntry, on
         vehicleName: selectedVehicle?.name,
         employeeId: currentUser!.id,
         projectId: timeEntry.projectId,
+        timeEntryId: timeEntry.id,
         date: today,
         hours: hours,
         hoursUsed: hours,

@@ -112,6 +112,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
             vehicleName: selectedVehicle?.name,
             employeeId: currentUser.id,
             projectId: timeEntry.projectId,
+            timeEntryId: timeEntry.id,
             date: today,
             hours: row.hours,
             hoursUsed: row.hours,
@@ -131,7 +132,8 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
           timeEntry.employeeId,
           'construction_site',
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         sitePhotoObjects.push(upload)
       }
@@ -148,7 +150,8 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
           timeEntry.employeeId,
           documentType,
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         documentPhotoObjects.push(upload)
       }

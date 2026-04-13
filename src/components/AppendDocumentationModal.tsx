@@ -136,6 +136,7 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
             vehicleName: selectedVehicle?.name,
             employeeId: currentUser.id,
             projectId: timeEntry.projectId,
+            timeEntryId: timeEntry.id,
             date: bookingDateForEntry,
             hours: row.hours,
             hoursUsed: row.hours,
@@ -152,7 +153,8 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
           timeEntry.employeeId,
           'construction_site',
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         sitePhotoObjects.push(upload)
       }
@@ -166,7 +168,8 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
           timeEntry.employeeId,
           documentType,
           '',
-          comment.trim()
+          comment.trim(),
+          { timeEntryId: timeEntry.id }
         )
         documentPhotoObjects.push(upload)
       }

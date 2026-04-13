@@ -87,6 +87,8 @@ export interface VehicleUsage {
   vehicleName?: string
   employeeId: string
   projectId: string
+  /** Optional: Zuordnung zum Stempelsatz (Umzug & Auswertung) */
+  timeEntryId?: string
   date: string | Date | any
   hours?: number
   hoursUsed?: number
@@ -100,6 +102,8 @@ export interface FileUpload {
   fileType: string
   projectId: string
   employeeId: string
+  /** Verknüpfung zum Stempelsatz (Zuordnung auch wenn Arrays im Eintrag unvollständig sind) */
+  timeEntryId?: string
   uploadTime: Date | any
   notes?: string
   imageComment?: string
