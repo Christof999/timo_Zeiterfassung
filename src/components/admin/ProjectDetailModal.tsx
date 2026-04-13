@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
 import type { Project, FileUpload, TimeEntry, VehicleUsage } from '../../types'
 import { Timestamp } from 'firebase/firestore'
+import { toast } from '../ToastContainer'
 import '../../styles/Modal.css'
 
 interface ProjectDetailModalProps {
@@ -34,6 +35,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     imageComment?: string
   } | null>(null)
   const [timeEntryDetail, setTimeEntryDetail] = useState<TimeEntryWithEmployee | null>(null)
+  const [allProjects, setAllProjects] = useState<Project[]>([])
+  const [moveTargetProjectId, setMoveTargetProjectId] = useState('')
+  const [moveUiOpen, setMoveUiOpen] = useState(false)
+  const [isMovingEntry, setIsMovingEntry] = useState(false)
   const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
   const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
   const modalContentRef = useRef<HTMLDivElement | null>(null)
@@ -64,6 +69,11 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     setDetailInfoHeight(null)
     setIsDetailInfoResizing(false)
   }, [project.id])
+
+  useEffect(() => {
+    setMoveUiOpen(false)
+    setMoveTargetProjectId('')
+  }, [timeEntryDetail?.id])
 
   useEffect(() => {
     if (!isDetailInfoResizing) return
@@ -106,7 +116,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       console.log('Lade Projektdaten für:', project.id, project.name)
       
       // Verwende getProjectFiles wie in der alten App (lädt aus Zeiteinträgen)
-      const [allPhotos, allDocs, timeEntries, employees, rawVehicleUsages] = await Promise.all([
+      const [allPhotos, allDocs, timeEntries, employees, rawVehicleUsages, projectsList] = await Promise.all([
         DataService.getProjectFiles(project.id!, 'construction_site').catch(err => {
           console.error('Fehler beim Laden der Fotos:', err)
           return []
@@ -126,8 +136,14 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         DataService.getVehicleUsagesByProject(project.id!).catch(err => {
           console.error('Fehler beim Laden der Fahrzeugbuchungen:', err)
           return []
+        }),
+        DataService.getAllProjects().catch((err) => {
+          console.error('Fehler beim Laden der Projekte:', err)
+          return [] as Project[]
         })
       ])
+
+      setAllProjects(projectsList)
       
       console.log('Geladene Fotos:', allPhotos.length, allPhotos)
       console.log('Geladene Dokumente:', allDocs.length, allDocs)
@@ -306,11 +322,40 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const openStreetMapUrl = (lat: number, lng: number) =>
     `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
 
+  const moveTargetOptions = [...allProjects]
+    .filter((p) => p.id && p.id !== project.id)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+
+  const handleConfirmMoveTimeEntry = async () => {
+    if (!timeEntryDetail?.id || !moveTargetProjectId) {
+      toast.error('Bitte wählen Sie ein Zielprojekt.')
+      return
+    }
+    const target = allProjects.find((p) => p.id === moveTargetProjectId)
+    setIsMovingEntry(true)
+    try {
+      await DataService.moveTimeEntryToProject(timeEntryDetail.id, moveTargetProjectId, {
+        sourceProjectName: project.name,
+        targetProjectName: target?.name
+      })
+      toast.success('Stempelsatz und Dokumentation wurden umgezogen.')
+      setTimeEntryDetail(null)
+      setMoveUiOpen(false)
+      setMoveTargetProjectId('')
+      await loadProjectData()
+    } catch (e: any) {
+      toast.error(e?.message || 'Umzug fehlgeschlagen')
+    } finally {
+      setIsMovingEntry(false)
+    }
+  }
+
   const renderTimeEntryLocationModal = () => {
     if (!timeEntryDetail) return null
 
     const clockInDate = convertToDate(timeEntryDetail.clockInTime)
     const clockOutDate = convertToDate(timeEntryDetail.clockOutTime)
+    const canMoveEntry = !!clockOutDate
     const inLoc = formatLocationText(timeEntryDetail.clockInLocation)
     const outLocRaw = getClockOutLocation(timeEntryDetail)
     const outLoc = formatLocationText(outLocRaw)
@@ -422,6 +467,80 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               )
             ) : (
               <p className="time-entry-location-missing">—</p>
+            )}
+          </div>
+
+          <div className="time-entry-move-section">
+            {!canMoveEntry ? (
+              <p className="time-entry-move-disabled-hint">
+                Ein Umzug ist nur bei abgeschlossenen Zeiteinträgen möglich (bereits ausgestempelt).
+              </p>
+            ) : moveTargetOptions.length === 0 ? (
+              <p className="time-entry-move-disabled-hint">
+                Es gibt kein weiteres Projekt, in das umgezogen werden könnte.
+              </p>
+            ) : !moveUiOpen ? (
+              <button
+                type="button"
+                className="btn secondary-btn time-entry-move-toggle"
+                onClick={() => setMoveUiOpen(true)}
+              >
+                Stempelsatz umziehen
+              </button>
+            ) : (
+              <div className="time-entry-move-panel">
+                <label htmlFor="time-entry-move-project" className="time-entry-move-label">
+                  Zielprojekt
+                </label>
+                <select
+                  id="time-entry-move-project"
+                  className="time-entry-move-select"
+                  value={moveTargetProjectId}
+                  onChange={(e) => setMoveTargetProjectId(e.target.value)}
+                  disabled={isMovingEntry}
+                >
+                  <option value="">— Projekt wählen —</option>
+                  {moveTargetOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || p.id}
+                    </option>
+                  ))}
+                </select>
+                <p className="time-entry-move-hint">
+                  Zeiten, Baustellenfotos, Belege und Fahrzeugbuchungen vom selben Tag werden dem
+                  gewählten Projekt zugeordnet.
+                </p>
+                <div className="time-entry-move-actions">
+                  <button
+                    type="button"
+                    className="btn primary-btn"
+                    disabled={isMovingEntry || !moveTargetProjectId}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          'Diesen Stempelsatz wirklich in das gewählte Projekt verschieben? Die Zuordnung kann nicht automatisch rückgängig gemacht werden.'
+                        )
+                      ) {
+                        return
+                      }
+                      handleConfirmMoveTimeEntry()
+                    }}
+                  >
+                    {isMovingEntry ? 'Wird umgezogen…' : 'Umziehen bestätigen'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary-btn"
+                    disabled={isMovingEntry}
+                    onClick={() => {
+                      setMoveUiOpen(false)
+                      setMoveTargetProjectId('')
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
