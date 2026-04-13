@@ -480,6 +480,31 @@ class DataServiceClass {
       })
     }
 
+    // Live-Dokumentation (während der Schicht): Bilder/Dokumente in images[] / documents[] — oft nur hier, nicht in sitePhotoUploads
+    if (entry.liveDocumentation && Array.isArray(entry.liveDocumentation)) {
+      for (const block of entry.liveDocumentation) {
+        if (!block || typeof block !== 'object') continue
+        const imgs = (block as any).images
+        if (Array.isArray(imgs)) {
+          imgs.forEach((img: any) => {
+            if (img && typeof img === 'object') {
+              addId(img.id)
+              addId(img.fileId)
+            }
+          })
+        }
+        const docs = (block as any).documents
+        if (Array.isArray(docs)) {
+          docs.forEach((d: any) => {
+            if (d && typeof d === 'object') {
+              addId(d.id)
+              addId(d.fileId)
+            }
+          })
+        }
+      }
+    }
+
     const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
       if (!items || !Array.isArray(items)) return items
       return items.map((item) => {
@@ -487,6 +512,25 @@ class DataServiceClass {
           return { ...item, projectId: targetProjectId }
         }
         return item
+      })
+    }
+
+    const patchLiveDocumentationProject = (live: unknown, targetId: string): unknown[] | undefined => {
+      if (!live || !Array.isArray(live)) return undefined
+      return live.map((block: any) => {
+        if (!block || typeof block !== 'object') return block
+        const next = { ...block }
+        if (Array.isArray(next.images)) {
+          next.images = next.images.map((img: any) =>
+            img && typeof img === 'object' ? { ...img, projectId: targetId } : img
+          )
+        }
+        if (Array.isArray(next.documents)) {
+          next.documents = next.documents.map((d: any) =>
+            d && typeof d === 'object' ? { ...d, projectId: targetId } : d
+          )
+        }
+        return next
       })
     }
 
@@ -509,6 +553,11 @@ class DataServiceClass {
       typeof (entry.photos as any[])[0] === 'object'
     ) {
       timeEntryUpdate.photos = patchNestedProject(entry.photos as any[])
+    }
+
+    const patchedLive = patchLiveDocumentationProject(entry.liveDocumentation, targetProjectId)
+    if (patchedLive) {
+      timeEntryUpdate.liveDocumentation = patchedLive
     }
 
     const cleanedUpdate = Object.fromEntries(
