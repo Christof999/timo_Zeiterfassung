@@ -6,7 +6,8 @@ import {
   addDoc, 
   setDoc,
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
+  writeBatch,
   query, 
   where, 
   limit,
@@ -411,6 +412,144 @@ class DataServiceClass {
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Zeiteintrags:', error)
       throw error
+    }
+  }
+
+  /**
+   * Zeiteintrag inkl. verknüpfter Dokumente (fileUploads) und Fahrzeugbuchungen am Arbeitstag
+   * auf ein anderes Projekt umhängen (Admin-Korrektur falscher Projektwahl).
+   */
+  async moveTimeEntryToProject(
+    timeEntryId: string,
+    targetProjectId: string,
+    options?: { sourceProjectName?: string; targetProjectName?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+    if (!timeEntryId?.trim() || !targetProjectId?.trim()) {
+      throw new Error('Zeiteintrag und Zielprojekt sind erforderlich')
+    }
+
+    const entry = await this.getTimeEntryById(timeEntryId)
+    if (!entry) {
+      throw new Error('Zeiteintrag nicht gefunden')
+    }
+
+    const sourceProjectId = entry.projectId
+    if (sourceProjectId === targetProjectId) {
+      throw new Error('Der Eintrag liegt bereits in diesem Projekt')
+    }
+
+    if (entry.clockOutTime == null || entry.clockOutTime === undefined) {
+      throw new Error(
+        'Einstempel-Einträge können nicht umgezogen werden. Bitte zuerst ausstempeln oder den aktiven Eintrag beenden.'
+      )
+    }
+
+    const targetProject = await this.getProjectById(targetProjectId)
+    if (!targetProject) {
+      throw new Error('Zielprojekt nicht gefunden')
+    }
+
+    const clockIn = this.convertToDate(entry.clockInTime)
+    const workDayKey = `${clockIn.getFullYear()}-${String(clockIn.getMonth() + 1).padStart(2, '0')}-${String(clockIn.getDate()).padStart(2, '0')}`
+
+    const fileIdSet = new Set<string>()
+    const addId = (id: unknown) => {
+      if (id != null && (typeof id === 'string' || typeof id === 'number')) {
+        const s = String(id).trim()
+        if (s) fileIdSet.add(s)
+      }
+    }
+
+    ;(entry.sitePhotoUploads || []).forEach(addId)
+    ;(entry.documentPhotoUploads || []).forEach(addId)
+    if (entry.photos && Array.isArray(entry.photos)) {
+      entry.photos.forEach((p: unknown) => {
+        if (typeof p === 'string' || typeof p === 'number') addId(p)
+      })
+    }
+    if (entry.sitePhotos && Array.isArray(entry.sitePhotos)) {
+      entry.sitePhotos.forEach((photo: any) => {
+        if (photo?.id) addId(photo.id)
+      })
+    }
+    if (entry.documents && Array.isArray(entry.documents)) {
+      entry.documents.forEach((doc: any) => {
+        if (doc?.id) addId(doc.id)
+        if (typeof doc === 'string' || typeof doc === 'number') addId(doc)
+      })
+    }
+
+    const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
+      if (!items || !Array.isArray(items)) return items
+      return items.map((item) => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          return { ...item, projectId: targetProjectId }
+        }
+        return item
+      })
+    }
+
+    const auditLine = `Projekt geändert: ${options?.sourceProjectName || sourceProjectId} → ${options?.targetProjectName || targetProject.name || targetProjectId}`
+    const newNotes = (entry.notes || '').trim()
+      ? `${(entry.notes || '').trim()} | ${auditLine}`
+      : auditLine
+
+    const timeEntryUpdate: Record<string, unknown> = {
+      projectId: targetProjectId,
+      notes: newNotes,
+      sitePhotos: patchNestedProject(entry.sitePhotos as any[]),
+      documents: patchNestedProject(entry.documents as any[])
+    }
+
+    if (
+      entry.photos &&
+      Array.isArray(entry.photos) &&
+      entry.photos.length > 0 &&
+      typeof (entry.photos as any[])[0] === 'object'
+    ) {
+      timeEntryUpdate.photos = patchNestedProject(entry.photos as any[])
+    }
+
+    const cleanedUpdate = Object.fromEntries(
+      Object.entries(timeEntryUpdate).filter(([, v]) => v !== undefined)
+    ) as Partial<TimeEntry>
+
+    await this.updateTimeEntry(timeEntryId, cleanedUpdate)
+
+    const fileIds = [...fileIdSet]
+    const maxBatch = 400
+    for (let i = 0; i < fileIds.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      const chunk = fileIds.slice(i, i + maxBatch)
+      for (const fid of chunk) {
+        batch.update(doc(db, 'fileUploads', fid), { projectId: targetProjectId })
+      }
+      await batch.commit()
+    }
+
+    const projectUsages = await this.getVehicleUsagesByProject(sourceProjectId)
+    const usageIdsToMove: string[] = []
+    for (const usage of projectUsages) {
+      if (usage.employeeId !== entry.employeeId || !usage.id) continue
+      const rawDate = usage.date as any
+      let dayKey = ''
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+        dayKey = rawDate.slice(0, 10)
+      } else {
+        const d = this.convertToDate(rawDate)
+        dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      }
+      if (dayKey === workDayKey) {
+        usageIdsToMove.push(usage.id)
+      }
+    }
+    for (let i = 0; i < usageIdsToMove.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      for (const uid of usageIdsToMove.slice(i, i + maxBatch)) {
+        batch.update(doc(db, 'vehicleUsages', uid), { projectId: targetProjectId })
+      }
+      await batch.commit()
     }
   }
 
