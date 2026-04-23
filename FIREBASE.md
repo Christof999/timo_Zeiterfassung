@@ -78,6 +78,7 @@ Typische Kette: **anonyme Anmeldung fehlgeschlagen** → `request.auth` ist leer
 | **vehicleUsages** | Fahrzeugbuchungen pro Projekt/Mitarbeiter/Tag, optional `timeEntryId` |
 | **leaveRequests** | Urlaubs-/Abwesenheitsanträge |
 | **adminPushSubscriptions** | Web-Push-Abos für Admins (nur Server/API `api/push/*`) |
+| **materialTypes** | Verbrauchsmaterial (Name, Einheit, optional Preis/Einheit) für die Auswahl beim Ausstempeln |
 
 Es sind **keine zusätzlichen Composite-Indizes** nötig, solange die App nur die vorhandenen Abfragen nutzt (kein `orderBy` in Firestore).
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
-import type { Employee, Project, TimeEntry } from '../types'
+import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
 import ClockInForm from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
@@ -103,7 +103,10 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleSimpleClockOut = async (pauseMinutes: number) => {
+  const handleSimpleClockOut = async (
+    pauseMinutes: number,
+    materialUsages: TimeEntryMaterialUsage[] | undefined
+  ) => {
     if (!currentTimeEntry) return
 
     try {
@@ -113,7 +116,8 @@ const TimeTracking: React.FC = () => {
         currentTimeEntry.id,
         currentTimeEntry.notes || '',
         location,
-        pauseTotalTimeMs
+        pauseTotalTimeMs,
+        materialUsages
       )
 
       resetClockOutState()

@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project, Vehicle, VehicleUsage } from '../types'
-import VehicleBookingModal from './VehicleBookingModal'
+import type { TimeEntry, Project, MaterialType, TimeEntryMaterialUsage } from '../types'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
+import MaterialUsageFields, {
+  buildMaterialUsagesFromRows,
+  createMaterialUsageRow,
+  type MaterialUsageRow
+} from './MaterialUsageFields'
 import { toast } from './ToastContainer'
 import '../styles/ClockOutForm.css'
 
@@ -11,7 +15,7 @@ interface ClockOutFormProps {
   timeEntry: TimeEntry
   project: Project | null
   clockInTime: Date | null
-  onSimpleClockOut: (pauseMinutes: number) => void
+  onSimpleClockOut: (pauseMinutes: number, materialUsages: TimeEntryMaterialUsage[] | undefined) => void
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
 }
@@ -24,73 +28,19 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   onExtendedClockOutSuccess,
   onUpdate
 }) => {
-  const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showExtendedModal, setShowExtendedModal] = useState(false)
   const [showLiveDocModal, setShowLiveDocModal] = useState(false)
-  const [vehicleBookings, setVehicleBookings] = useState<VehicleUsage[]>([])
   /** Leer = noch nicht bestätigt; „0“ ist gültig */
   const [pauseMinutesInput, setPauseMinutesInput] = useState('')
   /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
   const [pauseMsForExtendedModal, setPauseMsForExtendedModal] = useState<number | null>(null)
+  const [noMaterial, setNoMaterial] = useState(false)
+  const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
 
   useEffect(() => {
-    loadVehicleBookings()
+    DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
   }, [])
-
-  const loadVehicleBookings = async () => {
-    try {
-      const [bookings, vehicles, user] = await Promise.all([
-        DataService.getVehicleUsagesByProject(timeEntry.projectId),
-        DataService.getAllVehicles(),
-        DataService.getCurrentUser()
-      ])
-
-      const formatDateToKey = (value: any): string => {
-        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-          return value
-        }
-
-        const asDate = value instanceof Date
-          ? value
-          : value?.toDate?.()
-            ? value.toDate()
-            : typeof value === 'string'
-              ? new Date(value)
-              : null
-
-        if (!asDate || isNaN(asDate.getTime())) {
-          return typeof value === 'string' ? value : ''
-        }
-
-        const year = asDate.getFullYear()
-        const month = String(asDate.getMonth() + 1).padStart(2, '0')
-        const day = String(asDate.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
-      }
-
-      const today = formatDateToKey(new Date())
-      const vehicleNameById = new Map<string, string>(
-        (vehicles || []).map((vehicle: Vehicle) => [String(vehicle.id), vehicle.name])
-      )
-
-      const myBookings = bookings
-        .filter((booking) => {
-          const bookingDate = formatDateToKey(booking.date)
-          return booking.employeeId === user?.id && bookingDate === today
-        })
-        .map((booking) => ({
-          ...booking,
-          vehicleName:
-            booking.vehicleName ||
-            vehicleNameById.get(String(booking.vehicleId)) ||
-            'Unbekanntes Fahrzeug'
-        }))
-
-      setVehicleBookings(myBookings)
-    } catch (error) {
-      console.error('Fehler beim Laden der Fahrzeugbuchungen:', error)
-    }
-  }
 
   const formatTime = (date: Date | null) => {
     if (!date) return '-'
@@ -114,7 +64,29 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const handleSimpleClockOutClick = () => {
     const minutes = parsePauseMinutes()
     if (minutes === null) return
-    onSimpleClockOut(minutes)
+
+    const typesById = new Map(materialTypes.map((t) => [t.id, t]))
+    let materialUsages: TimeEntryMaterialUsage[] | undefined
+    if (!noMaterial) {
+      if (materialTypes.length === 0) {
+        toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator unter „Material“ informieren.')
+        return
+      }
+      const built = buildMaterialUsagesFromRows(materialRows, typesById)
+      if (built === null) {
+        toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
+        return
+      }
+      if (built.length === 0) {
+        toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
+        return
+      }
+      materialUsages = built
+    } else {
+      materialUsages = []
+    }
+
+    onSimpleClockOut(minutes, materialUsages)
   }
 
   return (
@@ -135,6 +107,13 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       <p className="clock-in-info">
         Eingestempelt seit: {formatTime(clockInTime)}
       </p>
+
+      <MaterialUsageFields
+        noMaterial={noMaterial}
+        onNoMaterialChange={setNoMaterial}
+        rows={materialRows}
+        onRowsChange={setMaterialRows}
+      />
 
       <div className="pause-input-section">
         <label htmlFor="clock-out-pause-minutes" className="pause-input-label">
@@ -158,40 +137,9 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         </p>
       </div>
 
-      {vehicleBookings.length > 0 && (
-        <div className="current-vehicle-bookings">
-          <h4>Gebuchte Fahrzeuge heute:</h4>
-          <div className="vehicle-bookings-list">
-            {vehicleBookings.map((booking) => (
-              <div key={booking.id} className="booking-item">
-                <div className="booking-item-details">
-                  <div className="booking-item-vehicle">
-                    {booking.vehicleName || 'Unbekanntes Fahrzeug'}
-                  </div>
-                  {booking.hoursUsed && (
-                    <div className="booking-item-hours">
-                      {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
-                    </div>
-                  )}
-                  {booking.comment && (
-                    <div className="booking-item-comment">{booking.comment}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="clock-out-buttons">
         <button type="button" onClick={handleSimpleClockOutClick} className="btn secondary-btn">
           Einfach Ausstempeln
-        </button>
-        <button 
-          onClick={() => setShowVehicleModal(true)} 
-          className="btn info-btn"
-        >
-          Fahrzeugzeit buchen
         </button>
         <button 
           onClick={() => setShowLiveDocModal(true)} 
@@ -212,16 +160,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           Mit Dokumentation Ausstempeln
         </button>
       </div>
-
-      {showVehicleModal && (
-        <VehicleBookingModal
-          timeEntry={timeEntry}
-          onClose={() => {
-            setShowVehicleModal(false)
-            loadVehicleBookings()
-          }}
-        />
-      )}
 
       {showExtendedModal && pauseMsForExtendedModal !== null && (
         <ExtendedClockOutModal

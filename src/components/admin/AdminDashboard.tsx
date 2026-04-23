@@ -7,7 +7,7 @@ import ThemeToggle from '../ThemeToggle'
 import OverviewTab from './tabs/OverviewTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
-import VehiclesTab from './tabs/VehiclesTab'
+import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
@@ -19,7 +19,7 @@ type TabType =
   | 'employees'
   | 'projects'
   | 'projectsArchived'
-  | 'vehicles'
+  | 'material'
   | 'costing'
   | 'reports'
   | 'vacation'
@@ -167,7 +167,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'employees' as TabType, label: 'Mitarbeiter' },
     { id: 'projects' as TabType, label: 'Projekte' },
     { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
-    { id: 'vehicles' as TabType, label: 'Fahrzeuge' },
+    { id: 'material' as TabType, label: 'Material' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     { id: 'vacation' as TabType, label: 'Urlaub' },
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' }
@@ -325,7 +325,7 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'employees' && <EmployeesTab />}
           {currentTab === 'projects' && <ProjectsTab variant="active" />}
           {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
-          {currentTab === 'vehicles' && <VehiclesTab />}
+          {currentTab === 'material' && <MaterialTypesTab />}
           {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {currentTab === 'vacation' && <VacationTab />}
           {currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}

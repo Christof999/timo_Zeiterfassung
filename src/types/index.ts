@@ -30,6 +30,26 @@ export interface Project {
   status?: 'active' | 'inactive' | 'aktiv' | 'planned' | 'completed' | 'archived'
 }
 
+/** Verbrauchsmaterial beim Ausstempeln (Stückliste für Nachkalkulation) */
+export interface TimeEntryMaterialUsage {
+  materialTypeId: string
+  materialName?: string
+  unitLabel?: string
+  quantity: number
+  unitPriceEur?: number
+}
+
+export interface MaterialType {
+  id: string
+  name: string
+  /** z. B. m², Stück, Sack */
+  unitLabel?: string
+  /** Preis pro Mengeneinheit (EUR) */
+  unitPriceEur?: number
+  isActive?: boolean
+  sortOrder?: number
+}
+
 export interface TimeEntry {
   id: string
   employeeId: string
@@ -40,6 +60,8 @@ export interface TimeEntry {
   clockOutLocation?: { lat: number | null; lng: number | null } | null
   locationOut?: { lat: number | null; lng: number | null } | null
   notes?: string
+  /** Beim Ausstempeln erfasstes Material (qm, Stück, …) */
+  materialUsages?: TimeEntryMaterialUsage[]
   pauseTotalTime?: number
   pauseDetails?: Array<{
     start: any

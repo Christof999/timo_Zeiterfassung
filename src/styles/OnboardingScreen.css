@@ -1,0 +1,103 @@
+.onboarding-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  background: linear-gradient(165deg, var(--primary-light) 0%, var(--light-color) 45%, var(--accent-light) 100%);
+}
+
+.onboarding-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card-background);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  padding: var(--spacing-xl);
+}
+
+.onboarding-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.onboarding-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.onboarding-brand-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  line-height: var(--line-height-tight);
+}
+
+.onboarding-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.onboarding-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+}
+
+.onboarding-dot.active {
+  background: var(--primary-color);
+}
+
+.onboarding-dot.done {
+  background: var(--accent-color);
+}
+
+.onboarding-title {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-2xl);
+  color: var(--text-color);
+}
+
+.onboarding-body {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-color);
+}
+
+.onboarding-bullets {
+  margin: 0 0 var(--spacing-xl) 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.onboarding-bullets li {
+  margin-bottom: var(--spacing-xs);
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+  .onboarding-actions {
+    flex-direction: column-reverse;
+  }
+
+  .onboarding-actions .btn {
+    width: 100%;
+  }
+}

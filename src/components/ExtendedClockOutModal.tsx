@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Vehicle } from '../types'
+import type { TimeEntry, TimeEntryMaterialUsage } from '../types'
 import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
-import { VehicleBookingFormFields } from './VehicleBookingFormFields'
+import MaterialUsageFields, {
+  buildMaterialUsagesFromRows,
+  createMaterialUsageRow,
+  type MaterialUsageRow
+} from './MaterialUsageFields'
 import { toast } from './ToastContainer'
-import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/Modal.css'
 
 interface ExtendedClockOutModalProps {
@@ -13,22 +16,6 @@ interface ExtendedClockOutModalProps {
   pauseTotalTimeMs: number
   onClose: () => void
   onClockOutSuccess: () => void
-}
-
-type VehicleBookingRow = {
-  id: string
-  vehicleId: string
-  hours: number
-  comment: string
-}
-
-function createVehicleBookingRow(): VehicleBookingRow {
-  return {
-    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-    vehicleId: '',
-    hours: 1,
-    comment: ''
-  }
 }
 
 const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
@@ -41,37 +28,8 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   const [sitePhotoItems, setSitePhotoItems] = useState<PhotoUploadItem[]>([])
   const [documentPhotoItems, setDocumentPhotoItems] = useState<PhotoUploadItem[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [vehicleRows, setVehicleRows] = useState<VehicleBookingRow[]>(() => [createVehicleBookingRow()])
-
-  useEffect(() => {
-    const loadVehicles = async () => {
-      try {
-        const allVehicles = await DataService.getAllVehicles()
-        setVehicles(allVehicles.filter(v => v.isActive !== false))
-      } catch (error) {
-        console.error('Fehler beim Laden der Fahrzeuge:', error)
-      }
-    }
-    loadVehicles()
-  }, [])
-
-  const updateVehicleRow = (id: string, patch: Partial<Omit<VehicleBookingRow, 'id'>>) => {
-    setVehicleRows((rows) =>
-      rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
-    )
-  }
-
-  const addVehicleRow = () => {
-    setVehicleRows((rows) => [...rows, createVehicleBookingRow()])
-  }
-
-  const removeVehicleRow = (id: string) => {
-    setVehicleRows((rows) => {
-      const next = rows.filter((r) => r.id !== id)
-      return next.length > 0 ? next : [createVehicleBookingRow()]
-    })
-  }
+  const [noMaterial, setNoMaterial] = useState(false)
+  const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,44 +44,34 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
     setIsSubmitting(true)
 
     try {
-      const bookingsToSave = vehicleRows.filter((r) => r.vehicleId.trim() !== '')
+      const types = await DataService.getActiveMaterialTypes()
+      const typesById = new Map(types.map((t) => [t.id, t]))
 
-      if (bookingsToSave.length > 0) {
-        for (const row of bookingsToSave) {
-          if (!Number.isFinite(row.hours) || row.hours < 0.25 || row.hours > 24) {
-            toast.error('Bitte gültige Betriebsstunden (0,25–24) für alle gewählten Fahrzeuge eingeben.')
-            setIsSubmitting(false)
-            return
-          }
-        }
-        const currentUser = await DataService.getCurrentUser()
-        if (!currentUser) {
-          toast.error('Benutzer nicht gefunden.')
+      let materialUsages: TimeEntryMaterialUsage[] | undefined
+      if (!noMaterial) {
+        if (types.length === 0) {
+          toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator informieren.')
           setIsSubmitting(false)
           return
         }
-        const today = getTodayLocalDateString()
-        for (const row of bookingsToSave) {
-          const selectedVehicle = vehicles.find(
-            (v) => String(v.id) === String(row.vehicleId)
-          )
-          await DataService.addVehicleUsage({
-            vehicleId: row.vehicleId,
-            vehicleName: selectedVehicle?.name,
-            employeeId: currentUser.id,
-            projectId: timeEntry.projectId,
-            timeEntryId: timeEntry.id,
-            date: today,
-            hours: row.hours,
-            hoursUsed: row.hours,
-            comment: row.comment.trim() || undefined
-          })
+        const built = buildMaterialUsagesFromRows(materialRows, typesById)
+        if (built === null) {
+          toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
+          setIsSubmitting(false)
+          return
         }
+        if (built.length === 0) {
+          toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
+          setIsSubmitting(false)
+          return
+        }
+        materialUsages = built
+      } else {
+        materialUsages = []
       }
 
       const location = await getCurrentLocation()
 
-      // Upload site photos (Kommentar pro Bild → imageComment in Firestore)
       const sitePhotoObjects = []
       for (const { file, comment } of sitePhotoItems) {
         const upload = await DataService.uploadFile(
@@ -138,12 +86,9 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         sitePhotoObjects.push(upload)
       }
 
-      // Upload document photos
       const documentPhotoObjects = []
       for (const { file, comment } of documentPhotoItems) {
-        const documentType = file.name.toLowerCase().includes('rechnung') 
-          ? 'invoice' 
-          : 'delivery_note'
+        const documentType = file.name.toLowerCase().includes('rechnung') ? 'invoice' : 'delivery_note'
         const upload = await DataService.uploadFile(
           file,
           timeEntry.projectId,
@@ -156,19 +101,15 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         documentPhotoObjects.push(upload)
       }
 
-      // Clock out
-      await DataService.clockOutEmployee(timeEntry.id, notes, location, pauseTotalTimeMs)
+      await DataService.clockOutEmployee(timeEntry.id, notes, location, pauseTotalTimeMs, materialUsages)
 
-      // Update with documentation
       await DataService.updateTimeEntry(timeEntry.id, {
-        sitePhotoUploads: sitePhotoObjects.map(u => u.id),
-        documentPhotoUploads: documentPhotoObjects.map(u => u.id),
+        sitePhotoUploads: sitePhotoObjects.map((u) => u.id),
+        documentPhotoUploads: documentPhotoObjects.map((u) => u.id),
         sitePhotos: sitePhotoObjects,
         documents: documentPhotoObjects,
         hasDocumentation:
-          sitePhotoObjects.length > 0 ||
-          documentPhotoObjects.length > 0 ||
-          notes.trim() !== ''
+          sitePhotoObjects.length > 0 || documentPhotoObjects.length > 0 || notes.trim() !== ''
       })
 
       toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
@@ -215,6 +156,13 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         </div>
         <div className="modal-body">
           <form onSubmit={handleSubmit}>
+            <MaterialUsageFields
+              noMaterial={noMaterial}
+              onNoMaterialChange={setNoMaterial}
+              rows={materialRows}
+              onRowsChange={setMaterialRows}
+            />
+
             <div className="form-group">
               <label htmlFor="clock-out-notes">Notizen zur durchgeführten Arbeit:</label>
               <textarea
@@ -226,10 +174,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               />
             </div>
 
-            <PhotoUpload
-              label="Fotos von der Baustelle:"
-              onItemsChange={setSitePhotoItems}
-            />
+            <PhotoUpload label="Fotos von der Baustelle:" onItemsChange={setSitePhotoItems} />
 
             <PhotoUpload
               label="Lieferscheine oder Rechnungen:"
@@ -237,71 +182,11 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               commentFieldLabel="Kommentar zu diesem Dokument (optional)"
             />
 
-            <div className="form-group">
-              <h4 className="extended-doc-vehicle-heading">Fahrzeugzeit buchen (optional)</h4>
-              <p className="form-hint" style={{ marginTop: 0 }}>
-                Gleiche Auswahl wie bei „Fahrzeugzeit buchen“ auf der Zeiterfassungskarte. Mehrere Buchungen sind möglich.
-              </p>
-              {vehicleRows.map((row, index) => (
-                <div
-                  key={row.id}
-                  className="extended-vehicle-booking-row"
-                  style={index > 0 ? { marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color, #e0e0e0)' } : undefined}
-                >
-                  {vehicleRows.length > 1 && (
-                    <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                      <strong>Buchung {index + 1}</strong>
-                    </div>
-                  )}
-                  <VehicleBookingFormFields
-                    vehicles={vehicles}
-                    selectedVehicleId={row.vehicleId}
-                    hours={row.hours}
-                    comment={row.comment}
-                    onVehicleChange={(vehicleId) => updateVehicleRow(row.id, { vehicleId })}
-                    onHoursChange={(hours) => updateVehicleRow(row.id, { hours })}
-                    onCommentChange={(comment) => updateVehicleRow(row.id, { comment })}
-                    idPrefix={`extended-vehicle-${row.id}`}
-                  />
-                  {vehicleRows.length > 1 && (
-                    <div className="form-group">
-                      <button
-                        type="button"
-                        className="btn secondary-btn"
-                        onClick={() => removeVehicleRow(row.id)}
-                        disabled={isSubmitting}
-                      >
-                        Diese Buchung entfernen
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div className="form-group">
-                <button
-                  type="button"
-                  className="btn info-btn"
-                  onClick={addVehicleRow}
-                  disabled={isSubmitting}
-                >
-                  Weitere Fahrzeugbuchung hinzufügen
-                </button>
-              </div>
-            </div>
-
             <div className="form-group text-center">
-              <button 
-                type="submit" 
-                className="btn primary-btn"
-                disabled={isSubmitting}
-              >
+              <button type="submit" className="btn primary-btn" disabled={isSubmitting}>
                 {isSubmitting ? 'Speichere...' : 'Ausstempeln und Speichern'}
               </button>
-              <button 
-                type="button" 
-                className="btn secondary-btn" 
-                onClick={onClose}
-              >
+              <button type="button" className="btn secondary-btn" onClick={onClose}>
                 Abbrechen
               </button>
             </div>
@@ -313,4 +198,3 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 }
 
 export default ExtendedClockOutModal
-
