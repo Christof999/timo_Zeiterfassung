@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════════════════════
+   Onboarding Demo Preview – vollständige Mini-App-Vorschau
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Äußerer Rahmen ────────────────────────────────────── */
 .onboarding-demo {
   margin: var(--spacing-lg) 0 var(--spacing-md) 0;
   border-radius: var(--radius-lg);
@@ -7,6 +12,7 @@
   box-shadow: var(--shadow-md);
 }
 
+/* ─── Browser-Chrome (Punkte + URL) ─────────────────────── */
 .onboarding-demo-chrome {
   display: flex;
   align-items: center;
@@ -22,18 +28,9 @@
   border-radius: 50%;
   background: var(--border-color);
 }
-
-.onboarding-demo-dot:first-child {
-  background: #f87171;
-}
-
-.onboarding-demo-dot:nth-child(2) {
-  background: #fbbf24;
-}
-
-.onboarding-demo-dot:nth-child(3) {
-  background: #4ade80;
-}
+.onboarding-demo-dot:first-child  { background: #f87171; }
+.onboarding-demo-dot:nth-child(2) { background: #fbbf24; }
+.onboarding-demo-dot:nth-child(3) { background: #4ade80; }
 
 .onboarding-demo-url {
   flex: 1;
@@ -43,35 +40,23 @@
   font-weight: 500;
 }
 
+/* ─── Body-Wrapper ──────────────────────────────────────── */
 .onboarding-demo-body {
   padding: var(--spacing-md);
   background: var(--card-background);
 }
 
+/* ─── Stage (feste Höhe, overflow-clipped) ──────────────── */
 .onboarding-demo-stage {
   position: relative;
-  min-height: 200px;
+  height: 244px;
   border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
   background: var(--background-color);
-  border: 1px dashed var(--border-color);
-  padding: var(--spacing-md);
 }
 
-/* Animierter „Cursor“ (Kreis) */
-.onboarding-cursor {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ffffff 0%, var(--primary-color) 45%, var(--primary-dark) 100%);
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.2),
-    0 0 0 3px rgba(255, 255, 255, 0.85);
-  pointer-events: none;
-  z-index: 6;
-  opacity: 0.95;
-}
-
+/* ─── Unterschrift ──────────────────────────────────────── */
 .onboarding-demo-caption {
   margin: 0;
   padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
@@ -81,321 +66,660 @@
   background: var(--card-background);
 }
 
-.onboarding-demo-line {
-  height: 10px;
-  border-radius: 4px;
-  background: var(--border-color);
-  margin-bottom: 8px;
-  max-width: 70%;
+/* ═══════════════════════════════════════════════════════════
+   SVG-Cursor
+   ═══════════════════════════════════════════════════════════ */
+.onboarding-cursor {
+  position: absolute;
+  width: 14px;
+  height: 18px;
+  pointer-events: none;
+  z-index: 20;
+  /* Hotspot am Pfeil-Tip (oben-links) */
+  transform-origin: 0 0;
+  filter: drop-shadow(0.5px 1.5px 1.5px rgba(0, 0, 0, 0.45));
+  display: block;
+  /* Basis-Position (wird per Varianten-Selektor überschrieben) */
+  top: 10px;
+  left: 44%;
 }
 
-.onboarding-demo-line.wide {
-  max-width: 90%;
-}
-
-.onboarding-demo-line.short {
-  max-width: 45%;
-  margin-bottom: 12px;
-}
-
-.onboarding-demo-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.onboarding-demo-logo-mini {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--primary-light), var(--accent-light));
-  margin-bottom: 10px;
-}
-
-.onboarding-demo-field {
-  height: 36px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background: var(--card-background);
-  margin-bottom: 10px;
-}
-
-.onboarding-demo-field.small {
-  height: 32px;
-  max-width: 80px;
-}
-
-.onboarding-demo-field.tiny {
-  height: 32px;
-  flex: 1;
-  margin-bottom: 0;
-}
-
-.onboarding-demo-select {
-  height: 38px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+/* ═══════════════════════════════════════════════════════════
+   Seiten-Basisstruktur (füllt die Stage)
+   ═══════════════════════════════════════════════════════════ */
+.odp-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--light-color);
+  font-family: inherit;
+}
+
+/* ─── Typografie-Helfer ─────────────────────────────────── */
+.odp-text    { display: block; font-size: 0.6rem; color: var(--text-color); line-height: 1.3; }
+.odp-bold    { font-weight: 700; }
+.odp-muted   { color: var(--text-muted); }
+.odp-link    { color: var(--accent-color); text-align: center; }
+.odp-size-md  { font-size: 0.78rem !important; }
+.odp-size-sm  { font-size: 0.65rem !important; }
+.odp-size-xs  { font-size: 0.6rem !important;  }
+.odp-size-xxs { font-size: 0.52rem !important; }
+
+/* ─── Gemeinsamer Header ────────────────────────────────── */
+.odp-hdr {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  font-size: 0.75rem;
+  gap: 7px;
+  padding: 8px 10px;
+  background: var(--card-background);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.odp-hdr-menu { padding-right: 7px; }
+
+/* App-Logo (farbiger Quadrat-Block) */
+.odp-logo-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(196, 30, 58, 0.35);
+}
+.odp-logo-lg {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+/* Hamburger-Menü */
+.odp-menu {
+  margin-left: auto;
+  font-size: 0.85rem;
   color: var(--text-secondary);
-  margin-bottom: 12px;
-}
-
-.onboarding-demo-select.tiny {
-  height: 32px;
-  margin-bottom: 0;
-  flex: 1.4;
-}
-
-.onboarding-demo-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: none;
+  padding: 2px 3px;
+  border-radius: 3px;
+  flex-shrink: 0;
   cursor: default;
 }
-
-.onboarding-demo-btn.primary {
-  background: var(--primary-color);
-  color: #fff;
-}
-
-.onboarding-demo-btn.secondary {
-  background: var(--secondary-color);
-  color: #fff;
-}
-
-.onboarding-demo-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
-}
-
-.onboarding-demo-check-box {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-color);
-  border-radius: 3px;
-  background: var(--card-background);
-}
-
-.onboarding-demo-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.onboarding-demo-nav {
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.onboarding-demo-nav-icon {
-  font-size: 1.1rem;
-  color: var(--text-secondary);
-}
-
-.onboarding-demo-nav-spacer {
-  flex: 1;
-}
-
-.onboarding-demo-pill {
-  display: inline-block;
-  padding: 8px 12px;
-  border-radius: var(--radius-full);
+.odp-menu-highlight {
+  color: var(--primary-color);
   background: var(--primary-light);
-  color: var(--primary-dark);
-  font-size: 0.7rem;
-  font-weight: 600;
-  border: 1px solid rgba(196, 30, 58, 0.25);
 }
 
-.onboarding-demo-thumb {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(90deg, var(--border-light), var(--border-color), var(--border-light));
-  margin-top: 8px;
-}
-
-.onboarding-demo-admin {
-  display: flex;
-  gap: 10px;
-  min-height: 160px;
-}
-
-.onboarding-demo-admin-sidebar {
-  width: 38%;
+/* ─── Main-Bereich ──────────────────────────────────────── */
+.odp-main {
+  flex: 1;
+  padding: 6px 8px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.onboarding-demo-admin-tab {
-  padding: 8px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.65rem;
-  background: var(--light-color);
-  color: var(--text-secondary);
-  border: 1px solid transparent;
-}
-
-.onboarding-demo-admin-tab.active {
-  background: var(--primary-light);
-  color: var(--primary-dark);
-  font-weight: 600;
-  border-color: rgba(196, 30, 58, 0.2);
-}
-
-.onboarding-demo-admin-tab.hit-material {
-  border: 1px dashed var(--accent-color);
-}
-
-.onboarding-demo-admin-main {
-  flex: 1;
-  padding: 4px 0;
-}
-
-.onboarding-demo-table-row {
+/* ─── Karte ─────────────────────────────────────────────── */
+.odp-card {
+  background: var(--card-background);
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  padding: 8px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   display: flex;
-  justify-content: space-between;
-  font-size: 0.65rem;
-  padding: 8px 6px;
-  background: var(--light-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
-/* Cursor-Positionen & Animation pro Slide */
-@keyframes onboarding-cursor-welcome {
-  0%,
-  100% {
-    top: 18px;
-    left: 18px;
-    transform: scale(1);
-  }
-  50% {
-    top: 22px;
-    left: 28px;
-    transform: scale(1.05);
-  }
+.odp-card-h {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-color);
+  text-align: center;
+  margin-bottom: 3px;
+}
+
+.odp-hr {
+  height: 1px;
+  background: var(--border-light);
+  margin: 2px 0;
+}
+
+/* ─── Formular-Elemente ─────────────────────────────────── */
+.odp-fg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.odp-lbl {
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.odp-lbl-md { font-size: 0.58rem; }
+
+.odp-inp {
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--background-color);
+}
+.odp-inp-pw {
+  display: flex;
+  align-items: center;
+  padding-left: 7px;
+}
+.odp-pw-dots {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+}
+.odp-inp-sm  { height: 18px; width: 38px; }
+.odp-inp-val {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  font-size: 0.58rem;
+  color: var(--text-color);
+}
+
+.odp-sel {
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--card-background);
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  font-size: 0.58rem;
+  color: var(--text-secondary);
+  justify-content: space-between;
+}
+.odp-arr { font-size: 0.45rem; color: var(--text-muted); }
+
+/* ─── Buttons ───────────────────────────────────────────── */
+.odp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: none;
+}
+.odp-btn-p    { background: var(--primary-color); color: #fff; }
+.odp-btn-s    { background: var(--secondary-color); color: #fff; }
+.odp-btn-o    { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); }
+.odp-btn-full { width: 100%; }
+.odp-btn-sm   { height: 22px; font-size: 0.52rem; padding: 0 8px; flex: 1; }
+.odp-btn-xs   { height: 18px; font-size: 0.48rem; padding: 0 6px; }
+
+.odp-btn-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WELCOME-Seite
+   ═══════════════════════════════════════════════════════════ */
+.odp-welcome-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(160deg, var(--card-background) 0%, var(--light-color) 100%);
+}
+
+.odp-welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.odp-welcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 210px;
+}
+
+.odp-welcome-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-background);
+  border-radius: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-light);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.odp-fi     { font-size: 0.85rem; flex-shrink: 0; }
+.odp-fi-sm  { font-size: 0.75rem; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   LOGIN-Seite  (Header + Card im Main-Bereich)
+   ═══════════════════════════════════════════════════════════ */
+/* Struktur über .odp-hdr, .odp-main, .odp-card abgedeckt */
+
+/* ═══════════════════════════════════════════════════════════
+   EINSTEMPELN-Seite
+   ═══════════════════════════════════════════════════════════ */
+.odp-userbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-background);
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  padding: 5px 8px;
+  flex-shrink: 0;
+}
+.odp-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-light), var(--accent-light));
+  flex-shrink: 0;
+  border: 1.5px solid rgba(196, 30, 58, 0.2);
+}
+.odp-theme-dot {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AUSSTEMPELN-Seite
+   ═══════════════════════════════════════════════════════════ */
+.odp-proj-card {
+  background: var(--primary-light);
+  border-radius: 6px;
+  border: 1px solid rgba(196, 30, 58, 0.22);
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.odp-proj-badge {
+  font-size: 0.49rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.odp-proj-name {
+  font-size: 0.63rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+.odp-proj-time {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.odp-pause-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.odp-pause-right {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+
+.odp-chk-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.odp-chk {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1.5px solid var(--border-color);
+  background: var(--card-background);
+  flex-shrink: 0;
+  position: relative;
+}
+.odp-chk-on {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+/* Häkchen via clip-path-trick */
+.odp-chk-on::after {
+  content: '';
+  position: absolute;
+  left: 1.5px;
+  top: 1px;
+  width: 7px;
+  height: 4.5px;
+  border-left: 1.5px solid white;
+  border-bottom: 1.5px solid white;
+  transform: rotate(-45deg);
+  transform-origin: 20% 80%;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DOKUMENTATION-Seite
+   ═══════════════════════════════════════════════════════════ */
+.odp-retro {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary-light);
+  border: 1px solid rgba(196, 30, 58, 0.28);
+  border-radius: 20px;
+  padding: 6px 12px;
+  flex-shrink: 0;
+}
+.odp-retro-arr {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--primary-color);
+}
+
+.odp-act-h {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+.odp-act-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border-light);
+  border-radius: 3px;
+}
+.odp-act-row-highlight {
+  background: rgba(196, 30, 58, 0.04);
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 4px;
+  border-color: rgba(196, 30, 58, 0.12);
+}
+.odp-act-dt {
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 40px;
+}
+.odp-act-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN-Seite
+   ═══════════════════════════════════════════════════════════ */
+.odp-admin-page {
+  background: var(--light-color);
+}
+.odp-admin-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--card-background);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Tab-Leiste */
+.odp-tabs {
+  display: flex;
+  background: var(--card-background);
+  border-bottom: 2px solid var(--border-light);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.odp-tab {
+  flex: 1;
+  text-align: center;
+  padding: 5px 1px;
+  font-size: 0.49rem;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.odp-tab-on {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 700;
+  font-size: 0.51rem !important;
+}
+
+/* Inhalts-Bereich */
+.odp-admin-body {
+  flex: 1;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+.odp-content-ttl {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 5px;
+}
+
+/* Tabelle */
+.odp-tbl-hdr {
+  display: flex;
+  padding: 3px 5px;
+  font-size: 0.47rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--border-light);
+  border-radius: 3px 3px 0 0;
+}
+.odp-tbl-hdr span,
+.odp-tbl-row span { flex: 1; }
+
+.odp-tbl-row {
+  display: flex;
+  padding: 4px 5px;
+  font-size: 0.55rem;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-light);
+  background: var(--card-background);
+}
+.odp-tbl-row:last-child { border-radius: 0 0 3px 3px; }
+.odp-tbl-row-hi {
+  background: rgba(196, 30, 58, 0.04);
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CURSOR-ANIMATIONEN (eine pro Slide-Variante)
+   Jede Animation:
+     • startet & endet an derselben Position (nahtloser Loop)
+     • hält kurz bei jedem Ziel-Element
+     • führt einen „Klick" aus (scale 0.82 → 1)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── WELCOME ── sanfter Scan über die Feature-Liste */
+@keyframes odp-cur-welcome {
+  0%, 100% { top: 58px;  left: 44%; transform: scale(1); }
+  25%       { top: 103px; left: 18%; transform: scale(1); }
+  50%       { top: 135px; left: 18%; transform: scale(1); }
+  75%       { top: 167px; left: 18%; transform: scale(1); }
 }
 
 .onboarding-demo--welcome .onboarding-cursor {
-  top: 18px;
-  left: 18px;
-  animation: onboarding-cursor-welcome 2.2s ease-in-out infinite;
+  top: 58px;
+  left: 44%;
+  animation: odp-cur-welcome 3.2s ease-in-out infinite;
 }
 
-@keyframes onboarding-cursor-login {
-  0%,
-  100% {
-    top: 52px;
-    left: 14px;
-  }
-  33% {
-    top: 100px;
-    left: 14px;
-  }
-  66% {
-    top: 152px;
-    left: 50%;
-    transform: translateX(-50%);
-  }
+/* ── LOGIN ── Cursor füllt Benutzername, Passwort, klickt Anmelden */
+@keyframes odp-cur-login {
+  /* 1. Startposition oben */
+  0%, 5%   { top: 10px;  left: 44%; transform: scale(1); }
+  /* 2. Bewegen zu Benutzername-Feld */
+  18%, 30% { top: 88px;  left: 44%; transform: scale(1); }
+  /* Klick ins Feld */
+  22%      { transform: scale(0.82); }
+  26%      { transform: scale(1);    }
+  /* 3. Bewegen zu Passwort-Feld */
+  45%, 57% { top: 125px; left: 44%; transform: scale(1); }
+  49%      { transform: scale(0.82); }
+  53%      { transform: scale(1);    }
+  /* 4. Bewegen zum Anmelden-Button */
+  70%, 85% { top: 157px; left: 44%; transform: scale(1); }
+  74%      { transform: scale(0.82); }
+  79%      { transform: scale(1);    }
+  /* 5. Zurück nach oben */
+  95%, 100% { top: 10px; left: 44%; transform: scale(1); }
 }
 
 .onboarding-demo--login .onboarding-cursor {
-  animation: onboarding-cursor-login 3.5s ease-in-out infinite;
+  top: 10px;
+  left: 44%;
+  animation: odp-cur-login 4.2s ease-in-out infinite;
 }
 
-@keyframes onboarding-cursor-clockin {
-  0%,
-  100% {
-    top: 48px;
-    left: 12px;
-  }
-  50% {
-    top: 108px;
-    left: 40%;
-    transform: translateX(0);
-  }
+/* ── EINSTEMPELN ── Projekt-Dropdown öffnen, dann Einstempeln klicken */
+@keyframes odp-cur-clockin {
+  /* Startposition oben */
+  0%, 5%   { top: 10px;  left: 44%; transform: scale(1); }
+  /* Bewegen zum Dropdown */
+  18%, 32% { top: 109px; left: 44%; transform: scale(1); }
+  /* Klick Dropdown */
+  24%      { transform: scale(0.82); }
+  28%      { transform: scale(1);    }
+  /* Bewegen zum Button */
+  50%, 65% { top: 138px; left: 44%; transform: scale(1); }
+  /* Klick Einstempeln */
+  57%      { transform: scale(0.82); }
+  61%      { transform: scale(1);    }
+  /* Kurz auf Button verweilen */
+  80%      { top: 138px; left: 44%; transform: scale(1); }
+  /* Zurück nach oben */
+  100%     { top: 10px;  left: 44%; transform: scale(1); }
 }
 
 .onboarding-demo--clockin .onboarding-cursor {
-  animation: onboarding-cursor-clockin 2.8s ease-in-out infinite;
+  top: 10px;
+  left: 44%;
+  animation: odp-cur-clockin 3.8s ease-in-out infinite;
 }
 
-@keyframes onboarding-cursor-clockout {
-  0%,
-  100% {
-    top: 88px;
-    left: 22px;
-  }
-  40% {
-    top: 130px;
-    left: 55%;
-  }
-  70% {
-    top: 178px;
-    left: 30%;
-  }
+/* ── AUSSTEMPELN ── Projekt prüfen → Pause eintragen → Checkbox → Ausstempeln */
+@keyframes odp-cur-clockout {
+  /* 1. Start: aktives Projekt betrachten */
+  0%, 8%   { top: 62px;  left: 28%; transform: scale(1); }
+  /* 2. Pause-Eingabefeld (rechts oben in der Karte) */
+  20%, 32% { top: 113px; left: 57%; transform: scale(1); }
+  25%      { transform: scale(0.82); }
+  29%      { transform: scale(1);    }
+  /* 3. Checkbox "Kein Material" (links) */
+  44%, 56% { top: 137px; left: 14%; transform: scale(1); }
+  48%      { transform: scale(0.82); }
+  52%      { transform: scale(1);    }
+  /* 4. Ausstempeln-Button */
+  67%, 81% { top: 161px; left: 14%; transform: scale(1); }
+  71%      { transform: scale(0.82); }
+  76%      { transform: scale(1);    }
+  /* 5. Zurück zum Projektbereich */
+  93%, 100% { top: 62px; left: 28%; transform: scale(1); }
 }
 
 .onboarding-demo--clockout .onboarding-cursor {
-  animation: onboarding-cursor-clockout 3.2s ease-in-out infinite;
+  top: 62px;
+  left: 28%;
+  animation: odp-cur-clockout 4.8s ease-in-out infinite;
 }
 
-@keyframes onboarding-cursor-doc {
-  0%,
-  100% {
-    top: 42px;
-    left: 10px;
-  }
-  50% {
-    top: 86px;
-    left: 18%;
-  }
+/* ── DOKUMENTATION ── ☰ antippen → Bericht nachtragen → Aktivität ansehen */
+@keyframes odp-cur-doc {
+  /* 1. Hamburger-Menü (oben rechts) */
+  0%, 8%   { top: 15px; left: 84%; transform: scale(1); }
+  13%      { transform: scale(0.82); }
+  17%      { transform: scale(1);    }
+  /* 2. "Bericht nachtragen"-Button */
+  27%, 42% { top: 51px; left: 42%; transform: scale(1); }
+  33%      { transform: scale(0.82); }
+  38%      { transform: scale(1);    }
+  /* 3. Erste Aktivitäts-Zeile */
+  55%, 74% { top: 103px; left: 30%; transform: scale(1); }
+  /* 4. Zweite Zeile */
+  82%      { top: 119px; left: 30%; transform: scale(1); }
+  /* 5. Zurück zum Menü */
+  93%, 100% { top: 15px; left: 84%; transform: scale(1); }
 }
 
 .onboarding-demo--documentation .onboarding-cursor {
-  animation: onboarding-cursor-doc 2.6s ease-in-out infinite;
+  top: 15px;
+  left: 84%;
+  animation: odp-cur-doc 4s ease-in-out infinite;
 }
 
-@keyframes onboarding-cursor-admin {
-  0%,
-  100% {
-    top: 72px;
-    left: 12%;
-  }
-  50% {
-    top: 118px;
-    left: 12%;
-  }
+/* ── ADMIN ── Übersicht-Tab → Material-Tab klicken → Tabellenzeilen lesen */
+@keyframes odp-cur-admin {
+  /* 1. Übersicht-Tab (links) */
+  0%, 8%   { top: 43px; left: 6%;  transform: scale(1); }
+  /* 2. Material-Tab (4. Tab) */
+  20%, 34% { top: 43px; left: 56%; transform: scale(1); }
+  26%      { transform: scale(0.82); }
+  30%      { transform: scale(1);    }
+  /* 3. Erste Tabellenzeile (Fliese) */
+  48%, 63% { top: 93px; left: 18%; transform: scale(1); }
+  55%      { transform: scale(0.86); }
+  59%      { transform: scale(1);    }
+  /* 4. Zweite Tabellenzeile (Kabel) */
+  74%, 86% { top: 109px; left: 18%; transform: scale(1); }
+  /* 5. Zurück zum Übersicht-Tab */
+  96%, 100% { top: 43px; left: 6%; transform: scale(1); }
 }
 
 .onboarding-demo--admin .onboarding-cursor {
-  animation: onboarding-cursor-admin 2.8s ease-in-out infinite;
+  top: 43px;
+  left: 6%;
+  animation: odp-cur-admin 4.5s ease-in-out infinite;
 }
 
+/* ─── Barrierefreiheit: keine Animation bei reduzierter Bewegung ── */
 @media (prefers-reduced-motion: reduce) {
   .onboarding-cursor {
     animation: none !important;
     top: 50% !important;
     left: 50% !important;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) !important;
   }
 }
