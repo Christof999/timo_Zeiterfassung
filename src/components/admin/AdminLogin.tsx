@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
+import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import '../../styles/AdminLogin.css'
 
 const AdminLogin: React.FC = () => {
@@ -59,7 +60,7 @@ const AdminLogin: React.FC = () => {
             alt="Logo" 
             className="admin-login-logo-image"
           />
-          <h1>Lauffer Zeiterfassung</h1>
+          <h1>{APP_DISPLAY_NAME}</h1>
           <p>Admin Panel</p>
         </div>
       </header>

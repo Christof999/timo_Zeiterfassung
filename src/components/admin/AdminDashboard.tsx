@@ -10,6 +10,7 @@ import ProjectsTab from './tabs/ProjectsTab'
 import VehiclesTab from './tabs/VehiclesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
+import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import '../../styles/AdminDashboard.css'
 
 type TabType =
@@ -279,7 +280,7 @@ const AdminDashboard: React.FC = () => {
             alt="Logo" 
             className="admin-logo-image"
           />
-          <h1>Lauffer Zeiterfassung</h1>
+          <h1>{APP_DISPLAY_NAME}</h1>
           <p className="admin-logo-subtitle">Admin Panel</p>
         </div>
         <div className="admin-header-controls">

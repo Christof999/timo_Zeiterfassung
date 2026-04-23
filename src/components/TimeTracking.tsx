@@ -12,6 +12,7 @@ import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
+import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
 const TimeTracking: React.FC = () => {
@@ -177,8 +178,8 @@ const TimeTracking: React.FC = () => {
             alt="Logo" 
             className="time-tracking-logo-image"
           />
-          <h1>Lauffer Zeiterfassung</h1>
-          <p>Gartenbau • Erdbau • Natursteinhandel</p>
+          <h1>{APP_DISPLAY_NAME}</h1>
+          <p>Mitarbeiter-Zeiterfassung</p>
         </div>
       </header>
 

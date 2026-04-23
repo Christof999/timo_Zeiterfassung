@@ -18,7 +18,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const title = payload.title || 'Lauffer Zeiterfassung'
+  const title = payload.title || 'Fliesen Reislöhner GmbH Zeiterfassung'
   const options = {
     body: payload.body || 'Es gibt eine neue Benachrichtigung.',
     icon: payload.icon || '/icon-192.png',

@@ -1,4 +1,5 @@
 import '../styles/SplashScreen.css'
+import { APP_DISPLAY_NAME } from '../constants/appBranding'
 
 const SplashScreen: React.FC = () => {
   return (
@@ -9,8 +10,8 @@ const SplashScreen: React.FC = () => {
           alt="Logo" 
           className="splash-logo"
         />
-        <h1 className="splash-title">Lauffer Zeiterfassung</h1>
-        <p className="splash-subtitle">Gartenbau • Erdbau • Natursteinhandel</p>
+        <h1 className="splash-title">{APP_DISPLAY_NAME}</h1>
+        <p className="splash-subtitle">Mitarbeiter-Zeiterfassung</p>
         <div className="splash-loader">
           <div className="loader-bar"></div>
         </div>
