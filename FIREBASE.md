@@ -34,6 +34,12 @@ Typische Kette: **anonyme Anmeldung fehlgeschlagen** → `request.auth` ist leer
 2. In der **Browser-Konsole** prüfen, ob **`Firebase Auth bereit`** erscheint (ohne rotes ❌ davor).
 3. In der Firebase Console unter **Firestore** → **Regeln** prüfen, ob deployed ist, was Schreiben für angemeldete Nutzer erlaubt (siehe `firestore.rules` im Repo).
 
+### „Load failed“ / `DOMException` trotz „Firebase Auth bereit“
+
+- Oft **Netzwerk / WebChannel** (Safari, Firmen-VPN, iCloud Private Relay, strenge Browser-Einstellungen). Im Client ist **Long-Polling für Firestore** aktiviert (`firebaseConfig.ts`), damit viele dieser Abbrüche verschwinden – bitte **neu deployen** und testen.
+- In den **Entwicklertools → Netzwerk** prüfen, ob Anfragen an `firestore.googleapis.com` mit **403** / **permission-denied** enden → dann **Firestore-Regeln** anpassen/deployen (nicht nur die Default-Regeln „alles verweigern“).
+- Wenn **nur** `/api/push/...` fehlschlägt: auf Vercel **Server-Variablen** `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` setzen (siehe `.env.example`). Fehlende Admin-Credentials führen dort zu **500** – für normales Admin-Speichern in Firestore **nicht** nötig.
+
 ## Firestore-Sammlungen („Tabellen“)
 
 | Sammlung | Verwendung |
