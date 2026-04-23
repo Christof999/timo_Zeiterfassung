@@ -5,6 +5,10 @@
 1. In der [Firebase Console](https://console.firebase.google.com/) das Projekt **timozeiterfassung** öffnen.
 2. **Projekteinstellungen** → **Meine Apps** → Web-App anlegen (falls noch nicht geschehen) und die Konfiguration kopieren.
 3. Im Projektroot: `cp .env.example .env` und alle `VITE_FIREBASE_*` sowie optional `VITE_PUSH_VAPID_PUBLIC_KEY` eintragen.
+
+### Vercel
+
+Unter **Project → Settings → Environment Variables** dieselben Namen wie in `.env.example` anlegen (**Prefix `VITE_` nicht weglassen**). Ohne `VITE_FIREBASE_API_KEY` schlägt der Build bzw. die Laufzeit mit `auth/invalid-api-key` fehl. Nach dem Anlegen **Redeploy** auslösen (bestehende Deployments lesen neue Variablen nicht automatisch nach).
 4. **Authentication** → **Anonym** aktivieren (die App meldet Nutzer per `signInAnonymously` an).
 5. **Firestore Database** anlegen (Modus **Production** ist ok, solange die Regeln aus diesem Repo deployed sind).
 6. Regeln deployen (Firebase CLI installiert und eingeloggt):

@@ -54,8 +54,8 @@ const Login: React.FC = () => {
         <ThemeToggle variant="icon" className="login-theme-toggle" />
         <div className="login-logo">
           <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
+            src="/brand-logo.png" 
+            alt="Logo" 
             className="login-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
