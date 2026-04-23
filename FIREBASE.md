@@ -12,14 +12,40 @@ Unter **Project → Settings → Environment Variables** dieselben Namen wie in 
 4. **Authentication** (links unter **Build**): Einmal **„Authentication aktivieren“ / Get started“** ausführen, bis die Methode **Anonym** sichtbar ist.
 5. **Authentication** → Tab **Sign-in method** → **Anonym** → **Aktivieren** (die App ruft `signInAnonymously` auf – ohne diesen Provider schlägt die Anmeldung fehl und **Firestore-Schreibzugriffe** sind gesperrt, siehe Regeln unten).
 6. **Authentication** → Tab **Settings** → **Authorized domains**: Deine **Vercel-Domain** hinzufügen (z. B. `dein-projekt.vercel.app` und ggf. jede **Preview-URL** wie `…-christof999s-projects.vercel.app`). Ohne Eintrag kann die Web-App auf der Domain nicht korrekt mit Auth sprechen.
-7. **Firestore Database** anlegen (Modus **Production** ist ok, solange die Regeln aus diesem Repo deployed sind).
-8. Regeln deployen (Firebase CLI installiert und eingeloggt):
+7. **Firestore Database** anlegen. **Production** ist in Ordnung, wenn du direkt danach die Regeln aus diesem Repo einspielst (siehe unten). **Testmodus** erlaubt nur **30 Tage** offenen Zugriff; danach brauchst du ohnehin echte Regeln.
+8. **Firestore-Regeln veröffentlichen** (ohne diesen Schritt: **`missing or insufficient permission`** beim Anlegen von Mitarbeitern, Projekten usw.):
+
+   **Option A – Console:** **Firestore** → **Regeln** → Inhalt von `firestore.rules` aus diesem Repo einfügen (oder unten kopieren) → **Veröffentlichen**.
+
+   **Option B – CLI** (im Projektroot, nach `npm i -g firebase-tools` und `firebase login`):
 
    ```bash
-   firebase deploy --only firestore:rules --project timozeiterfassung
+   firebase deploy --only firestore:rules
    ```
 
+   Die Datei `firestore.rules` erlaubt **Lesen und Schreiben für jeden angemeldeten Nutzer** (`request.auth != null`). Das passt zur App (anonyme Anmeldung). Für spätere Absicherung kannst du feinere Regeln ergänzen.
+
+### Regeln zum Kopieren (falls du sie nur in der Console brauchst)
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
 ## Fehlerbehebung
+
+### `missing or insufficient permission` / `permission-denied`
+
+- **Häufigste Ursache:** Firestore ist angelegt, aber es sind **noch keine Regeln** veröffentlicht – im **Production**-Modus ist dann **alles gesperrt**.
+- **Lösung:** Regeln wie oben deployen bzw. in der Console **Veröffentlichen**. Kurz warten, Seite **neu laden** (damit der Client die neuen Regeln nutzt).
+- **Prüfen:** In der Console unter **Firestore** → **Regeln** darf nicht nur der Platzhalter „deny all“ stehen, sondern mindestens `request.auth != null` wie im Repo.
+- Wenn die Regeln stimmen und der Fehler bleibt: **anonyme Anmeldung** wirklich aktiv? In der Konsole muss **`Firebase Auth bereit`** erscheinen (sonst ist `request.auth` leer → ebenfalls `permission-denied`).
 
 ### `auth/configuration-not-found`
 
