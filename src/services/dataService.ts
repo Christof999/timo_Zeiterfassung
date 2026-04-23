@@ -152,6 +152,11 @@ class DataServiceClass {
           console.log('Kein Benutzer, starte anonyme Anmeldung...')
           signInAnonymously(auth).catch((error) => {
             console.error('❌ Fehler bei der anonymen Anmeldung:', error)
+            if (error?.code === 'auth/configuration-not-found') {
+              console.error(
+                'Firebase Auth: Im Projekt Authentication aktivieren, Provider „Anonym“ einschalten und die Vercel-Domain unter Authentication → Settings → Authorized domains eintragen. Ohne gültige Anmeldung sind Firestore-Schreibzugriffe (Admin) gesperrt.'
+              )
+            }
             resolve() // Trotzdem auflösen, damit die App weiterläuft
           })
         }

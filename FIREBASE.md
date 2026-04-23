@@ -9,13 +9,30 @@
 ### Vercel
 
 Unter **Project → Settings → Environment Variables** dieselben Namen wie in `.env.example` anlegen (**Prefix `VITE_` nicht weglassen**). Ohne `VITE_FIREBASE_API_KEY` schlägt der Build bzw. die Laufzeit mit `auth/invalid-api-key` fehl. Nach dem Anlegen **Redeploy** auslösen (bestehende Deployments lesen neue Variablen nicht automatisch nach).
-4. **Authentication** → **Anonym** aktivieren (die App meldet Nutzer per `signInAnonymously` an).
-5. **Firestore Database** anlegen (Modus **Production** ist ok, solange die Regeln aus diesem Repo deployed sind).
-6. Regeln deployen (Firebase CLI installiert und eingeloggt):
+4. **Authentication** (links unter **Build**): Einmal **„Authentication aktivieren“ / Get started“** ausführen, bis die Methode **Anonym** sichtbar ist.
+5. **Authentication** → Tab **Sign-in method** → **Anonym** → **Aktivieren** (die App ruft `signInAnonymously` auf – ohne diesen Provider schlägt die Anmeldung fehl und **Firestore-Schreibzugriffe** sind gesperrt, siehe Regeln unten).
+6. **Authentication** → Tab **Settings** → **Authorized domains**: Deine **Vercel-Domain** hinzufügen (z. B. `dein-projekt.vercel.app` und ggf. jede **Preview-URL** wie `…-christof999s-projects.vercel.app`). Ohne Eintrag kann die Web-App auf der Domain nicht korrekt mit Auth sprechen.
+7. **Firestore Database** anlegen (Modus **Production** ist ok, solange die Regeln aus diesem Repo deployed sind).
+8. Regeln deployen (Firebase CLI installiert und eingeloggt):
 
    ```bash
    firebase deploy --only firestore:rules --project timozeiterfassung
    ```
+
+## Fehlerbehebung
+
+### `auth/configuration-not-found`
+
+- **Authentication** wurde im Projekt noch nicht gestartet **oder** der Provider **Anonym** ist nicht aktiv (siehe Schritte 4–5).
+- Prüfen, ob die `VITE_FIREBASE_*`-Variablen auf Vercel **wirklich zu diesem Firebase-Projekt** gehören (kein Tippfehler bei `projectId` / falscher API-Key von einem anderen Projekt).
+
+### Admin: nichts lässt sich speichern / „Load failed“ / `DOMException`
+
+Typische Kette: **anonyme Anmeldung fehlgeschlagen** → `request.auth` ist leer → Regeln in `firestore.rules` erlauben Schreiben nur mit `request.auth != null` → alle `setDoc`/`addDoc` schlagen fehl.
+
+1. Oben **Anonym** + **Authorized domains** korrigieren, Seite neu laden (Hard-Reload).
+2. In der **Browser-Konsole** prüfen, ob **`Firebase Auth bereit`** erscheint (ohne rotes ❌ davor).
+3. In der Firebase Console unter **Firestore** → **Regeln** prüfen, ob deployed ist, was Schreiben für angemeldete Nutzer erlaubt (siehe `firestore.rules` im Repo).
 
 ## Firestore-Sammlungen („Tabellen“)
 
