@@ -4,8 +4,8 @@
   "description": "Zeiterfassung für die Fliesen Reislöhner GmbH",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#4A7C59",
-  "theme_color": "#4A7C59",
+  "background_color": "#C41E3A",
+  "theme_color": "#C41E3A",
   "orientation": "portrait-primary",
   "icons": [
     {

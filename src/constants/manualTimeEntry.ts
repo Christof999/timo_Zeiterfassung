@@ -1,8 +1,9 @@
-/** Benutzer, die Stempelzeiten für sich und andere nachtragen dürfen */
-export const MANUAL_TIME_ENTRY_USERNAMES = ['mdorner', 'plauffer', 'csoergel'] as const
+/**
+ * Früher: ausgewählte Benutzer durften Stempelsätze nachtragen.
+ * Für diese App-Konfiguration ist das deaktiviert – kein Mitarbeiter darf Stempelsätze nachstempeln.
+ */
+export const MANUAL_TIME_ENTRY_USERNAMES = [] as const
 
-export function canAddManualTimeEntries(username: string | undefined | null): boolean {
-  if (!username) return false
-  const u = username.toLowerCase().trim()
-  return (MANUAL_TIME_ENTRY_USERNAMES as readonly string[]).includes(u)
+export function canAddManualTimeEntries(_username: string | undefined | null): boolean {
+  return false
 }

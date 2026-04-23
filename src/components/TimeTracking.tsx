@@ -28,6 +28,8 @@ const TimeTracking: React.FC = () => {
   const navigate = useNavigate()
 
   const canManualTimeEntry = canAddManualTimeEntries(currentUser?.username)
+  /** Dokumentation zu abgeschlossenen Tagen – für alle; Stempel-Nachträge nur wenn explizit erlaubt (derzeit aus). */
+  const canRetroactiveDocumentation = true
 
   useEffect(() => {
     const init = async () => {
@@ -194,27 +196,32 @@ const TimeTracking: React.FC = () => {
           </div>
         </div>
 
-        {canManualTimeEntry && (
+        {(canManualTimeEntry || canRetroactiveDocumentation) && (
           <div className="manual-time-entry-banner">
             <p className="manual-time-entry-banner-text">
-              Sie können vergessene Stempelzeiten für sich oder andere Mitarbeiter nachtragen sowie
-              Dokumentation zu bereits abgeschlossenen Tagen ergänzen.
+              {canManualTimeEntry
+                ? 'Sie können vergessene Stempelzeiten nachtragen sowie Dokumentation zu abgeschlossenen Tagen ergänzen.'
+                : 'Sie können Dokumentation (Fotos/Notizen) zu bereits abgeschlossenen Arbeitstagen ergänzen.'}
             </p>
             <div className="manual-time-entry-actions">
-              <button
-                type="button"
-                className="manual-time-entry-open-btn"
-                onClick={() => setShowManualEntryModal(true)}
-              >
-                Stempelzeit nachtragen
-              </button>
-              <button
-                type="button"
-                className="manual-time-entry-secondary-btn"
-                onClick={() => setShowRetroDocListModal(true)}
-              >
-                Bericht nachtragen
-              </button>
+              {canManualTimeEntry && (
+                <button
+                  type="button"
+                  className="manual-time-entry-open-btn"
+                  onClick={() => setShowManualEntryModal(true)}
+                >
+                  Stempelzeit nachtragen
+                </button>
+              )}
+              {canRetroactiveDocumentation && (
+                <button
+                  type="button"
+                  className="manual-time-entry-secondary-btn"
+                  onClick={() => setShowRetroDocListModal(true)}
+                >
+                  Bericht nachtragen
+                </button>
+              )}
             </div>
           </div>
         )}

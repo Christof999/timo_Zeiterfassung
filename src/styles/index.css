@@ -1,18 +1,18 @@
 :root {
-  /* Farbpalette */
-  --primary-color: #10B981;
-  --primary-dark: #059669;
-  --primary-light: #D1FAE5;
-  --primary-gradient: linear-gradient(180deg, #10B981 0%, #059669 100%);
+  /* Farbpalette – Rot im Fokus, Gelb/Grün als Akzente (Logo) */
+  --primary-color: #C41E3A;
+  --primary-dark: #9B1530;
+  --primary-light: #FCE8EC;
+  --primary-gradient: linear-gradient(180deg, #C41E3A 0%, #9B1530 100%);
   --secondary-color: #6B7280;
-  --accent-color: #3B82F6;
-  --accent-light: #DBEAFE;
-  --danger-color: #EF4444;
+  --accent-color: #D4A012;
+  --accent-light: #FEF6D9;
+  --danger-color: #B91C1C;
   --danger-light: #FEE2E2;
-  --warning-color: #F59E0B;
+  --warning-color: #D4A012;
   --warning-light: #FEF3C7;
-  --success-color: #10B981;
-  --success-light: #D1FAE5;
+  --success-color: #15803D;
+  --success-light: #DCFCE7;
 
   /* Neutrale Farben */
   --light-color: #F9FAFB;
@@ -32,7 +32,7 @@
   --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.10);
   --shadow-lg: 0 10px 24px rgba(15, 23, 42, 0.12);
   --shadow-xl: 0 18px 36px rgba(15, 23, 42, 0.18);
-  --shadow-colored: 0 6px 16px rgba(16, 185, 129, 0.20);
+  --shadow-colored: 0 6px 16px rgba(196, 30, 58, 0.22);
   --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.04);
 
   /* Glas-Effekte */
@@ -305,11 +305,15 @@ p {
   --dark-color: #f8fafc;
   --glass-bg: rgba(30, 41, 59, 0.85);
   --glass-border: rgba(51, 65, 85, 0.5);
-  --primary-light: rgba(16, 185, 129, 0.18);
-  --success-light: rgba(16, 185, 129, 0.18);
+  --primary-color: #E85A6F;
+  --primary-dark: #C41E3A;
+  --primary-light: rgba(232, 90, 111, 0.2);
+  --accent-color: #EAB308;
+  --accent-light: rgba(234, 179, 8, 0.18);
+  --success-color: #22C55E;
+  --success-light: rgba(34, 197, 94, 0.18);
   --danger-light: rgba(239, 68, 68, 0.18);
   --warning-light: rgba(245, 158, 11, 0.18);
-  --accent-light: rgba(59, 130, 246, 0.18);
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);

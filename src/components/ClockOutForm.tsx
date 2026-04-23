@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project, Employee, Vehicle, VehicleUsage } from '../types'
+import type { TimeEntry, Project, Vehicle, VehicleUsage } from '../types'
 import VehicleBookingModal from './VehicleBookingModal'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
@@ -32,16 +32,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const [pauseMinutesInput, setPauseMinutesInput] = useState('')
   /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
   const [pauseMsForExtendedModal, setPauseMsForExtendedModal] = useState<number | null>(null)
-
-  const documentationUsers = ['mdorner', 'plauffer', 'csoergel']
-  const [currentUser, setCurrentUser] = useState<Employee | null>(null)
-
-  useEffect(() => {
-    DataService.getCurrentUser().then(setCurrentUser)
-  }, [])
-
-  const canUseDocumentation = currentUser && 
-    (documentationUsers.includes(currentUser.username || '') || currentUser.username === 'martin')
 
   useEffect(() => {
     loadVehicleBookings()
@@ -209,20 +199,18 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         >
           Dokumentation hinzufügen
         </button>
-        {canUseDocumentation && (
-          <button
-            type="button"
-            onClick={() => {
-              const minutes = parsePauseMinutes()
-              if (minutes === null) return
-              setPauseMsForExtendedModal(minutes * 60 * 1000)
-              setShowExtendedModal(true)
-            }}
-            className="btn primary-btn"
-          >
-            Mit Dokumentation Ausstempeln
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            const minutes = parsePauseMinutes()
+            if (minutes === null) return
+            setPauseMsForExtendedModal(minutes * 60 * 1000)
+            setShowExtendedModal(true)
+          }}
+          className="btn primary-btn"
+        >
+          Mit Dokumentation Ausstempeln
+        </button>
       </div>
 
       {showVehicleModal && (
