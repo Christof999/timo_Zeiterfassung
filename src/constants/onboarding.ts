@@ -1,2 +1,2 @@
-/** Nach Änderung der Slides ggf. erhöhen, damit bestehende Nutzer das Tutorial erneut sehen. */
-export const ONBOARDING_STORAGE_KEY = 'reislöhner_onboarding_v1_done'
+/** Nach größeren Tour-Updates erhöhen, damit Nutzer die neue Version einmal sehen. */
+export const ONBOARDING_STORAGE_KEY = 'reislöhner_onboarding_v2_done'

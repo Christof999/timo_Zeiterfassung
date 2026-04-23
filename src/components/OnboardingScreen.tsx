@@ -1,62 +1,92 @@
 import React, { useState } from 'react'
 import { ONBOARDING_STORAGE_KEY } from '../constants/onboarding'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
+import OnboardingDemoPreview, { type OnboardingDemoVariant } from './OnboardingDemoPreview'
 import '../styles/OnboardingScreen.css'
 
-const slides: { title: string; body: React.ReactNode; bullets?: string[] }[] = [
+type Slide = {
+  title: string
+  body: React.ReactNode
+  bullets?: string[]
+  preview: OnboardingDemoVariant
+}
+
+const slides: Slide[] = [
   {
     title: 'Willkommen',
+    preview: 'welcome',
     body: (
       <>
-        Diese kurze Tour erklärt die wichtigsten Schritte in der <strong>{APP_DISPLAY_NAME}</strong>.
+        In wenigen Schritten zeigen wir dir die <strong>{APP_DISPLAY_NAME}</strong> – mit einer kleinen Vorschau, wie der Bildschirm später aussieht.
       </>
     ),
-    bullets: ['Mit „Weiter“ geht es Schritt für Schritt voran.', 'Überspringen ist jederzeit möglich.']
+    bullets: ['Mit „Weiter“ gehst du Schritt für Schritt voran.', 'Du kannst die Tour jederzeit überspringen.']
   },
   {
-    title: 'Anmeldung & Baustelle',
+    title: 'Anmeldung',
+    preview: 'login',
     body: (
       <>
-        Melden Sie sich mit Benutzername und Passwort an. Zum <strong>Einstempeln</strong> wählen Sie die aktuelle Baustelle aus der Liste.
+        Melde dich mit <strong>Benutzername</strong> und <strong>Passwort</strong> an. Dein Zugang legt der Administrator für dich an.
       </>
     ),
-    bullets: ['Nur eine aktive Stempelung gleichzeitig.', 'Die Auswahl entspricht den im Admin angelegten Projekten.']
+    bullets: ['Nach dem Login landest du direkt in der Zeiterfassung.']
+  },
+  {
+    title: 'Einstempeln',
+    preview: 'clockin',
+    body: (
+      <>
+        Wähle deine <strong>aktuelle Baustelle</strong> aus der Liste und tippe auf <strong>Einstempeln</strong>.
+      </>
+    ),
+    bullets: ['Es gibt nur eine aktive Stempelung gleichzeitig.', 'Die Projekte pflegt der Administrator.']
   },
   {
     title: 'Ausstempeln & Material',
+    preview: 'clockout',
     body: (
       <>
-        Beim <strong>Ausstempeln</strong> geben Sie die Pausenzeit an und tragen Sie den <strong>Materialverbrauch</strong> ein (z.&nbsp;B. Fliesen in m²).
+        Beim <strong>Ausstempeln</strong> trägst du die <strong>Pause</strong> ein und den <strong>Materialverbrauch</strong> (z.&nbsp;B. Fliesen in m²).
       </>
     ),
     bullets: [
       'Materialarten und Preise legt der Administrator unter „Material“ fest.',
-      'Ohne Material: Häkchen bei „Heute wurde kein Verbrauchsmaterial verbucht“.',
-      '„Einfach Ausstempeln“ speichert Zeit und Material; „Mit Dokumentation“ erlaubt Fotos und Notizen.'
+      'Wenn du heute kein Material verbucht hast: Häkchen bei „Kein Material“.',
+      '„Einfach Ausstempeln“ speichert Zeit und Material; „Mit Dokumentation“ erlaubt zusätzlich Fotos und Notizen.'
     ]
   },
   {
-    title: 'Dokumentation & Berichte',
+    title: 'Dokumentation',
+    preview: 'documentation',
     body: (
       <>
-        Sie können <strong>Fotos</strong> und <strong>Lieferscheine</strong> während oder nach der Arbeit ergänzen. Über <strong>„Bericht nachtragen“</strong> lassen sich abgeschlossene Tage mit Dokumentation nachziehen.
+        Du kannst <strong>Fotos</strong> und <strong>Lieferscheine</strong> während der Arbeit ergänzen. Mit <strong>„Bericht nachtragen“</strong> füllst du bei abgeschlossenen Tagen noch etwas nach.
       </>
     ),
-    bullets: ['Urlaubsanträge finden Sie im Menü unter dem passenden Eintrag.']
+    bullets: ['Urlaubsanträge erreichst du über das Menü (☰).']
   },
   {
     title: 'Administration',
+    preview: 'admin',
     body: (
       <>
-        Im <strong>Admin-Bereich</strong> verwalten Sie Mitarbeiter, Projekte, <strong>Material</strong> mit Einheit und Preis sowie Auswertungen.
+        Im <strong>Admin-Bereich</strong> pflegst du <strong>Mitarbeiter</strong>, <strong>Projekte</strong>, <strong>Material</strong> (Einheit &amp; Preis) und die Auswertungen.
       </>
     ),
-    bullets: ['Nach dem ersten Login sollten Sie unter „Material“ Ihre gängigen Positionen anlegen.']
+    bullets: ['Leg gleich zu Beginn deine gängigen Materialpositionen unter „Material“ an.']
   },
   {
     title: 'Los geht’s',
-    body: <>Sie sind startklar. Wenn Sie Fragen haben, wenden Sie sich an Ihren Ansprechpartner.</>,
-    bullets: ['Die Tour erscheint nur einmal pro Gerät (Speicher im Browser). Zum erneuten Anzeigen kann der Website-Daten-Eintrag für diese Seite gelöscht werden.']
+    preview: 'welcome',
+    body: (
+      <>
+        Du bist startklar. Wenn etwas unklar ist, melde dich bei deinem Ansprechpartner.
+      </>
+    ),
+    bullets: [
+      'Die Tour erscheint nur einmal pro Browser. Willst du sie nochmal sehen, lösche die Website-Daten für diese Seite oder den Eintrag im Speicher.'
+    ]
   }
 ]
 
@@ -90,6 +120,9 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onFinished }) => {
             <span key={i} className={`onboarding-dot ${i === index ? 'active' : ''} ${i < index ? 'done' : ''}`} />
           ))}
         </div>
+
+        <OnboardingDemoPreview variant={slide.preview} />
+
         <h1 className="onboarding-title">{slide.title}</h1>
         <div className="onboarding-body">{slide.body}</div>
         {slide.bullets && slide.bullets.length > 0 && (
