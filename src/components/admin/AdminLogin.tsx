@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
+import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import '../../styles/AdminLogin.css'
 
 const AdminLogin: React.FC = () => {
@@ -55,11 +56,11 @@ const AdminLogin: React.FC = () => {
         <ThemeToggle variant="icon" className="admin-login-theme-toggle" />
         <div className="admin-login-logo">
           <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
+            src="/brand-logo.png" 
+            alt="Logo" 
             className="admin-login-logo-image"
           />
-          <h1>Lauffer Zeiterfassung</h1>
+          <h1>{APP_DISPLAY_NAME}</h1>
           <p>Admin Panel</p>
         </div>
       </header>

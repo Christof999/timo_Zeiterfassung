@@ -19,7 +19,17 @@ import {
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebaseConfig'
-import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
+import type {
+  Employee,
+  Project,
+  TimeEntry,
+  TimeEntryMaterialUsage,
+  Vehicle,
+  VehicleUsage,
+  FileUpload,
+  LeaveRequest,
+  MaterialType
+} from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
@@ -152,6 +162,11 @@ class DataServiceClass {
           console.log('Kein Benutzer, starte anonyme Anmeldung...')
           signInAnonymously(auth).catch((error) => {
             console.error('❌ Fehler bei der anonymen Anmeldung:', error)
+            if (error?.code === 'auth/configuration-not-found') {
+              console.error(
+                'Firebase Auth: Im Projekt Authentication aktivieren, Provider „Anonym“ einschalten und die Vercel-Domain unter Authentication → Settings → Authorized domains eintragen. Ohne gültige Anmeldung sind Firestore-Schreibzugriffe (Admin) gesperrt.'
+              )
+            }
             resolve() // Trotzdem auflösen, damit die App weiterläuft
           })
         }
@@ -447,7 +462,8 @@ class DataServiceClass {
     timeEntryId: string,
     notes: string,
     location: { lat: number | null; lng: number | null } | null,
-    pauseTotalTimeMs: number
+    pauseTotalTimeMs: number,
+    materialUsages?: TimeEntryMaterialUsage[]
   ): Promise<void> {
     await this.authReadyPromise
     try {
@@ -497,6 +513,10 @@ class DataServiceClass {
         if (location) {
           updateData.clockOutLocation = location
           updateData.locationOut = location
+        }
+
+        if (materialUsages !== undefined) {
+          updateData.materialUsages = materialUsages
         }
 
         transaction.update(timeEntryRef, updateData)
@@ -881,6 +901,63 @@ class DataServiceClass {
       console.error('Fehler beim Hinzufügen der Live-Dokumentation:', error)
       throw error
     }
+  }
+
+  // Material types (Verbrauchsmaterial für Ausstempeln / Nachkalkulation)
+  async getActiveMaterialTypes(): Promise<MaterialType[]> {
+    await this.authReadyPromise
+    try {
+      const ref = collection(db, 'materialTypes')
+      const snapshot = await getDocs(ref)
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialType))
+      return list
+        .filter((m) => m.isActive !== false && (m.name || '').trim())
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Materialtypen:', error)
+      return []
+    }
+  }
+
+  async getAllMaterialTypes(): Promise<MaterialType[]> {
+    await this.authReadyPromise
+    try {
+      const ref = collection(db, 'materialTypes')
+      const snapshot = await getDocs(ref)
+      return snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() } as MaterialType))
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Materialtypen:', error)
+      return []
+    }
+  }
+
+  async createMaterialType(data: Partial<MaterialType>): Promise<string> {
+    await this.authReadyPromise
+    const ref = collection(db, 'materialTypes')
+    const docRef = await addDoc(ref, {
+      name: data.name || '',
+      unitLabel: data.unitLabel || 'm²',
+      unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
+      isActive: data.isActive !== false,
+      sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
+      createdAt: new Date()
+    })
+    return docRef.id
+  }
+
+  async updateMaterialType(id: string, data: Partial<MaterialType>): Promise<void> {
+    await this.authReadyPromise
+    await updateDoc(doc(db, 'materialTypes', id), {
+      ...data,
+      updatedAt: new Date()
+    })
+  }
+
+  async deleteMaterialType(id: string): Promise<void> {
+    await this.authReadyPromise
+    await deleteDoc(doc(db, 'materialTypes', id))
   }
 
   // Vehicle Management

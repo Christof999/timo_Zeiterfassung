@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
-import type { Employee, Project, TimeEntry } from '../types'
+import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
 import ClockInForm from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
@@ -12,6 +12,7 @@ import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
+import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
 const TimeTracking: React.FC = () => {
@@ -27,6 +28,8 @@ const TimeTracking: React.FC = () => {
   const navigate = useNavigate()
 
   const canManualTimeEntry = canAddManualTimeEntries(currentUser?.username)
+  /** Dokumentation zu abgeschlossenen Tagen – für alle; Stempel-Nachträge nur wenn explizit erlaubt (derzeit aus). */
+  const canRetroactiveDocumentation = true
 
   useEffect(() => {
     const init = async () => {
@@ -100,7 +103,10 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleSimpleClockOut = async (pauseMinutes: number) => {
+  const handleSimpleClockOut = async (
+    pauseMinutes: number,
+    materialUsages: TimeEntryMaterialUsage[] | undefined
+  ) => {
     if (!currentTimeEntry) return
 
     try {
@@ -110,7 +116,8 @@ const TimeTracking: React.FC = () => {
         currentTimeEntry.id,
         currentTimeEntry.notes || '',
         location,
-        pauseTotalTimeMs
+        pauseTotalTimeMs,
+        materialUsages
       )
 
       resetClockOutState()
@@ -173,12 +180,12 @@ const TimeTracking: React.FC = () => {
       <header className="time-tracking-header">
         <div className="time-tracking-logo">
           <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
+            src="/brand-logo.png" 
+            alt="Logo" 
             className="time-tracking-logo-image"
           />
-          <h1>Lauffer Zeiterfassung</h1>
-          <p>Gartenbau • Erdbau • Natursteinhandel</p>
+          <h1>{APP_DISPLAY_NAME}</h1>
+          <p>Mitarbeiter-Zeiterfassung</p>
         </div>
       </header>
 
@@ -193,27 +200,32 @@ const TimeTracking: React.FC = () => {
           </div>
         </div>
 
-        {canManualTimeEntry && (
+        {(canManualTimeEntry || canRetroactiveDocumentation) && (
           <div className="manual-time-entry-banner">
             <p className="manual-time-entry-banner-text">
-              Sie können vergessene Stempelzeiten für sich oder andere Mitarbeiter nachtragen sowie
-              Dokumentation zu bereits abgeschlossenen Tagen ergänzen.
+              {canManualTimeEntry
+                ? 'Sie können vergessene Stempelzeiten nachtragen sowie Dokumentation zu abgeschlossenen Tagen ergänzen.'
+                : 'Sie können Dokumentation (Fotos/Notizen) zu bereits abgeschlossenen Arbeitstagen ergänzen.'}
             </p>
             <div className="manual-time-entry-actions">
-              <button
-                type="button"
-                className="manual-time-entry-open-btn"
-                onClick={() => setShowManualEntryModal(true)}
-              >
-                Stempelzeit nachtragen
-              </button>
-              <button
-                type="button"
-                className="manual-time-entry-secondary-btn"
-                onClick={() => setShowRetroDocListModal(true)}
-              >
-                Bericht nachtragen
-              </button>
+              {canManualTimeEntry && (
+                <button
+                  type="button"
+                  className="manual-time-entry-open-btn"
+                  onClick={() => setShowManualEntryModal(true)}
+                >
+                  Stempelzeit nachtragen
+                </button>
+              )}
+              {canRetroactiveDocumentation && (
+                <button
+                  type="button"
+                  className="manual-time-entry-secondary-btn"
+                  onClick={() => setShowRetroDocListModal(true)}
+                >
+                  Bericht nachtragen
+                </button>
+              )}
             </div>
           </div>
         )}

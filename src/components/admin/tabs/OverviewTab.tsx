@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { TimeEntry, Employee, Project } from '../../../types'
 import { toast } from '../../ToastContainer'
+import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
 import '../../../styles/AdminTabs.css'
 
 const OverviewTab: React.FC = () => {
@@ -183,7 +184,12 @@ const OverviewTab: React.FC = () => {
               
               const employeeName = activity.employee.name || `${activity.employee.firstName} ${activity.employee.lastName}`
               const isClockingOut = clockingOut === activity.timeEntry.id
-              
+              const locationLabel = formatClockInLocationLabel(activity.timeEntry)
+              const locationCoords = getClockInCoordinates(activity.timeEntry)
+              const mapsHref = locationCoords
+                ? `https://www.google.com/maps?q=${locationCoords.lat},${locationCoords.lng}`
+                : null
+
               return (
                 <div key={activity.timeEntry.id} className="activity-item">
                   <div className="activity-main">
@@ -199,6 +205,14 @@ const OverviewTab: React.FC = () => {
                         <div className="activity-duration">
                           Eingestempelt seit: {durationString}
                         </div>
+                        {locationLabel && mapsHref && (
+                          <div className="activity-location">
+                            <span className="activity-location-label">Einstempel-Ort:</span>{' '}
+                            <a href={mapsHref} target="_blank" rel="noopener noreferrer" className="activity-location-link">
+                              {locationLabel}
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button
