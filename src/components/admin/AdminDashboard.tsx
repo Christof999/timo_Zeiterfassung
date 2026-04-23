@@ -275,8 +275,8 @@ const AdminDashboard: React.FC = () => {
         </div>
         <div className="admin-logo">
           <img 
-            src="https://anfragenmanager.s3.eu-central-1.amazonaws.com/Logo_Lauffer_RGB.png" 
-            alt="Lauffer Logo" 
+            src="/brand-logo.png" 
+            alt="Logo" 
             className="admin-logo-image"
           />
           <h1>Lauffer Zeiterfassung</h1>
