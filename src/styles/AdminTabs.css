@@ -950,3 +950,62 @@
   }
 }
 
+/* HERO-Integration (Admin) */
+.hero-integration-tab .hero-card {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-integration-tab .hero-card h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-lg);
+}
+
+.hero-integration-tab .hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.hero-integration-tab .hero-status-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.hero-integration-tab .hero-error {
+  color: var(--danger-color, #c0392b);
+  font-size: var(--font-size-sm);
+}
+
+.hero-integration-tab .hero-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+}
+
+.hero-integration-tab .hero-log-list li {
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.hero-integration-tab .hero-log-list li.success {
+  color: var(--text-primary);
+}
+
+.hero-integration-tab .hero-log-list li.error {
+  color: var(--danger-color, #c0392b);
+}
+
+.hero-integration-tab .btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: var(--font-size-sm);
+}
+
