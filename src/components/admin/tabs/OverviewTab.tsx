@@ -111,7 +111,8 @@ const OverviewTab: React.FC = () => {
       await DataService.updateTimeEntry(timeEntry.id, {
         clockOutTime: now,
         pauseTotalTime,
-        notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin'
+        notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin',
+        heroSyncStatus: 'pending'
       })
 
       toast.success(`${employeeName} wurde ausgestempelt`)

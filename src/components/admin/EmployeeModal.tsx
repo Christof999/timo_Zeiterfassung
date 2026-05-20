@@ -19,7 +19,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     password: '',
     position: '',
     status: 'active' as 'active' | 'inactive',
-    hourlyRate: 0
+    hourlyRate: 0,
+    heroEmployeeId: ''
   })
   const [isLoading, setIsLoading] = useState(false)
 
@@ -50,7 +51,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         password: '',
         position: employee.position || '',
         status: (employee.status as 'active' | 'inactive') || 'active',
-        hourlyRate: employee.hourlyRate || employee.hourlyWage || 0
+        hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
+        heroEmployeeId: employee.heroEmployeeId || ''
       })
     } else {
       // Reset form when no employee (new employee)
@@ -62,7 +64,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         password: '',
         position: '',
         status: 'active',
-        hourlyRate: 0
+        hourlyRate: 0,
+        heroEmployeeId: ''
       })
     }
   }, [employee])
@@ -79,7 +82,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         username: formData.username,
         position: formData.position,
         status: formData.status,
-        hourlyRate: formData.hourlyRate
+        hourlyRate: formData.hourlyRate,
+        heroEmployeeId: formData.heroEmployeeId.trim() || undefined
       }
 
       if (formData.password) {
@@ -166,6 +170,15 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               step="0.01"
               value={formData.hourlyRate}
               onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="form-group">
+            <label>HERO-Kontakt-ID (optional):</label>
+            <input
+              type="text"
+              value={formData.heroEmployeeId}
+              onChange={(e) => setFormData({ ...formData, heroEmployeeId: e.target.value })}
+              placeholder="Für späteren Zeit-Export an HERO"
             />
           </div>
           <div className="form-group">

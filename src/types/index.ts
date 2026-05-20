@@ -1,3 +1,28 @@
+/** Status der Rückübertragung erfasster Zeiten an HERO (Export folgt in späterer Phase). */
+export type HeroSyncStatus = 'pending' | 'synced' | 'failed' | 'skipped'
+
+export interface HeroIntegrationConfig {
+  lastProjectSyncAt?: Date | any
+  lastProjectSyncError?: string | null
+  lastProjectSyncStats?: {
+    created: number
+    updated: number
+    archived: number
+    skipped: number
+    total: number
+  }
+}
+
+export interface HeroSyncLogEntry {
+  id?: string
+  type: 'projects' | 'health' | 'times'
+  success: boolean
+  message?: string
+  stats?: Record<string, number>
+  error?: string
+  createdAt?: Date | any
+}
+
 export interface Employee {
   id?: string
   username: string
@@ -10,6 +35,9 @@ export interface Employee {
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'
+  /** HERO-Kontakt-ID für späteren Zeit-Export */
+  heroEmployeeId?: string
+  heroContactNr?: string
   vacationDays?: {
     total: number
     used: number
@@ -28,6 +56,13 @@ export interface Project {
   description?: string
   isActive?: boolean
   status?: 'active' | 'inactive' | 'aktiv' | 'planned' | 'completed' | 'archived'
+  /** HERO project_matches.id */
+  heroProjectId?: string
+  heroProjectNr?: string
+  heroLastSyncedAt?: Date | any
+  heroSyncSource?: 'hero'
+  heroStatusCode?: number
+  heroStatusName?: string
 }
 
 /** Verbrauchsmaterial beim Ausstempeln (Stückliste für Nachkalkulation) */
@@ -92,6 +127,11 @@ export interface TimeEntry {
   manualTimeEntryAddedByEmployeeId?: string
   manualTimeEntryAddedByDisplayName?: string
   manualTimeEntryCreatedAt?: any
+  /** Warteschlange für HERO-Zeit-Export (noch nicht implementiert) */
+  heroSyncStatus?: HeroSyncStatus
+  heroSyncedAt?: Date | any
+  heroSyncError?: string
+  heroExternalRef?: string
 }
 
 export interface Vehicle {

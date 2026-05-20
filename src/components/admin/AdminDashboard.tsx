@@ -10,7 +10,9 @@ import ProjectsTab from './tabs/ProjectsTab'
 import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
+import HeroIntegrationTab from './tabs/HeroIntegrationTab'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
+import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
 import '../../styles/AdminDashboard.css'
 
 type TabType =
@@ -21,6 +23,7 @@ type TabType =
   | 'projectsArchived'
   | 'material'
   | 'costing'
+  | 'hero'
   | 'reports'
   | 'vacation'
 
@@ -169,6 +172,9 @@ const AdminDashboard: React.FC = () => {
     { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
     { id: 'material' as TabType, label: 'Material' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
+    ...(HERO_INTEGRATION_UI_ENABLED
+      ? [{ id: 'hero' as TabType, label: 'HERO' }]
+      : []),
     { id: 'vacation' as TabType, label: 'Urlaub' },
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' }
   ]
@@ -327,6 +333,7 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
           {currentTab === 'material' && <MaterialTypesTab />}
           {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
+          {currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
           {currentTab === 'vacation' && <VacationTab />}
           {currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
         </div>
