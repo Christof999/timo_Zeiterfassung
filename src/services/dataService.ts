@@ -29,7 +29,9 @@ import type {
   FileUpload,
   LeaveRequest,
   MaterialType,
-  TimeReportSettlement
+  TimeReportSettlement,
+  HeroIntegrationConfig,
+  HeroSyncLogEntry
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 
@@ -443,7 +445,9 @@ class DataServiceClass {
         manualTimeEntry: true,
         manualTimeEntryAddedByEmployeeId: params.addedByEmployeeId,
         manualTimeEntryAddedByDisplayName: params.addedByDisplayName,
-        manualTimeEntryCreatedAt: serverTimestamp()
+        manualTimeEntryCreatedAt: serverTimestamp(),
+        heroSyncStatus: 'pending',
+        heroSyncError: null
       }
 
       const payload = Object.fromEntries(
@@ -519,6 +523,8 @@ class DataServiceClass {
         if (materialUsages !== undefined) {
           updateData.materialUsages = materialUsages
         }
+
+        updateData.heroSyncStatus = 'pending'
 
         transaction.update(timeEntryRef, updateData)
 
@@ -2120,6 +2126,42 @@ class DataServiceClass {
       return uploads
     } catch (error) {
       console.error('Fehler beim Abrufen der Datei-Uploads:', error)
+      return []
+    }
+  }
+
+  async getHeroIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
+    await this.authReadyPromise
+    try {
+      const configRef = doc(db, 'integrations', 'hero')
+      const snap = await getDoc(configRef)
+      if (!snap.exists()) return null
+      return snap.data() as HeroIntegrationConfig
+    } catch (error) {
+      console.error('Fehler beim Laden der HERO-Integration:', error)
+      return null
+    }
+  }
+
+  async getHeroSyncLogs(limit = 10): Promise<HeroSyncLogEntry[]> {
+    await this.authReadyPromise
+    try {
+      const logsRef = collection(db, 'heroSyncLogs')
+      const snapshot = await getDocs(logsRef)
+      const logs = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      })) as HeroSyncLogEntry[]
+
+      logs.sort((a, b) => {
+        const aTime = this.convertToDate(a.createdAt)?.getTime() ?? 0
+        const bTime = this.convertToDate(b.createdAt)?.getTime() ?? 0
+        return bTime - aTime
+      })
+
+      return logs.slice(0, limit)
+    } catch (error) {
+      console.error('Fehler beim Laden der HERO-Sync-Logs:', error)
       return []
     }
   }

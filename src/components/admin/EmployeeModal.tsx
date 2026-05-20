@@ -20,7 +20,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     position: '',
     status: 'active' as 'active' | 'inactive',
     hourlyRate: 0,
-    overtimeBalanceHours: '' as string
+    overtimeBalanceHours: '' as string,
+    heroEmployeeId: ''
   })
   const [isLoading, setIsLoading] = useState(false)
 
@@ -58,7 +59,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: employee.position || '',
         status: (employee.status as 'active' | 'inactive') || 'active',
         hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
-        overtimeBalanceHours
+        overtimeBalanceHours,
+        heroEmployeeId: employee.heroEmployeeId || ''
       })
     } else {
       // Reset form when no employee (new employee)
@@ -71,7 +73,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: '',
         status: 'active',
         hourlyRate: 0,
-        overtimeBalanceHours: ''
+        overtimeBalanceHours: '',
+        heroEmployeeId: ''
       })
     }
   }, [employee])
@@ -88,7 +91,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         username: formData.username,
         position: formData.position,
         status: formData.status,
-        hourlyRate: formData.hourlyRate
+        hourlyRate: formData.hourlyRate,
+        heroEmployeeId: formData.heroEmployeeId.trim() || undefined
       }
 
       const trimmedOt = formData.overtimeBalanceHours.trim()
@@ -195,6 +199,15 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               placeholder="z.B. 12,5 — wird bei Zeiterfassungs-Abrechnung reduziert"
               value={formData.overtimeBalanceHours}
               onChange={e => setFormData({ ...formData, overtimeBalanceHours: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label>HERO-Kontakt-ID (optional):</label>
+            <input
+              type="text"
+              value={formData.heroEmployeeId}
+              onChange={(e) => setFormData({ ...formData, heroEmployeeId: e.target.value })}
+              placeholder="Für späteren Zeit-Export an HERO"
             />
           </div>
           <div className="form-group">
