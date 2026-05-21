@@ -15,6 +15,8 @@ export interface Employee {
     used: number
     year: number
   }
+  /** Optional: Überstunden-Saldo in Minuten (wird bei Zeiterfassungs-Abrechnung reduziert, falls gesetzt). */
+  overtimeBalanceMinutes?: number | null
 }
 
 export interface Project {
@@ -131,6 +133,26 @@ export interface FileUpload {
   imageComment?: string
   base64Data?: string
   mimeType?: string
+}
+
+/** Gespeicherte Abrechnung aus der Mitarbeiter-Zeitauswertung (Korrektur vs. Rohzeit). */
+export interface TimeReportSettlement {
+  id?: string
+  employeeId: string
+  periodStart: string
+  periodEnd: string
+  settledAt: Date | any
+  /** Summe max(0, Rohzeit − korrigierte Zeit) in Minuten — als „abgerechnet“ / ausbezahlt betrachtet. */
+  paidOutMinutes: number
+  rawTotalMinutes: number
+  correctedTotalMinutes: number
+  lines?: Array<{
+    timeEntryId: string
+    dateLabel: string
+    rawMinutes: number
+    correctedMinutes: number
+    paidOutMinutes: number
+  }>
 }
 
 export interface LeaveRequest {

@@ -28,7 +28,8 @@ import type {
   VehicleUsage,
   FileUpload,
   LeaveRequest,
-  MaterialType
+  MaterialType,
+  TimeReportSettlement
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 
@@ -1587,6 +1588,65 @@ class DataServiceClass {
     } catch (error) {
       console.error('Fehler beim Löschen des Urlaubsantrags:', error)
       throw error
+    }
+  }
+
+  settlementDocId(employeeId: string, periodStart: string, periodEnd: string): string {
+    return `${employeeId}_${periodStart}_${periodEnd}`.replace(/\//g, '-')
+  }
+
+  async saveTimeReportSettlement(data: Omit<TimeReportSettlement, 'id' | 'settledAt'>): Promise<void> {
+    await this.authReadyPromise
+    const id = this.settlementDocId(data.employeeId, data.periodStart, data.periodEnd)
+    const settlementRef = doc(db, 'timeReportSettlements', id)
+
+    try {
+      await setDoc(settlementRef, {
+        ...data,
+        settledAt: new Date()
+      })
+    } catch (error: unknown) {
+      console.error('Fehler beim Speichern der Zeiterfassungs-Abrechnung:', error)
+      const code = (error as { code?: string })?.code
+      if (code === 'permission-denied') {
+        throw new Error(
+          'Keine Berechtigung für „timeReportSettlements“ in Firestore. Bitte in den Security Rules Lesen/Schreiben für angemeldete Nutzer erlauben.'
+        )
+      }
+      throw error
+    }
+
+    try {
+      const empRef = doc(db, 'employees', data.employeeId)
+      const empSnap = await getDoc(empRef)
+      if (empSnap.exists()) {
+        const emp = empSnap.data() as Employee
+        const paid = Number(data.paidOutMinutes) || 0
+        if (emp.overtimeBalanceMinutes != null && typeof emp.overtimeBalanceMinutes === 'number') {
+          const next = Math.max(0, emp.overtimeBalanceMinutes - paid)
+          await updateDoc(empRef, { overtimeBalanceMinutes: next })
+        }
+      }
+    } catch (error) {
+      console.warn('Abrechnung gespeichert, aber Überstunden-Saldo am Mitarbeiter konnte nicht angepasst werden:', error)
+    }
+  }
+
+  async getTimeReportSettlement(
+    employeeId: string,
+    periodStart: string,
+    periodEnd: string
+  ): Promise<TimeReportSettlement | null> {
+    await this.authReadyPromise
+    try {
+      const id = this.settlementDocId(employeeId, periodStart, periodEnd)
+      const settlementRef = doc(db, 'timeReportSettlements', id)
+      const snap = await getDoc(settlementRef)
+      if (!snap.exists()) return null
+      return { id: snap.id, ...snap.data() } as TimeReportSettlement
+    } catch (error) {
+      console.error('Fehler beim Laden der Zeiterfassungs-Abrechnung:', error)
+      return null
     }
   }
 

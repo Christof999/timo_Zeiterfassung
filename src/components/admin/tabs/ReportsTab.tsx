@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload } from '../../../types'
+import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload, TimeReportSettlement } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import '../../../styles/AdminTabs.css'
@@ -77,6 +77,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [selectedEmployeeName, setSelectedEmployeeName] = useState('')
   const [reportEntries, setReportEntries] = useState<ReportEntry[]>([])
+  const [employeeSettlement, setEmployeeSettlement] = useState<TimeReportSettlement | null>(null)
+  const [employeeReportView, setEmployeeReportView] = useState<'full' | 'remainder'>('full')
+  const [isSavingSettlement, setIsSavingSettlement] = useState(false)
 
   // Projekt-Bericht States
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -85,6 +88,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([])
   const [projectPhotos, setProjectPhotos] = useState<FileUpload[]>([])
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
+  const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
+  const [projectVehicleUsagesList, setProjectVehicleUsagesList] = useState<VehicleUsage[]>([])
+  const [expandedProjectDays, setExpandedProjectDays] = useState<Set<string>>(new Set())
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [useTimeFilter, setUseTimeFilter] = useState(false)
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
@@ -130,10 +136,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   useEffect(() => {
     setHasSearched(false)
     setReportEntries([])
+    setEmployeeSettlement(null)
+    setEmployeeReportView('full')
     setEmployeeSummaries([])
     setVehicleSummaries([])
     setProjectPhotos([])
     setProjectDocuments([])
+    setProjectRawEntries([])
+    setProjectVehicleUsagesList([])
+    setExpandedProjectDays(new Set())
   }, [reportType])
 
   const loadInitialData = async () => {
@@ -208,6 +219,31 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const msToMinutes = (ms: number): number => Math.round(ms / (1000 * 60))
 
+  const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMinutes: number): number => {
+    if (!clockIn || !clockOut) return 0
+    const [inH, inM] = clockIn.split(':').map(Number)
+    const [outH, outM] = clockOut.split(':').map(Number)
+    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0
+    let totalMinutes = outH * 60 + outM - (inH * 60 + inM) - pauseMinutes
+    if (totalMinutes < 0) totalMinutes += 24 * 60
+    return Math.max(0, totalMinutes)
+  }
+
+  const minutesToHoursLabel = (totalMinutes: number): string => {
+    const h = Math.floor(totalMinutes / 60)
+    const m = Math.round(totalMinutes % 60)
+    return `${h}:${m.toString().padStart(2, '0')}`
+  }
+
+  const workMinutesFromOriginalEntry = (entry: TimeEntry): number => {
+    const clockInDate = convertToDate(entry.clockInTime)
+    const clockOutDate = convertToDate(entry.clockOutTime)
+    const cin = formatTimeForInput(clockInDate)
+    const cout = formatTimeForInput(clockOutDate)
+    const pauseMinutes = msToMinutes(entry.pauseTotalTime || 0)
+    return workMinutesFromParts(cin, cout, pauseMinutes)
+  }
+
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount)
   }
@@ -274,6 +310,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       setReportEntries(entries)
       const emp = employees.find(e => e.id === selectedEmployeeId)
       setSelectedEmployeeName(emp?.name || `${emp?.firstName} ${emp?.lastName}` || '')
+
+      const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, startDate, endDate)
+      setEmployeeSettlement(settlement)
     } catch (error) {
       console.error('Fehler:', error)
       toast.error('Fehler beim Laden der Zeiteinträge')
@@ -330,6 +369,301 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const hours = Math.floor(totalMinutes / 60)
     const minutes = totalMinutes % 60
     return `${hours}:${minutes.toString().padStart(2, '0')}`
+  }
+
+  const buildSettlementLinesFromEntries = () =>
+    reportEntries.map(re => {
+      const rawMinutes = workMinutesFromOriginalEntry(re.originalEntry)
+      const correctedMinutes = workMinutesFromParts(re.clockIn, re.clockOut, re.pauseMinutes)
+      const paidOutMinutes = Math.max(0, rawMinutes - correctedMinutes)
+      return {
+        timeEntryId: re.id,
+        dateLabel: re.date,
+        rawMinutes,
+        correctedMinutes,
+        paidOutMinutes
+      }
+    })
+
+  const getRemainderLines = () => {
+    if (employeeSettlement?.lines?.length) {
+      return employeeSettlement.lines.filter(l => l.paidOutMinutes > 0)
+    }
+    return buildSettlementLinesFromEntries().filter(l => l.paidOutMinutes > 0)
+  }
+
+  const handleSaveTimeSettlement = async () => {
+    if (!selectedEmployeeId || !startDate || !endDate) {
+      toast.error('Zeitraum und Mitarbeiter erforderlich')
+      return
+    }
+    if (reportEntries.length === 0) {
+      toast.error('Keine Einträge zum Speichern')
+      return
+    }
+    const lines = buildSettlementLinesFromEntries()
+    const rawTotalMinutes = lines.reduce((s, l) => s + l.rawMinutes, 0)
+    const correctedTotalMinutes = lines.reduce((s, l) => s + l.correctedMinutes, 0)
+    const paidOutMinutes = lines.reduce((s, l) => s + l.paidOutMinutes, 0)
+
+    setIsSavingSettlement(true)
+    try {
+      await DataService.saveTimeReportSettlement({
+        employeeId: selectedEmployeeId,
+        periodStart: startDate,
+        periodEnd: endDate,
+        paidOutMinutes,
+        rawTotalMinutes,
+        correctedTotalMinutes,
+        lines
+      })
+      toast.success(
+        paidOutMinutes > 0
+          ? 'Abrechnung gespeichert. Differenz wurde als ausbezahlte/gekürzte Zeit erfasst.'
+          : 'Abrechnung gespeichert (keine positive Differenz zur Rohzeit).'
+      )
+      const settlement = await DataService.getTimeReportSettlement(
+        selectedEmployeeId,
+        startDate,
+        endDate
+      )
+      setEmployeeSettlement(settlement)
+      await loadInitialData()
+    } catch (error: any) {
+      toast.error(error?.message || 'Speichern fehlgeschlagen')
+    } finally {
+      setIsSavingSettlement(false)
+    }
+  }
+
+  interface ProjectDayBlock {
+    dateKey: string
+    dateLabel: string
+    totalHours: number
+    byEmployee: { employeeId: string; name: string; hours: number }[]
+    entries: TimeEntry[]
+  }
+
+  const getEmployeeDisplayName = (employeeId: string): string => {
+    const employee = allEmployees.find(e => e.id === employeeId)
+    return (
+      employee?.name || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || employeeId
+    )
+  }
+
+  const buildProjectDayBlocks = (): ProjectDayBlock[] => {
+    const dayMap = new Map<
+      string,
+      {
+        entries: TimeEntry[]
+        empHours: Map<string, number>
+      }
+    >()
+
+    for (const entry of projectRawEntries) {
+      if (!entry.clockOutTime) continue
+      const clockIn = convertToDate(entry.clockInTime)
+      const clockOut = convertToDate(entry.clockOutTime)
+      if (!clockIn || !clockOut) continue
+      const dateKey = formatDateForInputLocal(clockIn)
+      let bucket = dayMap.get(dateKey)
+      if (!bucket) {
+        bucket = { entries: [], empHours: new Map() }
+        dayMap.set(dateKey, bucket)
+      }
+      bucket.entries.push(entry)
+      const diffMs = clockOut.getTime() - clockIn.getTime()
+      const pauseMs = entry.pauseTotalTime || 0
+      const workMs = Math.max(0, diffMs - pauseMs)
+      const hours = workMs / (1000 * 60 * 60)
+      const prev = bucket.empHours.get(entry.employeeId) || 0
+      bucket.empHours.set(entry.employeeId, prev + hours)
+    }
+
+    for (const f of [...projectPhotos, ...projectDocuments]) {
+      const d = convertToDate(f.uploadTime)
+      if (!d) continue
+      const dateKey = formatDateForInputLocal(d)
+      if (!dayMap.has(dateKey)) {
+        dayMap.set(dateKey, { entries: [], empHours: new Map() })
+      }
+    }
+
+    const keys = [...dayMap.keys()].sort()
+    return keys.map(dateKey => {
+      const bucket = dayMap.get(dateKey)!
+      const sortedEntries = [...bucket.entries].sort((a, b) => {
+        const ta = convertToDate(a.clockInTime)?.getTime() || 0
+        const tb = convertToDate(b.clockInTime)?.getTime() || 0
+        return ta - tb
+      })
+      let totalHours = 0
+      bucket.empHours.forEach(h => {
+        totalHours += h
+      })
+      const byEmployee = [...bucket.empHours.entries()]
+        .map(([employeeId, hours]) => ({
+          employeeId,
+          name: getEmployeeDisplayName(employeeId),
+          hours: Math.round(hours * 100) / 100
+        }))
+        .sort((a, b) => b.hours - a.hours)
+
+      const labelDate = new Date(dateKey + 'T12:00:00')
+      const dateLabel = labelDate.toLocaleDateString('de-DE', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+
+      return {
+        dateKey,
+        dateLabel,
+        totalHours: Math.round(totalHours * 100) / 100,
+        byEmployee,
+        entries: sortedEntries
+      }
+    })
+  }
+
+  const filesForProjectDay = (dateKey: string): { photos: FileUpload[]; docs: FileUpload[] } => {
+    const pred = (f: FileUpload) => {
+      const d = convertToDate(f.uploadTime)
+      if (!d) return false
+      return formatDateForInputLocal(d) === dateKey
+    }
+    return {
+      photos: projectPhotos.filter(pred),
+      docs: projectDocuments.filter(pred)
+    }
+  }
+
+  const toggleProjectDayExpanded = (dateKey: string) => {
+    setExpandedProjectDays(prev => {
+      const next = new Set(prev)
+      if (next.has(dateKey)) next.delete(dateKey)
+      else next.add(dateKey)
+      return next
+    })
+  }
+
+  const handleProjectStaffPrint = () => {
+    if (projectRawEntries.length === 0 && projectVehicleUsagesList.length === 0) {
+      toast.error('Keine Buchungen zum Drucken')
+      return
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Popup blockiert.')
+      return
+    }
+
+    const esc = escapeHtml
+    const projName = selectedProject?.name || ''
+
+    const timeRows = projectRawEntries
+      .filter(e => e.clockOutTime)
+      .sort((a, b) => {
+        const ta = convertToDate(a.clockInTime)?.getTime() || 0
+        const tb = convertToDate(b.clockInTime)?.getTime() || 0
+        return ta - tb
+      })
+      .map(e => {
+        const cin = convertToDate(e.clockInTime)
+        const cout = convertToDate(e.clockOutTime)
+        const dateStr = cin ? cin.toLocaleDateString('de-DE') : '-'
+        const tIn = formatTimeForInput(cin)
+        const tOut = formatTimeForInput(cout)
+        const pauseMin = msToMinutes(e.pauseTotalTime || 0)
+        const wh = calculateWorkHours(tIn, tOut, pauseMin)
+        const name = getEmployeeDisplayName(e.employeeId)
+        return `<tr>
+  <td>${esc(dateStr)}</td>
+  <td>${esc(name)}</td>
+  <td>${esc(tIn)}</td>
+  <td>${esc(tOut)}</td>
+  <td class="right">${pauseMin}</td>
+  <td class="right">${esc(wh)}</td>
+  <td>${esc((e.notes || '').trim())}</td>
+</tr>`
+      })
+      .join('')
+
+    const vehRows = projectVehicleUsagesList
+      .slice()
+      .sort((a, b) => {
+        const da = convertToDate(a.date)?.getTime() || 0
+        const db = convertToDate(b.date)?.getTime() || 0
+        return da - db
+      })
+      .map(u => {
+        const ud = convertToDate(u.date)
+        const dateStr = ud ? ud.toLocaleDateString('de-DE') : '-'
+        const vname =
+          vehicles.find(v => v.id === u.vehicleId)?.name || u.vehicleName || u.vehicleId
+        const h = u.hours ?? u.hoursUsed ?? 0
+        const name = getEmployeeDisplayName(u.employeeId)
+        return `<tr>
+  <td>${esc(dateStr)}</td>
+  <td>${esc(vname)}</td>
+  <td>${esc(name)}</td>
+  <td class="right">${esc(String(h))}</td>
+  <td>${esc((u.comment || '').trim())}</td>
+</tr>`
+      })
+      .join('')
+
+    const period =
+      useTimeFilter && startDate && endDate
+        ? `${new Date(startDate).toLocaleDateString('de-DE')} – ${new Date(endDate).toLocaleDateString('de-DE')}`
+        : 'Gesamte Projektlaufzeit'
+
+    const html = `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Mitarbeiter-Auszug</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
+    h1 { font-size: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f4f4f4; }
+    .right { text-align: right; }
+    .muted { color: #555; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>${esc(projName)}</h1>
+  <p class="muted">Gebuchte Zeiten und Fahrzeuge (ohne Stundensätze, ohne Gesamtkosten, ohne Bilder). Zeitraum: ${esc(period)}</p>
+  <h2>Zeiten</h2>
+  <table>
+    <thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Kommen</th><th>Gehen</th><th>Pause (min)</th><th>Arbeitszeit</th><th>Kommentar</th></tr></thead>
+    <tbody>${timeRows || '<tr><td colspan="7">Keine Zeiten</td></tr>'}</tbody>
+  </table>
+  <h2>Fahrzeuge</h2>
+  <table>
+    <thead><tr><th>Datum</th><th>Fahrzeug</th><th>Mitarbeiter</th><th>Stunden</th><th>Kommentar</th></tr></thead>
+    <tbody>${vehRows || '<tr><td colspan="5">Keine Fahrzeugbuchungen</td></tr>'}</tbody>
+  </table>
+</body>
+</html>`
+
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus()
+        printWindow.print()
+      }, 80)
+    }
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+    }, 350)
   }
 
   // ==================== PROJEKT-BERICHT ====================
@@ -448,6 +782,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       }))
       vehSummaries.sort((a, b) => b.totalCost - a.totalCost)
       setVehicleSummaries(vehSummaries)
+
+      setProjectRawEntries(timeEntries)
+      setProjectVehicleUsagesList(vehicleUsages)
 
       // Fotos und Dokumente laden
       try {
@@ -708,9 +1045,16 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const hasEdits = reportEntries.some(e => e.isEdited)
+  const settlementLinesPreview =
+    reportType === 'employee' && reportEntries.length > 0 ? buildSettlementLinesFromEntries() : []
+  const remainderHasTimeChange = settlementLinesPreview.some(l => l.rawMinutes !== l.correctedMinutes)
+  const remainderHasShortening = settlementLinesPreview.some(l => l.paidOutMinutes > 0)
   const isEmployeeReportEnabled = availableReportTypes.includes('employee')
   const isProjectReportEnabled = availableReportTypes.includes('project')
   const showReportTypeTabs = isEmployeeReportEnabled && isProjectReportEnabled
+
+  const projectJournalDays =
+    reportType === 'project' && hasSearched && selectedProject ? buildProjectDayBlocks() : []
 
   return (
     <div className="reports-tab">
@@ -780,9 +1124,51 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 <div className="actions-left">
                   <h4>Bericht für {selectedEmployeeName} <span className="date-range">({formatPeriod()})</span></h4>
                   {hasEdits && <span className="edit-hint">Es gibt temporäre Änderungen (nur für Druck)</span>}
+                  <div className="settlement-inline-hint">
+                    {employeeSettlement && (
+                      <p>
+                        Gespeicherte Abrechnung: Rohzeit {minutesToHoursLabel(employeeSettlement.rawTotalMinutes)} →
+                        korrigiert {minutesToHoursLabel(employeeSettlement.correctedTotalMinutes)}; Differenz
+                        (abgerechnet) {minutesToHoursLabel(employeeSettlement.paidOutMinutes)}
+                      </p>
+                    )}
+                    {typeof employees.find(e => e.id === selectedEmployeeId)?.overtimeBalanceMinutes === 'number' && (
+                      <p>
+                        Überstunden-Saldo am Mitarbeiter:{' '}
+                        <strong>
+                          {minutesToHoursLabel(
+                            employees.find(e => e.id === selectedEmployeeId)!.overtimeBalanceMinutes as number
+                          )}
+                        </strong>{' '}
+                        — kann im Mitarbeiter-Profil gesetzt werden; wird bei Abrechnung um die Differenz verringert,
+                        falls ein Saldo hinterlegt ist.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="actions-right">
-                  {hasEdits && <button onClick={handleEmployeeSearch} className="btn secondary-btn">Zurücksetzen</button>}
+                  <button
+                    type="button"
+                    className={`btn secondary-btn ${employeeReportView === 'remainder' ? 'active-toggle' : ''}`}
+                    onClick={() =>
+                      setEmployeeReportView(v => (v === 'full' ? 'remainder' : 'full'))
+                    }
+                  >
+                    {employeeReportView === 'remainder' ? 'Volle Tabelle' : 'Restliche Stunden'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary-btn"
+                    onClick={handleSaveTimeSettlement}
+                    disabled={isSavingSettlement || reportEntries.length === 0}
+                  >
+                    {isSavingSettlement ? 'Speichert…' : 'Korrektur abrechnen & speichern'}
+                  </button>
+                  {hasEdits && (
+                    <button onClick={handleEmployeeSearch} className="btn secondary-btn">
+                      Zurücksetzen
+                    </button>
+                  )}
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
                     {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
                   </button>
@@ -790,11 +1176,74 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               </div>
 
               <div className="edit-notice no-print">
-                <p><strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck.</p>
+                <p>
+                  <strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck, bis Sie sie mit „Korrektur
+                  abrechnen & speichern“ festhalten. „Restliche Stunden“ zeigt die pro Tag gekürzte Zeit (Rohzeit minus
+                  korrigierte Zeit).
+                </p>
               </div>
 
               {reportEntries.length === 0 ? (
                 <p className="no-data">Keine Zeiteinträge gefunden</p>
+              ) : employeeReportView === 'remainder' ? (
+                <div className="report-table-container">
+                  {getRemainderLines().length === 0 ? (
+                    <div className="no-data remainder-empty-hint">
+                      {!remainderHasTimeChange && hasEdits ? (
+                        <p>
+                          Sie haben nur den <strong>Projektnamen</strong> angepasst — die Stempelzeiten sind unverändert.
+                          „Restliche Stunden“ erscheinen nur, wenn Sie <strong>Kommen, Gehen oder Pause</strong> so ändern,
+                          dass die berechnete Arbeitszeit <strong>kürzer</strong> wird als die gespeicherte Rohzeit.
+                        </p>
+                      ) : remainderHasTimeChange && !remainderHasShortening ? (
+                        <p>
+                          Die korrigierten Zeiten sind nirgends <strong>kürzer</strong> als die Rohzeit (z.&nbsp;B. nur
+                          verlängert oder weniger Pause). Dadurch gibt es keine abzutrennenden „Rest-Stunden“.
+                        </p>
+                      ) : (
+                        <p>
+                          Keine gekürzte Arbeitszeit gegenüber der Rohzeit. In der Ansicht „Volle Tabelle“ Kommen/Gehen/
+                          Pause anpassen, dann erneut „Restliche Stunden“ öffnen.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <table className="report-table">
+                      <thead>
+                        <tr>
+                          <th>Tag</th>
+                          <th>Abgetrennte Stunden (Roh − korrigiert)</th>
+                          <th className="no-print">Hinweis</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getRemainderLines().map(line => (
+                          <tr key={line.timeEntryId}>
+                            <td>{line.dateLabel}</td>
+                            <td className="hours-cell">{minutesToHoursLabel(line.paidOutMinutes)}</td>
+                            <td className="no-print muted-cell">
+                              Roh {minutesToHoursLabel(line.rawMinutes)} → korr.{' '}
+                              {minutesToHoursLabel(line.correctedMinutes)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="total-row">
+                          <td><strong>Summe abgetrennt:</strong></td>
+                          <td className="hours-cell">
+                            <strong>
+                              {minutesToHoursLabel(
+                                getRemainderLines().reduce((s, l) => s + l.paidOutMinutes, 0)
+                              )}
+                            </strong>
+                          </td>
+                          <td className="no-print"></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+                </div>
               ) : (
                 <div className="report-table-container">
                   <table className="report-table">
@@ -814,20 +1263,59 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       {reportEntries.map((entry, index) => (
                         <tr key={entry.id} className={entry.isEdited ? 'edited-row' : ''}>
                           <td className="date-cell">{entry.date}</td>
-                          <td><input type="text" value={entry.projectName} onChange={(e) => handleFieldChange(index, 'projectName', e.target.value)} className="inline-edit" /></td>
-                          <td><input type="time" value={entry.clockIn} onChange={(e) => handleFieldChange(index, 'clockIn', e.target.value)} className="inline-edit time-input" /></td>
-                          <td><input type="time" value={entry.clockOut} onChange={(e) => handleFieldChange(index, 'clockOut', e.target.value)} className="inline-edit time-input" /></td>
-                          <td><input type="number" min="0" value={entry.pauseMinutes} onChange={(e) => handleFieldChange(index, 'pauseMinutes', e.target.value)} className="inline-edit pause-input" /></td>
+                          <td>
+                            <input
+                              type="text"
+                              value={entry.projectName}
+                              onChange={e => handleFieldChange(index, 'projectName', e.target.value)}
+                              className="inline-edit"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="time"
+                              value={entry.clockIn}
+                              onChange={e => handleFieldChange(index, 'clockIn', e.target.value)}
+                              className="inline-edit time-input"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="time"
+                              value={entry.clockOut}
+                              onChange={e => handleFieldChange(index, 'clockOut', e.target.value)}
+                              className="inline-edit time-input"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="0"
+                              value={entry.pauseMinutes}
+                              onChange={e => handleFieldChange(index, 'pauseMinutes', e.target.value)}
+                              className="inline-edit pause-input"
+                            />
+                          </td>
                           <td className="no-print comment-cell">{entry.notes || '—'}</td>
                           <td className="hours-cell">{entry.workHours}</td>
-                          <td className="no-print actions-cell">{entry.isEdited && <button onClick={() => handleResetEntry(index)} className="reset-btn">Zurück</button>}</td>
+                          <td className="no-print actions-cell">
+                            {entry.isEdited && (
+                              <button type="button" onClick={() => handleResetEntry(index)} className="reset-btn">
+                                Zurück
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="total-row">
-                        <td colSpan={6}><strong>Gesamt:</strong></td>
-                        <td className="hours-cell"><strong>{calculateTotalHours()}</strong></td>
+                        <td colSpan={6}>
+                          <strong>Gesamt:</strong>
+                        </td>
+                        <td className="hours-cell">
+                          <strong>{calculateTotalHours()}</strong>
+                        </td>
                         <td className="no-print"></td>
                       </tr>
                     </tfoot>
@@ -901,6 +1389,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   <h4>Kalkulation: {selectedProject.name}</h4>
                 </div>
                 <div className="actions-right">
+                  <button type="button" onClick={handleProjectStaffPrint} className="btn secondary-btn">
+                    Mitarbeiter-Auszug drucken
+                  </button>
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
                     {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
                   </button>
@@ -1020,62 +1511,180 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 </div>
               </div>
 
-              {/* Baustellenfotos */}
-              {projectPhotos.length > 0 && (
-                <div className="media-section">
-                  <h4>Baustellenfotos ({projectPhotos.length})</h4>
-                  <div className="photo-grid">
-                    {projectPhotos.map((photo, idx) => {
-                      const imgSrc = getImageSrc(photo)
-                      const uploadDate = convertToDate(photo.uploadTime)
+              {/* Tagesweise Dokumentation & Medien */}
+              <div className="project-day-report-section">
+                <h4>Berichte & Dokumentation nach Tag</h4>
+                <p className="project-day-intro">
+                  Pro Kalendertag: geleistete Gesamtstunden, ausklappbare Stunden je Mitarbeiter, Texte aus
+                  Stempelungen sowie Fotos und Dokumente mit Datum.
+                </p>
+                {projectJournalDays.length === 0 &&
+                projectPhotos.length === 0 &&
+                projectDocuments.length === 0 ? (
+                  <p className="no-data">Keine Tagesdaten oder Medien für dieses Projekt.</p>
+                ) : (
+                  <div className="project-day-list">
+                    {projectJournalDays.map(day => {
+                      const { photos: dayPhotos, docs: dayDocs } = filesForProjectDay(day.dateKey)
+                      const expanded = expandedProjectDays.has(day.dateKey)
                       return (
-                        <div key={photo.id || idx} className="photo-card" onClick={() => setLightboxImage(photo)}>
-                          {imgSrc ? (
-                            <img src={imgSrc} alt={photo.fileName || 'Foto'} className="photo-thumbnail" />
-                          ) : (
-                            <div className="photo-placeholder">Kein Bild</div>
-                          )}
-                          <div className="photo-info">
-                            {uploadDate && <span className="photo-date">{uploadDate.toLocaleDateString('de-DE')}</span>}
-                            {(photo.notes || photo.imageComment) && (
-                              <span className="photo-desc">{photo.notes || photo.imageComment}</span>
-                            )}
+                        <div key={day.dateKey} className="project-day-card">
+                          <div className="project-day-header">
+                            <div className="project-day-title">
+                              <strong>{day.dateLabel}</strong>
+                              <span className="project-day-hours">
+                                Σ {day.totalHours.toFixed(2)} h (alle Mitarbeiter)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn secondary-btn project-day-expand"
+                              onClick={() => toggleProjectDayExpanded(day.dateKey)}
+                              aria-expanded={expanded}
+                            >
+                              {expanded ? '▼' : '▶'} Stunden je Mitarbeiter
+                            </button>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
 
-              {/* Dokumente */}
-              {projectDocuments.length > 0 && (
-                <div className="media-section">
-                  <h4>Dokumente ({projectDocuments.length})</h4>
-                  <div className="document-list">
-                    {projectDocuments.map((doc, idx) => {
-                      const imgSrc = getImageSrc(doc)
-                      const uploadDate = convertToDate(doc.uploadTime)
-                      return (
-                        <div key={doc.id || idx} className="document-card" onClick={() => setLightboxImage(doc)}>
-                          {imgSrc ? (
-                            <img src={imgSrc} alt={doc.fileName || 'Dokument'} className="document-thumbnail" />
-                          ) : (
-                            <div className="document-placeholder">Dok.</div>
+                          {expanded && (
+                            <table className="project-day-emp-table">
+                              <thead>
+                                <tr>
+                                  <th>Mitarbeiter</th>
+                                  <th className="number-cell">Stunden</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {day.byEmployee.map(row => (
+                                  <tr key={row.employeeId}>
+                                    <td>{row.name}</td>
+                                    <td className="number-cell">{row.hours.toFixed(2)} h</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           )}
-                          <div className="document-info">
-                            <span className="document-name">{doc.fileName || 'Dokument'}</span>
-                            {uploadDate && <span className="document-date">{uploadDate.toLocaleDateString('de-DE')}</span>}
-                            {(doc.notes || doc.imageComment) && (
-                              <span className="document-desc">{doc.notes || doc.imageComment}</span>
+
+                          <div className="project-day-text-block">
+                            <h5>Schriftliche Einträge &amp; Kommentare</h5>
+                            {day.entries.length === 0 ? (
+                              <p className="muted-small">Keine abgeschlossenen Stempelungen an diesem Tag.</p>
+                            ) : (
+                              <ul className="project-entry-text-list">
+                                {day.entries.map(entry => {
+                                  const empName = getEmployeeDisplayName(entry.employeeId)
+                                  const cin = formatTimeForInput(convertToDate(entry.clockInTime))
+                                  const cout = formatTimeForInput(convertToDate(entry.clockOutTime))
+                                  const note = (entry.notes || '').trim()
+                                  const live = entry.liveDocumentation || []
+                                  return (
+                                    <li key={entry.id} className="project-entry-text-item">
+                                      <div className="pet-head">
+                                        <strong>{empName}</strong>
+                                        <span className="muted-small">
+                                          {cin}–{cout}
+                                        </span>
+                                      </div>
+                                      {note && <p className="pet-notes">{note}</p>}
+                                      {live.length > 0 && (
+                                        <ul className="pet-live-list">
+                                          {live.map((block, bi) => (
+                                            <li key={bi}>
+                                              <span className="muted-small">{block.addedByName || 'Team'}:</span>{' '}
+                                              {(block.notes || '').trim() ||
+                                                `( ${block.photoCount || 0} Fotos, ${block.documentCount || 0} Dok.)`}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </li>
+                                  )
+                                })}
+                              </ul>
                             )}
                           </div>
+
+                          {(dayPhotos.length > 0 || dayDocs.length > 0) && (
+                            <div className="project-day-media-block">
+                              {dayPhotos.length > 0 && (
+                                <>
+                                  <h5>Fotos ({dayPhotos.length})</h5>
+                                  <div className="photo-grid compact-grid">
+                                    {dayPhotos.map((photo, idx) => {
+                                      const imgSrc = getImageSrc(photo)
+                                      return (
+                                        <div
+                                          key={photo.id || idx}
+                                          className="photo-card"
+                                          onClick={() => setLightboxImage(photo)}
+                                        >
+                                          {imgSrc ? (
+                                            <img
+                                              src={imgSrc}
+                                              alt={photo.fileName || 'Foto'}
+                                              className="photo-thumbnail"
+                                            />
+                                          ) : (
+                                            <div className="photo-placeholder">Kein Bild</div>
+                                          )}
+                                          <div className="photo-info">
+                                            {(photo.notes || photo.imageComment) && (
+                                              <span className="photo-desc">
+                                                {photo.notes || photo.imageComment}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                              {dayDocs.length > 0 && (
+                                <>
+                                  <h5>Dokumente ({dayDocs.length})</h5>
+                                  <div className="document-list">
+                                    {dayDocs.map((doc, idx) => {
+                                      const imgSrc = getImageSrc(doc)
+                                      return (
+                                        <div
+                                          key={doc.id || idx}
+                                          className="document-card"
+                                          onClick={() => setLightboxImage(doc)}
+                                        >
+                                          {imgSrc ? (
+                                            <img
+                                              src={imgSrc}
+                                              alt={doc.fileName || 'Dokument'}
+                                              className="document-thumbnail"
+                                            />
+                                          ) : (
+                                            <div className="document-placeholder">Dok.</div>
+                                          )}
+                                          <div className="document-info">
+                                            <span className="document-name">{doc.fileName || 'Dokument'}</span>
+                                            {(doc.notes || doc.imageComment) && (
+                                              <span className="document-desc">
+                                                {doc.notes || doc.imageComment}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
+
+                    {/* Hinweis nur wenn es Medien gibt, aber keine passenden Zeiteinträge im Filter */}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Druck-Footer */}
               <div className="print-footer print-only">

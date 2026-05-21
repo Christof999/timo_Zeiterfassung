@@ -19,7 +19,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     password: '',
     position: '',
     status: 'active' as 'active' | 'inactive',
-    hourlyRate: 0
+    hourlyRate: 0,
+    overtimeBalanceHours: '' as string
   })
   const [isLoading, setIsLoading] = useState(false)
 
@@ -42,6 +43,12 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         }
       }
       
+      const obm = employee.overtimeBalanceMinutes
+      const overtimeBalanceHours =
+        obm != null && typeof obm === 'number' && !isNaN(obm)
+          ? String(Math.round((obm / 60) * 100) / 100)
+          : ''
+
       setFormData({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -50,7 +57,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         password: '',
         position: employee.position || '',
         status: (employee.status as 'active' | 'inactive') || 'active',
-        hourlyRate: employee.hourlyRate || employee.hourlyWage || 0
+        hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
+        overtimeBalanceHours
       })
     } else {
       // Reset form when no employee (new employee)
@@ -62,7 +70,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         password: '',
         position: '',
         status: 'active',
-        hourlyRate: 0
+        hourlyRate: 0,
+        overtimeBalanceHours: ''
       })
     }
   }, [employee])
@@ -80,6 +89,16 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: formData.position,
         status: formData.status,
         hourlyRate: formData.hourlyRate
+      }
+
+      const trimmedOt = formData.overtimeBalanceHours.trim()
+      if (trimmedOt === '') {
+        employeeData.overtimeBalanceMinutes = null
+      } else {
+        const h = parseFloat(trimmedOt.replace(',', '.'))
+        if (!isNaN(h) && h >= 0) {
+          employeeData.overtimeBalanceMinutes = Math.round(h * 60)
+        }
       }
 
       if (formData.password) {
@@ -166,6 +185,16 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               step="0.01"
               value={formData.hourlyRate}
               onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Überstunden-Saldo (Stunden, optional):</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="z.B. 12,5 — wird bei Zeiterfassungs-Abrechnung reduziert"
+              value={formData.overtimeBalanceHours}
+              onChange={e => setFormData({ ...formData, overtimeBalanceHours: e.target.value })}
             />
           </div>
           <div className="form-group">
