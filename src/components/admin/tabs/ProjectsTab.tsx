@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Project } from '../../../types'
 import { isProjectArchivedOrCompleted } from '../../../utils/projectArchive'
 import { toast } from '../../ToastContainer'
 import ProjectModal from '../ProjectModal'
 import ProjectDetailModal from '../ProjectDetailModal'
+import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
 export type ProjectsTabVariant = 'active' | 'archived'
@@ -20,6 +21,17 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredProjects = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return projects
+    return projects.filter((project) =>
+      [project.name, project.client]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(term))
+    )
+  }, [projects, searchTerm])
 
   const loadProjects = async () => {
     setIsLoading(true)
@@ -133,18 +145,27 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
       {projects.length === 0 ? (
         <p className="no-data">{emptyMessage}</p>
       ) : (
-        <div className="data-table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Kunde</th>
-                <th>Status</th>
-                <th>Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => (
+        <>
+          <ListSearch
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Projekt suchen (Name, Kunde)"
+          />
+          {filteredProjects.length === 0 ? (
+            <p className="no-data">Keine Treffer für „{searchTerm}"</p>
+          ) : (
+            <div className="data-table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Kunde</th>
+                    <th>Status</th>
+                    <th>Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProjects.map((project) => (
                 <tr key={project.id}>
                   <td data-label="Name">{project.name}</td>
                   <td data-label="Kunde">{project.client || '-'}</td>
@@ -176,9 +197,11 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (

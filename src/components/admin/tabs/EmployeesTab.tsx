@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee } from '../../../types'
 import { toast } from '../../ToastContainer'
 import EmployeeModal from '../EmployeeModal'
+import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
 const EmployeesTab: React.FC = () => {
@@ -10,6 +11,18 @@ const EmployeesTab: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredEmployees = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return employees
+    return employees.filter((employee) => {
+      const fullName = employee.name || `${employee.firstName ?? ''} ${employee.lastName ?? ''}`
+      return [fullName, employee.username, employee.position]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(term))
+    })
+  }, [employees, searchTerm])
 
   useEffect(() => {
     loadEmployees()
@@ -73,8 +86,17 @@ const EmployeesTab: React.FC = () => {
       {employees.length === 0 ? (
         <p className="no-data">Keine Mitarbeiter vorhanden</p>
       ) : (
-        <div className="data-table-container">
-          <table className="data-table">
+        <>
+          <ListSearch
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Mitarbeiter suchen (Name, Benutzername, Position)"
+          />
+          {filteredEmployees.length === 0 ? (
+            <p className="no-data">Keine Treffer für „{searchTerm}"</p>
+          ) : (
+            <div className="data-table-container">
+              <table className="data-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -85,7 +107,7 @@ const EmployeesTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {employees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <tr key={employee.id}>
                   <td data-label="Name">{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
                   <td data-label="Benutzername">{employee.username}</td>
@@ -115,7 +137,9 @@ const EmployeesTab: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (

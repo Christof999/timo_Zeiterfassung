@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
 import MaterialTypeModal from '../MaterialTypeModal'
+import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
 const MaterialTypesTab: React.FC = () => {
@@ -11,6 +12,17 @@ const MaterialTypesTab: React.FC = () => {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<MaterialType | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return items
+    return items.filter((m) =>
+      [m.name, m.unitLabel]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(term))
+    )
+  }, [items, searchTerm])
 
   const load = async () => {
     try {
@@ -49,20 +61,29 @@ const MaterialTypesTab: React.FC = () => {
       {items.length === 0 ? (
         <p className="no-data">Noch keine Materialarten – bitte anlegen.</p>
       ) : (
-        <div className="data-table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Bezeichnung</th>
-                <th>Einheit</th>
-                <th>Preis / Einheit</th>
-                <th>Sort.</th>
-                <th>Status</th>
-                <th>Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((m) => (
+        <>
+          <ListSearch
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Material suchen (Bezeichnung, Einheit)"
+          />
+          {filteredItems.length === 0 ? (
+            <p className="no-data">Keine Treffer für „{searchTerm}"</p>
+          ) : (
+            <div className="data-table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Bezeichnung</th>
+                    <th>Einheit</th>
+                    <th>Preis / Einheit</th>
+                    <th>Sort.</th>
+                    <th>Status</th>
+                    <th>Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((m) => (
                 <tr key={m.id}>
                   <td data-label="Bezeichnung">{m.name}</td>
                   <td data-label="Einheit">{m.unitLabel || '—'}</td>
@@ -100,9 +121,11 @@ const MaterialTypesTab: React.FC = () => {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (

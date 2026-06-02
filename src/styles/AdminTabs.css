@@ -1089,3 +1089,74 @@
   font-size: var(--font-size-sm);
 }
 
+
+/* ===== Listen-Suche (Mitarbeiter, Projekte, Material, …) ===== */
+.list-search {
+  position: relative;
+  margin-bottom: var(--spacing-lg);
+  max-width: 28rem;
+}
+
+.list-search-input {
+  width: 100%;
+  padding: 10px 2.5rem 10px 2.25rem;
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.list-search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+.list-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.list-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.list-search-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.list-search-clear:hover {
+  color: var(--text-color);
+  background: var(--border-light);
+}
+
+@media (max-width: 768px) {
+  .list-search {
+    max-width: none;
+  }
+}
