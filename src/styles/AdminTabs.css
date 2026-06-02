@@ -684,32 +684,112 @@
     grid-template-columns: 1fr;
   }
 
+  /* Tabellen werden auf dem Handy zu Karten – kein horizontales Scrollen mehr.
+     Jede Zeile = eine Karte, Spaltenüberschrift erscheint als Label vor dem Wert. */
   .data-table-container {
-    font-size: 0.875rem;
+    overflow-x: visible;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    scrollbar-gutter: auto;
   }
 
   .data-table {
-    min-width: 560px;
+    min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0;
   }
 
-  .data-table th,
+  /* Kopfzeile visuell ausblenden, für Screenreader aber erhalten */
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .data-table tbody tr {
+    display: block;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--spacing-xs) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+  }
+
+  /* Streifen/Hover deaktivieren – jede Karte hat eigenen Hintergrund */
+  .data-table tbody tr:hover,
+  .data-table tbody tr:nth-child(even) {
+    background: var(--card-background);
+  }
+
   .data-table td {
-    padding: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+    text-align: right;
+    font-size: var(--font-size-sm);
+    white-space: normal;
   }
 
-  .data-table th {
+  .data-table td:last-child {
+    border-bottom: none;
+  }
+
+  /* Label aus data-label vor dem Wert */
+  .data-table td::before {
+    content: attr(data-label);
+    flex: 0 0 40%;
+    text-align: left;
+    font-weight: var(--font-weight-semibold);
     font-size: var(--font-size-xs);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
   }
 
-  .action-buttons {
-    gap: var(--spacing-xs);
+  /* Zellen ohne Label (data-label="") nehmen die volle Breite */
+  .data-table td[data-label='']::before {
+    content: none;
+  }
+
+  /* Aktions-Buttons: volle Breite, untereinander */
+  .data-table td.action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+  }
+
+  .data-table td.action-buttons .action-btn,
+  .data-table td.action-buttons .btn {
+    width: 100%;
+    margin: 0;
+  }
+
+  /* Eingabefelder in Karten füllen die rechte Seite */
+  .data-table td .inline-edit,
+  .data-table td input,
+  .data-table td select {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .action-btn {
-    padding: 6px 8px;
-    min-height: 30px;
+    padding: 8px 10px;
+    min-height: 38px;
   }
-  
+
   .documents-gallery {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }

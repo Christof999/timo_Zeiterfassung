@@ -87,15 +87,15 @@ const EmployeesTab: React.FC = () => {
             <tbody>
               {employees.map((employee) => (
                 <tr key={employee.id}>
-                  <td>{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
-                  <td>{employee.username}</td>
-                  <td>{employee.position || '-'}</td>
-                  <td>
+                  <td data-label="Name">{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
+                  <td data-label="Benutzername">{employee.username}</td>
+                  <td data-label="Position">{employee.position || '-'}</td>
+                  <td data-label="Status">
                     <span className={`status-badge ${employee.status === 'active' ? 'active' : 'inactive'}`}>
                       {employee.status === 'active' ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="action-buttons">
+                  <td className="action-buttons" data-label="">
                     <button 
                       onClick={() => handleEdit(employee)} 
                       className="action-btn edit-btn"

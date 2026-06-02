@@ -200,8 +200,8 @@ const HeroIntegrationTab: React.FC = () => {
               <tbody>
                 {employees.map((employee) => (
                   <tr key={employee.id}>
-                    <td>{employee.name || employee.username}</td>
-                    <td>
+                    <td data-label="Mitarbeiter">{employee.name || employee.username}</td>
+                    <td data-label="HERO-ID">
                       <input
                         type="text"
                         className="inline-edit"
@@ -215,7 +215,7 @@ const HeroIntegrationTab: React.FC = () => {
                         }
                       />
                     </td>
-                    <td>
+                    <td className="action-buttons" data-label="">
                       <button
                         type="button"
                         className="btn secondary-btn btn-sm"

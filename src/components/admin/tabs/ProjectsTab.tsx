@@ -146,10 +146,10 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
             <tbody>
               {projects.map((project) => (
                 <tr key={project.id}>
-                  <td>{project.name}</td>
-                  <td>{project.client || '-'}</td>
-                  <td>{getStatusBadge(project.status)}</td>
-                  <td className="action-buttons">
+                  <td data-label="Name">{project.name}</td>
+                  <td data-label="Kunde">{project.client || '-'}</td>
+                  <td data-label="Status">{getStatusBadge(project.status)}</td>
+                  <td className="action-buttons" data-label="">
                     <button 
                       onClick={() => handleView(project)} 
                       className="action-btn view-btn"

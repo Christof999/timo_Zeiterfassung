@@ -64,16 +64,16 @@ const MaterialTypesTab: React.FC = () => {
             <tbody>
               {items.map((m) => (
                 <tr key={m.id}>
-                  <td>{m.name}</td>
-                  <td>{m.unitLabel || '—'}</td>
-                  <td>{typeof m.unitPriceEur === 'number' ? `${m.unitPriceEur.toFixed(2)} €` : '—'}</td>
-                  <td>{m.sortOrder ?? 0}</td>
-                  <td>
+                  <td data-label="Bezeichnung">{m.name}</td>
+                  <td data-label="Einheit">{m.unitLabel || '—'}</td>
+                  <td data-label="Preis / Einheit">{typeof m.unitPriceEur === 'number' ? `${m.unitPriceEur.toFixed(2)} €` : '—'}</td>
+                  <td data-label="Sort.">{m.sortOrder ?? 0}</td>
+                  <td data-label="Status">
                     <span className={`status-badge ${m.isActive !== false ? 'active' : 'inactive'}`}>
                       {m.isActive !== false ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td>
+                  <td className="action-buttons" data-label="">
                     <button type="button" className="btn secondary-btn" onClick={() => { setEditing(m); setShowModal(true) }}>
                       Bearbeiten
                     </button>

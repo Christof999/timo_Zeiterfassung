@@ -93,15 +93,15 @@ const VehiclesTab: React.FC = () => {
             <tbody>
               {vehicles.map((vehicle) => (
                 <tr key={vehicle.id}>
-                  <td>{vehicle.name}</td>
-                  <td>{vehicle.licensePlate || '-'}</td>
-                  <td>{vehicle.hourlyRate ? `${vehicle.hourlyRate.toFixed(2)} €` : '-'}</td>
-                  <td>
+                  <td data-label="Name">{vehicle.name}</td>
+                  <td data-label="Kennzeichen">{vehicle.licensePlate || '-'}</td>
+                  <td data-label="€/Std">{vehicle.hourlyRate ? `${vehicle.hourlyRate.toFixed(2)} €` : '-'}</td>
+                  <td data-label="Status">
                     <span className={`status-badge ${vehicle.isActive !== false ? 'active' : 'inactive'}`}>
                       {vehicle.isActive !== false ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="action-buttons">
+                  <td className="action-buttons" data-label="">
                     <button 
                       onClick={() => handleEdit(vehicle)} 
                       className="action-btn edit-btn"
