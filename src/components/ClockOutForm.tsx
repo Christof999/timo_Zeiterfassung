@@ -3,6 +3,7 @@ import { DataService } from '../services/dataService'
 import type { TimeEntry, Project, MaterialType, TimeEntryMaterialUsage } from '../types'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
+import ProjectSwitchModal from './ProjectSwitchModal'
 import MaterialUsageFields, {
   buildMaterialUsagesFromRows,
   createMaterialUsageRow,
@@ -18,6 +19,7 @@ interface ClockOutFormProps {
   onSimpleClockOut: (pauseMinutes: number, materialUsages: TimeEntryMaterialUsage[] | undefined) => void
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
+  onProjectSwitch: (newProjectId: string) => Promise<void>
 }
 
 const ClockOutForm: React.FC<ClockOutFormProps> = ({
@@ -26,10 +28,12 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   clockInTime,
   onSimpleClockOut,
   onExtendedClockOutSuccess,
-  onUpdate
+  onUpdate,
+  onProjectSwitch
 }) => {
   const [showExtendedModal, setShowExtendedModal] = useState(false)
   const [showLiveDocModal, setShowLiveDocModal] = useState(false)
+  const [showProjectSwitchModal, setShowProjectSwitchModal] = useState(false)
   /** Leer = noch nicht bestätigt; „0“ ist gültig */
   const [pauseMinutesInput, setPauseMinutesInput] = useState('')
   /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
@@ -138,6 +142,13 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       </div>
 
       <div className="clock-out-buttons">
+        <button
+          type="button"
+          onClick={() => setShowProjectSwitchModal(true)}
+          className="btn project-switch-btn"
+        >
+          Projekt wechseln
+        </button>
         <button type="button" onClick={handleSimpleClockOutClick} className="btn secondary-btn">
           Einfach Ausstempeln
         </button>
@@ -184,6 +195,15 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
             setShowLiveDocModal(false)
             onUpdate()
           }}
+        />
+      )}
+
+      {showProjectSwitchModal && (
+        <ProjectSwitchModal
+          currentProjectId={timeEntry.projectId}
+          currentProjectName={project?.name}
+          onClose={() => setShowProjectSwitchModal(false)}
+          onSwitch={onProjectSwitch}
         />
       )}
     </div>

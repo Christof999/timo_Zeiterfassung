@@ -294,3 +294,17 @@
     min-height: var(--btn-height);
   }
 }
+
+.clock-out-buttons .btn.project-switch-btn {
+  background: var(--accent-light);
+  color: var(--accent-color, #2563eb);
+  border: 1px solid var(--accent-color, #3b82f6);
+  font-weight: var(--font-weight-semibold);
+}
+
+.clock-out-buttons .btn.project-switch-btn:hover:not(:disabled) {
+  background: var(--accent-color, #3b82f6);
+  color: #fff;
+  border-color: var(--accent-color, #3b82f6);
+  transform: translateY(-1px);
+}

@@ -7,6 +7,9 @@ import MaterialUsageFields, {
   createMaterialUsageRow,
   type MaterialUsageRow
 } from './MaterialUsageFields'
+import SaveProgressOverlay from './SaveProgressOverlay'
+import { uploadDocumentationWithOfflineFallback } from '../utils/saveDocumentationPhotos'
+import { withTimeout } from '../utils/withTimeout'
 import { toast } from './ToastContainer'
 import '../styles/Modal.css'
 
@@ -30,6 +33,9 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [noMaterial, setNoMaterial] = useState(false)
   const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
+  const [progressMessage, setProgressMessage] = useState('')
+  const [progressStep, setProgressStep] = useState(0)
+  const [progressTotal, setProgressTotal] = useState(0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,49 +76,73 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         materialUsages = []
       }
 
+      const fileCount = sitePhotoItems.length + documentPhotoItems.length
+      const totalSteps = fileCount + 1
+      setProgressTotal(totalSteps)
+      setProgressStep(0)
+      setProgressMessage('Arbeitsende wird gespeichert…')
+
       const location = await getCurrentLocation()
 
-      const sitePhotoObjects = []
-      for (const { file, comment } of sitePhotoItems) {
-        const upload = await DataService.uploadFile(
-          file,
-          timeEntry.projectId,
-          timeEntry.employeeId,
-          'construction_site',
-          '',
-          comment.trim(),
-          { timeEntryId: timeEntry.id }
-        )
-        sitePhotoObjects.push(upload)
-      }
-
-      const documentPhotoObjects = []
-      for (const { file, comment } of documentPhotoItems) {
-        const documentType = file.name.toLowerCase().includes('rechnung') ? 'invoice' : 'delivery_note'
-        const upload = await DataService.uploadFile(
-          file,
-          timeEntry.projectId,
-          timeEntry.employeeId,
-          documentType,
-          '',
-          comment.trim(),
-          { timeEntryId: timeEntry.id }
-        )
-        documentPhotoObjects.push(upload)
-      }
-
+      // Zuerst ausstempeln (inkl. Material/Pause) — Fotos dürfen das Arbeitsende bei schlechtem
+      // Netz nicht mehr blockieren.
       await DataService.clockOutEmployee(timeEntry.id, notes, location, pauseTotalTimeMs, materialUsages)
 
-      await DataService.updateTimeEntry(timeEntry.id, {
-        sitePhotoUploads: sitePhotoObjects.map((u) => u.id),
-        documentPhotoUploads: documentPhotoObjects.map((u) => u.id),
-        sitePhotos: sitePhotoObjects,
-        documents: documentPhotoObjects,
-        hasDocumentation:
-          sitePhotoObjects.length > 0 || documentPhotoObjects.length > 0 || notes.trim() !== ''
-      })
+      // Fotos hochladen — bei Netzproblemen wandern sie in die Offline-Queue (Upload später).
+      const { siteUploads, documentUploads, deferredPhotos } =
+        await uploadDocumentationWithOfflineFallback({
+          batches: [
+            {
+              items: sitePhotoItems,
+              resolveFileType: () => 'construction_site',
+              category: 'site',
+              label: 'Baustellenfoto'
+            },
+            {
+              items: documentPhotoItems,
+              resolveFileType: (file) =>
+                file.name.toLowerCase().includes('rechnung') ? 'invoice' : 'delivery_note',
+              category: 'document',
+              label: 'Dokument'
+            }
+          ],
+          projectId: timeEntry.projectId,
+          employeeId: timeEntry.employeeId,
+          timeEntryId: timeEntry.id,
+          notes: notes.trim(),
+          onProgress: ({ message, step }) => {
+            setProgressMessage(message)
+            setProgressStep(step)
+          }
+        })
 
-      toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
+      // Online hochgeladene Fotos sofort verknüpfen (per Merge, falls die Queue parallel nachreicht)
+      if (siteUploads.length > 0 || documentUploads.length > 0) {
+        setProgressMessage('Fotos werden mit dem Eintrag verknüpft…')
+        setProgressStep(totalSteps - 1)
+        try {
+          await withTimeout(
+            DataService.attachDocumentationUploads(timeEntry.id, {
+              sitePhotos: siteUploads,
+              documents: documentUploads
+            }),
+            30_000,
+            'Speichern hat zu lange gedauert — vermutlich schlechtes Netz.'
+          )
+        } catch (linkErr) {
+          if (deferredPhotos === 0) throw linkErr
+          console.warn('Doku-Verknüpfung verschoben (offline):', linkErr)
+        }
+      }
+
+      setProgressStep(totalSteps)
+      if (deferredPhotos > 0) {
+        toast.success(
+          `Ausgestempelt. ${deferredPhotos} Foto(s) werden automatisch hochgeladen, sobald wieder Netz da ist.`
+        )
+      } else {
+        toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
+      }
 
       onClockOutSuccess()
       onClose()
@@ -120,6 +150,9 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
       toast.error('Fehler beim Ausstempeln: ' + error.message)
     } finally {
       setIsSubmitting(false)
+      setProgressMessage('')
+      setProgressStep(0)
+      setProgressTotal(0)
     }
   }
 
@@ -146,11 +179,11 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Arbeitsende dokumentieren</h3>
-          <button type="button" className="close-modal-btn" onClick={onClose}>
+          <button type="button" className="close-modal-btn" onClick={onClose} disabled={isSubmitting}>
             ×
           </button>
         </div>
@@ -180,19 +213,27 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               label="Lieferscheine oder Rechnungen:"
               onItemsChange={setDocumentPhotoItems}
               commentFieldLabel="Kommentar zu diesem Dokument (optional)"
+              captureMode="document"
             />
 
             <div className="form-group text-center">
               <button type="submit" className="btn primary-btn" disabled={isSubmitting}>
                 {isSubmitting ? 'Speichere...' : 'Ausstempeln und Speichern'}
               </button>
-              <button type="button" className="btn secondary-btn" onClick={onClose}>
+              <button type="button" className="btn secondary-btn" onClick={onClose} disabled={isSubmitting}>
                 Abbrechen
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      <SaveProgressOverlay
+        visible={isSubmitting}
+        message={progressMessage || 'Bitte warten…'}
+        current={progressStep}
+        total={progressTotal}
+      />
     </div>
   )
 }

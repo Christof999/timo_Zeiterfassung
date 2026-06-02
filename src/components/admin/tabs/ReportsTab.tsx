@@ -3,6 +3,8 @@ import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload, TimeReportSettlement } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
+import { collectEntryDocumentation } from '../../../utils/entryDocumentation'
+import { getFileImageSrc } from '../../../utils/fileImageSrc'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
 
@@ -21,6 +23,7 @@ interface ReportEntry {
   pauseMs: number
   workHours: string
   notes: string
+  originalNotes: string
   isEdited: boolean
 }
 
@@ -282,6 +285,19 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         return dateA.getTime() - dateB.getTime()
       })
 
+      const entryIds = filteredEntries.map(e => e.id)
+      const linkedFiles =
+        entryIds.length > 0
+          ? await DataService.getFileUploadsByTimeEntryIds(entryIds, { includeBinary: true })
+          : []
+      const filesByEntryId = new Map<string, FileUpload[]>()
+      for (const file of linkedFiles) {
+        if (!file.timeEntryId) continue
+        const list = filesByEntryId.get(file.timeEntryId) || []
+        list.push(file)
+        filesByEntryId.set(file.timeEntryId, list)
+      }
+
       const entries: ReportEntry[] = filteredEntries.map(entry => {
         const clockInDate = convertToDate(entry.clockInTime)
         const clockOutDate = convertToDate(entry.clockOutTime)
@@ -302,7 +318,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           pauseMinutes,
           pauseMs,
           workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
-          notes: (entry.notes || '').trim(),
+          notes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
+          originalNotes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
           isEdited: false
         }
       })
@@ -350,7 +367,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         ...updated[index],
         projectName: getProjectName(original.projectId),
         clockIn, clockOut, pauseMinutes, pauseMs,
-        notes: (original.notes || '').trim(),
+        notes: updated[index].originalNotes,
         workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
         isEdited: false
       }
@@ -528,7 +545,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const filesForProjectDay = (dateKey: string): { photos: FileUpload[]; docs: FileUpload[] } => {
+    const entryDateById = new Map<string, string>()
+    for (const entry of projectRawEntries) {
+      const clockIn = convertToDate(entry.clockInTime)
+      if (clockIn) {
+        entryDateById.set(entry.id, formatDateForInputLocal(clockIn))
+      }
+    }
     const pred = (f: FileUpload) => {
+      if (f.timeEntryId && entryDateById.has(f.timeEntryId)) {
+        return entryDateById.get(f.timeEntryId) === dateKey
+      }
       const d = convertToDate(f.uploadTime)
       if (!d) return false
       return formatDateForInputLocal(d) === dateKey
@@ -789,8 +816,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       // Fotos und Dokumente laden
       try {
         const [photos, docs] = await Promise.all([
-          DataService.getProjectFiles(selectedProjectId, 'construction_site'),
-          DataService.getProjectFiles(selectedProjectId, 'document')
+          DataService.getProjectFiles(selectedProjectId, 'construction_site', {
+            includeBinary: true
+          }),
+          DataService.getProjectFiles(selectedProjectId, 'document', { includeBinary: true })
         ])
         
         // Nach Datum sortieren
@@ -819,16 +848,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const getVehicleTotalCost = () => vehicleSummaries.reduce((sum, v) => sum + v.totalCost, 0)
   const getProjectTotalCost = () => getEmployeeTotalCost() + getVehicleTotalCost()
 
-  const getImageSrc = (file: FileUpload): string => {
-    if (file.base64Data) {
-      if (file.base64Data.startsWith('data:')) return file.base64Data
-      const mime = file.mimeType || 'image/jpeg'
-      return `data:${mime};base64,${file.base64Data}`
-    }
-    if ((file as any).fileUrl) return (file as any).fileUrl
-    if ((file as any).url) return (file as any).url
-    return ''
-  }
+  const getImageSrc = (file: FileUpload): string => getFileImageSrc(file)
 
   const handlePrint = () => {
     if (isPrintInProgressRef.current) {
@@ -879,6 +899,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       .replace(/'/g, '&#39;')
   }
 
+  const formatNotesForPrintHtml = (notes: string): string => {
+    if (!notes.trim()) return '—'
+    return escapeHtml(notes).replace(/\n/g, '<br />')
+  }
+
   const buildEmployeePrintHtml = (): string => {
     const rowsHtml = reportEntries
       .map((entry) => {
@@ -888,6 +913,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   <td>${escapeHtml(entry.clockIn)}</td>
   <td>${escapeHtml(entry.clockOut)}</td>
   <td>${entry.pauseMinutes}</td>
+  <td class="doc-cell">${formatNotesForPrintHtml(entry.notes)}</td>
   <td>${escapeHtml(entry.workHours)}</td>
 </tr>`
       })
@@ -926,6 +952,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       text-align: left;
       vertical-align: middle;
     }
+    td.doc-cell {
+      vertical-align: top;
+      white-space: normal;
+      word-break: break-word;
+      max-width: 280px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
     th {
       background: #f4f4f4;
       font-weight: 700;
@@ -958,6 +992,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         <th>Kommen</th>
         <th>Gehen</th>
         <th>Pause</th>
+        <th>Dokumentation</th>
         <th>Arbeitszeit</th>
       </tr>
     </thead>
@@ -966,7 +1001,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="5">Gesamt:</td>
+        <td colspan="6">Gesamt:</td>
         <td class="right">${escapeHtml(calculateTotalHours())}</td>
       </tr>
     </tfoot>
@@ -1254,7 +1289,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <th>Kommen</th>
                         <th>Gehen</th>
                         <th>Pause</th>
-                        <th className="no-print">Kommentar</th>
+                        <th>Dokumentation</th>
                         <th>Arbeitszeit</th>
                         <th className="no-print">Akt.</th>
                       </tr>
@@ -1296,7 +1331,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               className="inline-edit pause-input"
                             />
                           </td>
-                          <td className="no-print comment-cell">{entry.notes || '—'}</td>
+                          <td className="comment-cell">{entry.notes || '—'}</td>
                           <td className="hours-cell">{entry.workHours}</td>
                           <td className="no-print actions-cell">
                             {entry.isEdited && (
@@ -1546,8 +1581,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                             </button>
                           </div>
 
-                          {expanded && (
-                            <table className="project-day-emp-table">
+                          <table
+                            className={`project-day-emp-table${expanded ? '' : ' screen-collapsed'}`}
+                          >
                               <thead>
                                 <tr>
                                   <th>Mitarbeiter</th>
@@ -1563,7 +1599,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                                 ))}
                               </tbody>
                             </table>
-                          )}
 
                           <div className="project-day-text-block">
                             <h5>Schriftliche Einträge &amp; Kommentare</h5>

@@ -1,0 +1,12 @@
+rules_version = '2';
+// Firebase Storage: Uploads der Zeiterfassung (anonyme Auth wie in der App)
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /uploads/{projectId}/{employeeId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

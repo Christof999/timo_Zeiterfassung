@@ -18,7 +18,8 @@ import {
   arrayUnion
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import { db, auth } from './firebaseConfig'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, auth, storage } from './firebaseConfig'
 import type {
   Employee,
   Project,
@@ -34,8 +35,24 @@ import type {
   HeroSyncLogEntry
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
+import { withTimeout } from '../utils/withTimeout'
+import { getFileImageSrc } from '../utils/fileImageSrc'
+import { toFileUploadRef } from '../utils/fileUploadRef'
+import { sanitizeTimeEntryForRead } from '../utils/sanitizeTimeEntry'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
+
+/** Optionen beim Laden von Datei-Uploads — bei includeBinary=false bleibt Base64 außen vor. */
+export type FileUploadLoadOptions = { includeBinary?: boolean }
+
+// Timeouts für die Bild-/Upload-Pipeline — verhindern endloses „Speichere…“ bei schlechtem Netz.
+const STORAGE_UPLOAD_TIMEOUT_MS = 25_000
+const IMAGE_PREPARE_TIMEOUT_MS = 90_000
+const IMAGE_DECODE_TIMEOUT_MS = 30_000
+const FIRESTORE_WRITE_TIMEOUT_MS = 45_000
+
+/** Firestore-Maximum pro String-Feld (base64Data) — etwas Puffer unter 1.048.487 Bytes */
+const FIRESTORE_MAX_BASE64_BYTES = 1_000_000
 
 /** Keine Firestore-Dokumente (Platzhalter aus alter Offline-/Client-Logik). */
 function isPlaceholderFileUploadId(id: string): boolean {
@@ -94,7 +111,11 @@ class DataServiceClass {
   private fileUploadFromDocData(
     docId: string,
     data: Record<string, unknown>,
-    opts?: { projectIdFallback?: string; fileTypeFallback?: string }
+    opts?: {
+      projectIdFallback?: string
+      fileTypeFallback?: string
+      includeBinary?: boolean
+    }
   ): FileUpload {
     const uploadTimeRaw = data.uploadTime
     const uploadTime =
@@ -104,15 +125,22 @@ class DataServiceClass {
           ? uploadTimeRaw
           : (uploadTimeRaw as any)?.toDate?.() || new Date((uploadTimeRaw as any) || Date.now())
 
-    let base64 = String(data.base64Data || data.base64String || data.base64 || '')
+    const includeBinary = opts?.includeBinary === true
+    let base64 = ''
     let fileUrl = String(data.url || data.filePath || '')
-    if (fileUrl.startsWith('data:')) {
-      const parts = fileUrl.split(',')
-      if (parts.length > 1) base64 = parts[1]
-    }
-    if (!base64 && typeof data.mimeType === 'string' && data.mimeType.includes(',')) {
-      const parts = data.mimeType.split(',')
-      if (parts.length > 1) base64 = parts[1]
+    if (includeBinary) {
+      base64 = String(data.base64Data || data.base64String || data.base64 || '')
+      if (fileUrl.startsWith('data:')) {
+        const parts = fileUrl.split(',')
+        if (parts.length > 1) base64 = parts[1]
+        fileUrl = ''
+      }
+      if (!base64 && typeof data.mimeType === 'string' && data.mimeType.includes(',')) {
+        const parts = data.mimeType.split(',')
+        if (parts.length > 1) base64 = parts[1]
+      }
+    } else if (fileUrl.startsWith('data:')) {
+      fileUrl = ''
     }
 
     let mimeType = String(data.mimeType || data.contentType || '')
@@ -120,6 +148,12 @@ class DataServiceClass {
       const match = mimeType.match(/^data:([^;,]+)/)
       if (match) mimeType = match[1]
     }
+
+    const storagePathRaw = data.storagePath || data.storage_path
+    const storagePath =
+      typeof storagePathRaw === 'string' && storagePathRaw.trim()
+        ? storagePathRaw.trim()
+        : undefined
 
     return {
       id: docId,
@@ -133,7 +167,8 @@ class DataServiceClass {
       notes: String(data.notes || data.comment || ''),
       imageComment: String(data.imageComment || data.comment || ''),
       base64Data: base64,
-      mimeType
+      mimeType,
+      storagePath
     } as FileUpload
   }
 
@@ -307,7 +342,7 @@ class DataServiceClass {
           console.warn(`Mehrere offene Zeiteinträge für Mitarbeiter ${employeeId} gefunden:`, activeEntries.length)
         }
 
-        return activeEntries[0]
+        return sanitizeTimeEntryForRead(activeEntries[0])
       }
       return null
     } catch (error) {
@@ -323,7 +358,9 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('employeeId', '==', employeeId))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der Zeiteinträge:', error)
       return []
@@ -554,6 +591,148 @@ class DataServiceClass {
   }
 
   /**
+   * Wechselt das Projekt eines eingestempelten Mitarbeiters, ohne dass dieser sich ausstempeln
+   * muss: Der aktuelle Stempelsatz wird ohne Pause beendet und sofort ein neuer Stempelsatz auf
+   * dem neuen Projekt gestartet. Pausen werden erst beim regulären Ausstempeln am Tagesende erfasst.
+   */
+  async switchActiveProject(
+    employeeId: string,
+    currentTimeEntryId: string,
+    newProjectId: string,
+    location: { lat: number | null; lng: number | null } | null
+  ): Promise<TimeEntry> {
+    await this.authReadyPromise
+    try {
+      if (!employeeId || !currentTimeEntryId || !newProjectId) {
+        throw new Error('Mitarbeiter, Zeiteintrag und neues Projekt sind erforderlich')
+      }
+
+      const currentRef = doc(db, 'timeEntries', currentTimeEntryId)
+      const employeeRef = doc(db, 'employees', employeeId)
+      const newEntryRef = doc(collection(db, 'timeEntries'))
+
+      await runTransaction(db, async (transaction) => {
+        const [currentSnap, employeeSnap] = await Promise.all([
+          transaction.get(currentRef),
+          transaction.get(employeeRef)
+        ])
+
+        if (!currentSnap.exists()) {
+          throw new Error('Aktueller Zeiteintrag nicht gefunden')
+        }
+        if (!employeeSnap.exists()) {
+          throw new Error('Mitarbeiter nicht gefunden')
+        }
+
+        const current = currentSnap.data() as TimeEntry
+        if (current.clockOutTime != null) {
+          throw new Error('Sie sind nicht mehr eingestempelt')
+        }
+        if (current.projectId === newProjectId) {
+          throw new Error('Bitte wählen Sie ein anderes Projekt')
+        }
+
+        const employeeData = employeeSnap.data() as { activeTimeEntryId?: string }
+        if (employeeData.activeTimeEntryId && employeeData.activeTimeEntryId !== currentTimeEntryId) {
+          throw new Error('Aktiver Stempelsatz stimmt nicht überein. Bitte Seite neu laden.')
+        }
+
+        const clockOutTime = Timestamp.now()
+        const clockInTime = clockOutTime
+        const existingNotes = (current.notes || '').trim()
+        const switchNote = 'Projektwechsel'
+        const notes = existingNotes ? `${existingNotes} | ${switchNote}` : switchNote
+
+        const clockOutUpdate: Record<string, unknown> = {
+          clockOutTime,
+          pauseTotalTime: 0,
+          notes,
+          projectSwitchOut: true
+        }
+        if (location) {
+          clockOutUpdate.clockOutLocation = location
+          clockOutUpdate.locationOut = location
+        }
+        transaction.update(currentRef, clockOutUpdate)
+
+        const newEntryData: Record<string, unknown> = {
+          entryId: newEntryRef.id,
+          employeeId,
+          projectId: newProjectId,
+          clockInTime,
+          clockOutTime: null,
+          clockInLocation: location,
+          notes: '',
+          pauseTotalTime: 0,
+          projectSwitchIn: true
+        }
+        transaction.set(newEntryRef, newEntryData)
+
+        transaction.update(employeeRef, {
+          activeTimeEntryId: newEntryRef.id,
+          activeClockInAt: clockInTime,
+          updatedAt: new Date()
+        })
+      })
+
+      const newSnap = await getDoc(newEntryRef)
+      return { id: newEntryRef.id, ...newSnap.data() } as TimeEntry
+    } catch (error) {
+      console.error('Fehler beim Projektwechsel:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Verknüpft bereits hochgeladene Fotos/Dokumente mit einem Zeiteintrag und MERGT sie in die
+   * bestehenden Listen ein (liest den Eintrag frisch). Idempotent gegenüber bereits vorhandenen
+   * Feldern — wird sowohl online als auch vom Offline-Upload-Queue (späteres Nachreichen) genutzt.
+   */
+  async attachDocumentationUploads(
+    timeEntryId: string,
+    data: { sitePhotos?: FileUpload[]; documents?: FileUpload[]; notes?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+    const entry = await this.getTimeEntryById(timeEntryId)
+    if (!entry) throw new Error('Zeiteintrag nicht gefunden')
+
+    const sitePhotos = data.sitePhotos || []
+    const documents = data.documents || []
+
+    const mergeIds = (existing: unknown, additions: FileUpload[]): string[] => {
+      const prev = Array.isArray(existing) ? (existing as unknown[]).map(String).filter(Boolean) : []
+      return [...prev, ...additions.map((u) => u.id)]
+    }
+    const mergeRefs = (existing: unknown, additions: FileUpload[]): unknown[] => {
+      const base = Array.isArray(existing) ? [...existing] : []
+      return [...base, ...additions.map(toFileUploadRef)]
+    }
+
+    const mergedSiteUploads = mergeIds(entry.sitePhotoUploads, sitePhotos)
+    const mergedDocUploads = mergeIds(entry.documentPhotoUploads, documents)
+    const notes = typeof data.notes === 'string' ? data.notes.trim() : undefined
+
+    const update: Partial<TimeEntry> = {
+      sitePhotoUploads: mergedSiteUploads,
+      documentPhotoUploads: mergedDocUploads,
+      sitePhotos: mergeRefs(entry.sitePhotos, sitePhotos) as TimeEntry['sitePhotos'],
+      documents: mergeRefs(entry.documents, documents) as TimeEntry['documents'],
+      hasDocumentation:
+        !!entry.hasDocumentation ||
+        mergedSiteUploads.length > 0 ||
+        mergedDocUploads.length > 0 ||
+        (entry.notes || '').trim() !== '' ||
+        !!notes
+    }
+    // Notizen nur setzen, wenn übergeben und noch nicht identisch gespeichert (kein Überschreiben mit leer)
+    if (notes && notes !== (entry.notes || '').trim()) {
+      update.notes = notes
+    }
+
+    await this.updateTimeEntry(timeEntryId, update)
+  }
+
+  /**
    * Zeiteintrag inkl. verknüpfter Dokumente (fileUploads) und Fahrzeugbuchungen am Arbeitstag
    * auf ein anderes Projekt umhängen (Admin-Korrektur falscher Projektwahl).
    */
@@ -764,7 +943,40 @@ class DataServiceClass {
     }
   }
 
-  // File Upload
+  private buildStorageObjectPath(
+    projectId: string,
+    employeeId: string,
+    type: string,
+    fileName: string
+  ): string {
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'upload.jpg'
+    return `uploads/${projectId}/${employeeId}/${Date.now()}_${type}_${safeName}`
+  }
+
+  private async uploadFileToStorage(file: File, objectPath: string): Promise<string> {
+    const objectRef = storageRef(storage, objectPath)
+    await uploadBytes(objectRef, file, { contentType: file.type || 'image/jpeg' })
+    return getDownloadURL(objectRef)
+  }
+
+  private async prepareFileForStorageUpload(file: File, type: string): Promise<File> {
+    // Nicht-Bilder (z. B. PDF) niemals durch den Bild-Encoder schicken — das würde hängen.
+    if (!this.isCompressibleImage(file)) return file
+    const isDocument = this.isDocumentFileType(type)
+    // Auf Mobilgeräten schneller, in Storage trotzdem deutlich schärfer als früher
+    const maxWidth = isDocument ? 2400 : 1800
+    return this.compressImage(file, isDocument ? 0.9 : 0.85, maxWidth, { forceJpeg: true })
+  }
+
+  /** Lässt sich die Datei sinnvoll per Canvas rastern/komprimieren? */
+  private isCompressibleImage(file: File): boolean {
+    const t = (file.type || '').toLowerCase()
+    if (t.startsWith('image/')) return t !== 'image/svg+xml'
+    // Manche Kamera-/Datei-Apps liefern keinen MIME-Type — dann an der Endung erkennen
+    return /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name || '')
+  }
+
+  // File Upload — bevorzugt Firebase Storage (volle Qualität), Fallback Base64 in Firestore
   async uploadFile(
     file: File,
     projectId: string,
@@ -772,31 +984,70 @@ class DataServiceClass {
     type: string = 'construction_site',
     notes: string = '',
     comment: string = '',
-    options?: { timeEntryId?: string }
+    options?: { timeEntryId?: string; onProgress?: (message: string) => void }
   ): Promise<FileUpload> {
     await this.authReadyPromise
+    const report = (msg: string) => options?.onProgress?.(msg)
     try {
-      // Komprimiere Bild
-      const compressedFile = await this.compressImage(file, 0.5, 600)
-      
-      // Konvertiere zu Base64
-      const base64DataUrl = await this.fileToBase64(compressedFile)
-      const base64String = base64DataUrl.split(',')[1]
-      const mimeType = base64DataUrl.split(',')[0].split(':')[1].split(';')[0]
-
-      // Speichere in Firestore
       const fileUploadsRef = collection(db, 'fileUploads')
-      const uploadDataRaw: Record<string, unknown> = {
-        fileName: file.name,
-        fileType: type,
-        projectId,
-        employeeId,
-        base64Data: base64String,
-        mimeType,
-        notes,
-        imageComment: comment,
-        uploadTime: serverTimestamp()
+      let uploadDataRaw: Record<string, unknown>
+      let preparedFile: File | undefined
+
+      try {
+        report('Bild wird vorbereitet…')
+        preparedFile = await withTimeout(
+          this.prepareFileForStorageUpload(file, type),
+          IMAGE_PREPARE_TIMEOUT_MS,
+          'Die Bildaufbereitung hat zu lange gedauert.'
+        )
+        const objectPath = this.buildStorageObjectPath(
+          projectId,
+          employeeId,
+          type,
+          preparedFile.name
+        )
+        report('Wird in Firebase Storage hochgeladen…')
+        const downloadUrl = await withTimeout(
+          this.uploadFileToStorage(preparedFile, objectPath),
+          STORAGE_UPLOAD_TIMEOUT_MS,
+          'Storage-Upload Zeitüberschreitung'
+        )
+        uploadDataRaw = {
+          fileName: file.name,
+          fileType: type,
+          projectId,
+          employeeId,
+          filePath: downloadUrl,
+          storagePath: objectPath,
+          mimeType: preparedFile.type,
+          notes,
+          imageComment: comment,
+          uploadTime: serverTimestamp()
+        }
+      } catch (storageError) {
+        console.warn('Storage-Upload fehlgeschlagen, Fallback Firestore Base64:', storageError)
+        report('Speichere komprimiert in der Datenbank…')
+        // Das bereits aufbereitete (verkleinerte) Bild als Ausgangspunkt nehmen, falls vorhanden —
+        // so muss das große Original nicht erneut dekodiert werden.
+        const sourceForFallback = preparedFile ?? file
+        const { base64: base64String, mimeType } = await withTimeout(
+          this.compressImageForFirestoreUpload(sourceForFallback, type),
+          IMAGE_PREPARE_TIMEOUT_MS,
+          'Die Bildkomprimierung hat zu lange gedauert.'
+        )
+        uploadDataRaw = {
+          fileName: file.name,
+          fileType: type,
+          projectId,
+          employeeId,
+          base64Data: base64String,
+          mimeType,
+          notes,
+          imageComment: comment,
+          uploadTime: serverTimestamp()
+        }
       }
+
       if (options?.timeEntryId) {
         uploadDataRaw.timeEntryId = options.timeEntryId
       }
@@ -804,20 +1055,27 @@ class DataServiceClass {
         Object.entries(uploadDataRaw).filter(([, v]) => v !== undefined)
       )
 
-      const docRef = await addDoc(fileUploadsRef, uploadData)
-      const uploadDoc = await getDoc(docRef)
-      
+      report('Metadaten werden gespeichert…')
+      // Kein zusätzlicher getDoc-Readback: spart auf der Baustelle eine Netz-Runde und
+      // verhindert ein Hängenbleiben. Die benötigten Werte stehen bereits in uploadDataRaw.
+      const docRef = await withTimeout(
+        addDoc(fileUploadsRef, uploadData),
+        FIRESTORE_WRITE_TIMEOUT_MS,
+        'Speichern hat zu lange gedauert — vermutlich schlechtes Netz. Bitte später erneut versuchen.'
+      )
+
       return {
         id: docRef.id,
         fileName: file.name,
-        filePath: '', // Wird nicht verwendet bei Base64
+        filePath: String(uploadDataRaw.filePath ?? ''),
         fileType: type,
         projectId,
         employeeId,
         timeEntryId: options?.timeEntryId,
-        uploadTime: uploadDoc.data()?.uploadTime || new Date(),
+        uploadTime: new Date(),
         notes,
-        imageComment: comment
+        imageComment: comment,
+        mimeType: String(uploadDataRaw.mimeType ?? '')
       } as FileUpload
     } catch (error) {
       console.error('Fehler beim Hochladen der Datei:', error)
@@ -825,51 +1083,225 @@ class DataServiceClass {
     }
   }
 
-  private async compressImage(file: File, quality: number, maxWidth: number): Promise<File> {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          let width = img.width
-          let height = img.height
+  private isDocumentFileType(type: string): boolean {
+    return type === 'invoice' || type === 'delivery_note' || type === 'document'
+  }
 
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width
-            width = maxWidth
+  /**
+   * Dekodiert eine Bilddatei GENAU EINMAL in eine wiederverwendbare Zeichenquelle.
+   * Bevorzugt createImageBitmap (dekodiert ausserhalb des Main-Threads, deutlich schneller
+   * und schont das Handy), mit robustem Fallback auf ein <img>-Element.
+   */
+  private async decodeImageSource(
+    file: File
+  ): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        // imageOrientation: EXIF-Drehung anwenden (sonst liegen Handy-Fotos quer)
+        const bitmap = await createImageBitmap(file, {
+          imageOrientation: 'from-image'
+        } as ImageBitmapOptions)
+        if (bitmap.width > 0 && bitmap.height > 0) {
+          return {
+            source: bitmap,
+            width: bitmap.width,
+            height: bitmap.height,
+            release: () => bitmap.close()
           }
-
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, 0, 0, width, height)
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(new File([blob], file.name, { type: file.type }))
-              } else {
-                resolve(file)
-              }
-            },
-            file.type,
-            quality
-          )
         }
-        img.src = e.target?.result as string
+        bitmap.close()
+      } catch {
+        // Älterer Browser / nicht unterstütztes Format → <img>-Fallback
       }
-      reader.readAsDataURL(file)
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    try {
+      const img = await this.loadImageElement(objectUrl)
+      return {
+        source: img,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+        release: () => URL.revokeObjectURL(objectUrl)
+      }
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl)
+      throw error
+    }
+  }
+
+  private loadImageElement(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const timer = window.setTimeout(() => {
+        img.onload = null
+        img.onerror = null
+        reject(new Error('Bild konnte nicht rechtzeitig gelesen werden.'))
+      }, IMAGE_DECODE_TIMEOUT_MS)
+      img.onload = () => {
+        window.clearTimeout(timer)
+        resolve(img)
+      }
+      img.onerror = () => {
+        window.clearTimeout(timer)
+        reject(new Error('Bild konnte nicht gelesen werden (beschädigt oder nicht unterstützt).'))
+      }
+      img.src = src
     })
   }
 
-  private fileToBase64(file: File): Promise<string> {
+  /** Zeichnet eine bereits dekodierte Quelle skaliert auf ein Canvas und liefert ein Blob. */
+  private renderToBlob(
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number,
+    quality: number,
+    maxWidth: number,
+    outputType: string
+  ): Promise<Blob | null> {
+    let width = sourceWidth
+    let height = sourceHeight
+    const maxHeight = Math.round(maxWidth * 1.35)
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width
+      width = maxWidth
+    }
+    if (height > maxHeight) {
+      width = (width * maxHeight) / height
+      height = maxHeight
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(width))
+    canvas.height = Math.max(1, Math.round(height))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return Promise.resolve(null)
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), outputType, quality)
+    })
+  }
+
+  private resolveOutputType(file: File, forceJpeg?: boolean): string {
+    return forceJpeg || !(file.type || '').includes('png') ? 'image/jpeg' : 'image/png'
+  }
+
+  private blobToFile(blob: Blob, originalName: string, outputType: string): File {
+    const ext = outputType === 'image/png' ? '.png' : '.jpg'
+    const baseName = (originalName || 'upload').replace(/\.[^.]+$/, '') || 'upload'
+    return new File([blob], `${baseName}${ext}`, { type: outputType })
+  }
+
+  private async blobToBase64Parts(
+    blob: Blob,
+    fallbackMime: string
+  ): Promise<{ base64: string; mimeType: string }> {
+    const dataUrl = await this.blobToDataUrl(blob)
+    const base64 = dataUrl.split(',')[1] || ''
+    const mimeType = dataUrl.split(',')[0]?.split(':')[1]?.split(';')[0] || blob.type || fallbackMime
+    return { base64, mimeType }
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target?.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
+      reader.onerror = () => reject(new Error('Bilddaten konnten nicht gelesen werden.'))
+      reader.readAsDataURL(blob)
     })
+  }
+
+  /**
+   * Komprimiert so stark wie nötig, damit base64Data in Firestore passt (~1 MiB pro Feld).
+   * Startet mit hoher Qualität und reduziert schrittweise Breite/Qualität.
+   */
+  private async compressImageForFirestoreUpload(
+    file: File,
+    type: string
+  ): Promise<{ base64: string; mimeType: string }> {
+    const isDocument = this.isDocumentFileType(type)
+    let quality = isDocument ? 0.88 : 0.8
+    let maxWidth = isDocument ? 1800 : 1400
+    const minQuality = 0.42
+    const minWidth = 640
+    // base64 ist ~4/3 der Rohbytes — daraus die zulässige Blob-Grösse ableiten, statt
+    // bei jedem Versuch teuer base64 zu kodieren (nur das Gewinner-Blob wird kodiert).
+    const maxBlobBytes = Math.floor((FIRESTORE_MAX_BASE64_BYTES * 3) / 4)
+    const outputType = 'image/jpeg'
+
+    // Bild nur EINMAL dekodieren und für alle Versuche wiederverwenden — das war bisher
+    // der Flaschenhals (bis zu 12 Dekodierungen des Originals auf dem Handy → Timeout).
+    const decoded = await this.decodeImageSource(file)
+    try {
+      let smallestBlob: Blob | null = null
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const blob = await this.renderToBlob(
+          decoded.source,
+          decoded.width,
+          decoded.height,
+          quality,
+          maxWidth,
+          outputType
+        )
+        if (blob) {
+          if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob
+          if (blob.size <= maxBlobBytes) {
+            if (isDevMode && attempt > 0) {
+              console.log(
+                `Bild komprimiert (${attempt + 1}. Versuch): ${Math.round(blob.size / 1024)} KB`
+              )
+            }
+            return this.blobToBase64Parts(blob, outputType)
+          }
+        }
+
+        if (quality > minQuality + 0.08) {
+          quality -= 0.1
+        } else if (maxWidth > minWidth) {
+          maxWidth = Math.max(minWidth, Math.round(maxWidth * 0.72))
+          quality = isDocument ? 0.78 : 0.7
+        } else {
+          break
+        }
+      }
+
+      // Selbst die kleinste Variante nehmen, sofern sie noch unter dem harten Firestore-Limit liegt.
+      if (smallestBlob) {
+        const parts = await this.blobToBase64Parts(smallestBlob, outputType)
+        if (parts.base64.length <= FIRESTORE_MAX_BASE64_BYTES) return parts
+      }
+    } finally {
+      decoded.release()
+    }
+
+    throw new Error(
+      'Das Bild ist zu groß für die Datenbank (max. ca. 1 MB pro Foto). Bitte näher heranzoomen, weniger Bilder auf einmal speichern oder die Kamera-Auflösung reduzieren.'
+    )
+  }
+
+  private async compressImage(
+    file: File,
+    quality: number,
+    maxWidth: number,
+    options?: { forceJpeg?: boolean }
+  ): Promise<File> {
+    const decoded = await this.decodeImageSource(file)
+    try {
+      const outputType = this.resolveOutputType(file, options?.forceJpeg)
+      const blob = await this.renderToBlob(
+        decoded.source,
+        decoded.width,
+        decoded.height,
+        quality,
+        maxWidth,
+        outputType
+      )
+      // Falls toBlob fehlschlägt: lieber das Original hochladen als gar nichts.
+      return blob ? this.blobToFile(blob, file.name, outputType) : file
+    } finally {
+      decoded.release()
+    }
   }
 
   // Live Documentation
@@ -894,8 +1326,19 @@ class DataServiceClass {
         throw new Error('Zeiteintrag nicht gefunden')
       }
 
+      // Nur IDs + Text — keine Bilddaten im timeEntry (Firestore-Max. 1 MiB pro Dokument)
       const newDocumentation = {
-        ...documentationData,
+        notes: documentationData.notes || '',
+        photoCount: documentationData.photoCount,
+        documentCount: documentationData.documentCount,
+        addedBy: documentationData.addedBy,
+        addedByName: documentationData.addedByName,
+        imageIds: (documentationData.images || [])
+          .map((img: { id?: string }) => img?.id)
+          .filter((id): id is string => !!id),
+        documentIds: (documentationData.documents || [])
+          .map((doc: { id?: string }) => doc?.id)
+          .filter((id): id is string => !!id),
         timestamp: Timestamp.now()
       }
 
@@ -1682,7 +2125,9 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('clockOutTime', '==', null))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der aktuellen Zeiteinträge:', error)
       return []
@@ -1705,7 +2150,9 @@ class DataServiceClass {
       )
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der heutigen Zeiteinträge:', error)
       return []
@@ -1747,7 +2194,9 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('projectId', '==', projectId))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error(`Fehler beim Abrufen der Zeiteinträge für Projekt ${projectId}:`, error)
       return []
@@ -1755,8 +2204,64 @@ class DataServiceClass {
   }
 
   // Projekt-Dateien laden (wie in der alten App - aus Zeiteinträgen und zusätzlich direkt per projectId)
-  async getProjectFiles(projectId: string, type: string = 'construction_site'): Promise<FileUpload[]> {
+  async getFileUploadById(
+    id: string,
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload | null> {
     await this.authReadyPromise
+    if (!id?.trim() || isPlaceholderFileUploadId(id)) return null
+    try {
+      const snap = await getDoc(doc(db, 'fileUploads', id.trim()))
+      if (!snap.exists()) return null
+      return this.fileUploadFromDocData(snap.id, snap.data() as Record<string, unknown>, {
+        includeBinary: opts?.includeBinary === true
+      })
+    } catch (error) {
+      console.error(`Fehler beim Laden von fileUpload ${id}:`, error)
+      return null
+    }
+  }
+
+
+  /**
+   * Ergänzt Anzeige-URLs für Dateien, die ohne includeBinary geladen wurden
+   * (Firebase-Storage-Pfad, fehlende Download-URL oder Legacy-Base64).
+   */
+  async enrichFilesForDisplay(files: FileUpload[]): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    return Promise.all(
+      files.map(async (file) => {
+        if (getFileImageSrc(file)) return file
+
+        if (file.storagePath) {
+          try {
+            const url = await getDownloadURL(storageRef(storage, file.storagePath))
+            return { ...file, filePath: url }
+          } catch (error) {
+            if (isDevMode) {
+              console.warn('Storage-URL konnte nicht aufgelöst werden:', file.storagePath, error)
+            }
+          }
+        }
+
+        if (file.id) {
+          const full = await this.getFileUploadById(file.id, { includeBinary: true })
+          if (full && getFileImageSrc(full)) return full
+        }
+
+        return file
+      })
+    )
+  }
+
+  // Projekt-Dateien laden (wie in der alten App - aus Zeiteinträgen und zusätzlich direkt per projectId)
+  async getProjectFiles(
+    projectId: string,
+    type: string = 'construction_site',
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    const includeBinary = opts?.includeBinary === true
     try {
       if (!projectId) {
         console.error('Keine Projekt-ID angegeben')
@@ -1764,6 +2269,25 @@ class DataServiceClass {
       }
 
       const normalizedType = type === 'photo' ? 'construction_site' : type
+      const files: FileUpload[] = []
+      const seenIds = new Set<string>()
+
+      try {
+        const uploadsByProject = await this.getFileUploads(projectId, undefined, {
+          includeBinary
+        })
+        for (const u of uploadsByProject) {
+          if (u.id && !seenIds.has(u.id)) {
+            seenIds.add(u.id)
+            files.push(u)
+          }
+        }
+      } catch (extraErr) {
+        if (isDevMode) {
+          console.warn('Konnte Dateien über projectId nicht laden:', extraErr)
+        }
+      }
+
       const timeEntries = await this.getTimeEntriesByProject(projectId)
       if (!timeEntries || timeEntries.length === 0) {
         if (isDevMode) {
@@ -1855,18 +2379,17 @@ class DataServiceClass {
       // Alle Uploads mit timeEntryId zu Stempelsätzen dieses Projekts (falls Arrays im Eintrag unvollständig sind)
       const entryIdsForProject = timeEntries.map((e) => e.id).filter(Boolean) as string[]
       if (entryIdsForProject.length > 0) {
-        const linkedByTimeEntry = await this.getFileUploadsByTimeEntryIds(entryIdsForProject)
+        const linkedByTimeEntry = await this.getFileUploadsByTimeEntryIds(entryIdsForProject, {
+          includeBinary
+        })
         for (const u of linkedByTimeEntry) {
           if (u.id) fileIds.push(u.id)
         }
       }
 
-      // Entferne Duplikate
-      fileIds = [...new Set(fileIds)]
+      // Entferne Duplikate und bereits geladene IDs
+      fileIds = [...new Set(fileIds)].filter((id) => !seenIds.has(id))
 
-      // Lade Dateien aus fileUploads Collection basierend auf IDs
-      const files: FileUpload[] = []
-      
       if (fileIds.length > 0) {
         if (isDevMode) {
           console.log(`Lade ${fileIds.length} Dateien für Projekt ${projectId}, Typ: ${normalizedType}`)
@@ -1885,9 +2408,11 @@ class DataServiceClass {
             files.push(
               this.fileUploadFromDocData(fileDoc.id, data, {
                 projectIdFallback: projectId,
-                fileTypeFallback: normalizedType
+                fileTypeFallback: normalizedType,
+                includeBinary
               })
             )
+            seenIds.add(fileDoc.id)
           })
 
           if (isDevMode && chunkSnapshot.size < chunk.length) {
@@ -1903,32 +2428,21 @@ class DataServiceClass {
         }
       }
 
-      // Zusätzliche Dateien direkt über projectId (falls nicht in Zeiteinträgen referenziert)
-      try {
-        const uploadsByProject = await this.getFileUploads(projectId)
-        if (isDevMode) {
-          console.log(`Zusätzliche Dateien direkt über projectId (${projectId}):`, uploadsByProject.length)
-        }
-        uploadsByProject.forEach((u) => files.push(u))
-      } catch (extraErr) {
-        if (isDevMode) {
-          console.warn('Konnte zusätzliche Dateien über projectId nicht laden:', extraErr)
-        }
-      }
-
-      // Füge direkte Dateien hinzu
+      // Füge direkte Dateien hinzu (Legacy in Zeiteinträgen eingebettet)
       directFiles.forEach((file) => {
+        const filePath = String(file.url || file.filePath || '')
+        const legacyBase64 = includeBinary ? file.base64Data || file.base64 : undefined
         files.push({
           id: file.id || `direct-${Date.now()}-${Math.random()}`,
           fileName: file.fileName || file.name || 'Unbekannt',
-          filePath: file.url || file.filePath || '',
+          filePath: filePath.startsWith('data:') ? '' : filePath,
           fileType: file.fileType || normalizedType,
           projectId: file.projectId || projectId,
           employeeId: file.employeeId || '',
           uploadTime: file.timestamp ? this.convertToDate(file.timestamp) : new Date(),
           notes: file.notes || file.comment || '',
           imageComment: file.imageComment || file.comment || '',
-          base64Data: file.base64Data || file.base64,
+          base64Data: legacyBase64,
           mimeType: file.mimeType || file.type || 'image/jpeg'
         } as FileUpload)
       })
@@ -1997,11 +2511,11 @@ class DataServiceClass {
       })
 
       // Dedupliziere nach id (falls über Zeiteinträge + direct + projectId doppelt)
-      const seenIds = new Set<string>()
+      const dedupeKeys = new Set<string>()
       filteredFiles = filteredFiles.filter((f) => {
         const key = f.id || `${f.fileName}-${f.projectId}`
-        if (seenIds.has(key)) return false
-        seenIds.add(key)
+        if (dedupeKeys.has(key)) return false
+        dedupeKeys.add(key)
         return true
       })
 
@@ -2052,7 +2566,9 @@ class DataServiceClass {
       const timeEntriesRef = collection(db, 'timeEntries')
       const snapshot = await getDocs(timeEntriesRef)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen aller Zeiteinträge:', error)
       return []
@@ -2060,9 +2576,13 @@ class DataServiceClass {
   }
 
   /** Alle fileUploads, die explizit an einen Stempelsatz gebunden sind (auch wenn projectId/Arrays abweichen). */
-  async getFileUploadsByTimeEntryIds(timeEntryIds: string[]): Promise<FileUpload[]> {
+  async getFileUploadsByTimeEntryIds(
+    timeEntryIds: string[],
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
     await this.authReadyPromise
     if (!timeEntryIds || timeEntryIds.length === 0) return []
+    const includeBinary = opts?.includeBinary === true
     const out: FileUpload[] = []
     const chunkSize = 10
     for (let i = 0; i < timeEntryIds.length; i += chunkSize) {
@@ -2075,7 +2595,10 @@ class DataServiceClass {
         snapshot.docs.forEach((fileDoc) => {
           const data = fileDoc.data() as Record<string, unknown>
           out.push(
-            this.fileUploadFromDocData(fileDoc.id, data, { fileTypeFallback: 'construction_site' })
+            this.fileUploadFromDocData(fileDoc.id, data, {
+              fileTypeFallback: 'construction_site',
+              includeBinary
+            })
           )
         })
       } catch (e) {
@@ -2085,7 +2608,11 @@ class DataServiceClass {
     return out
   }
 
-  async getFileUploads(projectId?: string, type?: string): Promise<FileUpload[]> {
+  async getFileUploads(
+    projectId?: string,
+    type?: string,
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
     await this.authReadyPromise
     try {
       const fileUploadsRef = collection(db, 'fileUploads')
@@ -2116,13 +2643,15 @@ class DataServiceClass {
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - DATEN:`, JSON.stringify(dataCopy, null, 2))
         }
 
-        return this.fileUploadFromDocData(doc.id, data)
+        return this.fileUploadFromDocData(doc.id, data, {
+          includeBinary: opts?.includeBinary === true
+        })
       })
-      
+
       if (type) {
-        uploads = uploads.filter(upload => upload.fileType === type)
+        uploads = uploads.filter((upload) => upload.fileType === type)
       }
-      
+
       return uploads
     } catch (error) {
       console.error('Fehler beim Abrufen der Datei-Uploads:', error)

@@ -22,14 +22,18 @@ interface PhotoUploadProps {
   onItemsChange: (items: PhotoUploadItem[]) => void
   maxPhotos?: number
   commentFieldLabel?: string
+  /** document = höhere Qualität, Scan-Hinweise (Lieferscheine/Rechnungen) */
+  captureMode?: 'photo' | 'document'
 }
 
 const PhotoUpload: React.FC<PhotoUploadProps> = ({
   label,
   onItemsChange,
   maxPhotos = 10,
-  commentFieldLabel = 'Kommentar zu diesem Bild (optional)'
+  commentFieldLabel = 'Kommentar zu diesem Bild (optional)',
+  captureMode = 'photo'
 }) => {
+  const isDocumentMode = captureMode === 'document'
   const [slots, setSlots] = useState<PhotoUploadSlot[]>([])
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
@@ -106,8 +110,8 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
           className="file-input"
           onChange={(e) => handleFileSelect(e.target.files)}
         />
-        <label htmlFor={`camera-${label}`} className="file-label">
-          Kamera öffnen
+        <label htmlFor={`camera-${label}`} className="file-label file-label-primary">
+          {isDocumentMode ? 'Dokument scannen (Kamera)' : 'Kamera öffnen'}
         </label>
 
         <input
@@ -120,8 +124,15 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
           onChange={(e) => handleFileSelect(e.target.files)}
         />
         <label htmlFor={`gallery-${label}`} className="file-label">
-          Galerie öffnen
+          {isDocumentMode ? 'Aus Dateien wählen' : 'Galerie öffnen'}
         </label>
+
+        {isDocumentMode && (
+          <p className="photo-upload-scan-hint">
+            Für Lieferscheine und Rechnungen: Dokument flach ablegen, gute Beleuchtung, Kamera
+            möglichst gerade darüber halten — ähnlich wie beim iPhone-Scanner.
+          </p>
+        )}
 
         {slots.length > 0 && (
           <div className="photo-upload-slots">
