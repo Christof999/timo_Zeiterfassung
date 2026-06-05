@@ -62,6 +62,7 @@ export interface HeroDiagnosticsResponse {
   keyInfo: {
     rawLength: number
     trimmedLength: number
+    preview: string
     hadSurroundingWhitespace: boolean
     hasSurroundingQuotes: boolean
     containsInnerWhitespace: boolean

@@ -71,9 +71,13 @@ function dequote(s) {
 function analyzeKey(raw) {
   const trimmed = raw.trim()
   const cleaned = dequote(trimmed)
+  // Vorschau zum Abgleich mit der HERO-Erstellungsseite (erste 6 + letzte 2).
+  const preview =
+    cleaned.length > 12 ? `${cleaned.slice(0, 6)}…${cleaned.slice(-2)}` : '••••'
   return {
     rawLength: raw.length,
     trimmedLength: trimmed.length,
+    preview,
     hadSurroundingWhitespace: raw !== trimmed,
     hasSurroundingQuotes: cleaned !== trimmed,
     containsInnerWhitespace: /\s/.test(cleaned),

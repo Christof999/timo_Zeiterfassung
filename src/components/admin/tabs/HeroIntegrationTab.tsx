@@ -235,7 +235,8 @@ const HeroIntegrationTab: React.FC = () => {
             {!diagnostics.reachable && diagnostics.keyInfo && (
               <div className="hero-keycheck">
                 <p>
-                  <strong>Key-Format-Prüfung</strong> (Länge {diagnostics.keyInfo.trimmedLength}):
+                  <strong>Key-Format-Prüfung</strong> (Länge {diagnostics.keyInfo.trimmedLength},
+                  Vorschau <code>{diagnostics.keyInfo.preview}</code> – mit HERO abgleichen):
                 </p>
                 <ul className="hero-field-check">
                   <li className={diagnostics.keyInfo.hasSurroundingQuotes ? 'error' : 'ok'}>
