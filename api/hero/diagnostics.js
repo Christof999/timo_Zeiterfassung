@@ -56,11 +56,60 @@ function isEmpty(v) {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '')
 }
 
+// Surrounding-Quotes entfernen (häufiger Vercel-Copy-Fehler).
+function dequote(s) {
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    return s.slice(1, -1)
+  }
+  return s
+}
+
+// PII-sichere Analyse des Key-Werts (gibt NIE den Key selbst zurück).
+function analyzeKey(raw) {
+  const trimmed = raw.trim()
+  const cleaned = dequote(trimmed)
+  return {
+    rawLength: raw.length,
+    trimmedLength: trimmed.length,
+    hadSurroundingWhitespace: raw !== trimmed,
+    hasSurroundingQuotes: cleaned !== trimmed,
+    containsInnerWhitespace: /\s/.test(cleaned),
+    startsWithBearer: /^bearer\s/i.test(cleaned),
+    looksLikeJwt: cleaned.split('.').length === 3
+  }
+}
+
+// Rohanfrage mit beliebigen Auth-Headern; gibt Status/Fehler zurück, nie Daten.
+async function probeRequest(url, headers) {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
+      body: JSON.stringify({ query: 'query { __typename }' })
+    })
+    const text = await res.text()
+    let p = null
+    try {
+      p = text ? JSON.parse(text) : null
+    } catch {
+      /* kein JSON */
+    }
+    const errMsg = p?.errors?.[0]?.message || p?.message || (res.ok ? null : `HTTP ${res.status}`)
+    return { status: res.status, ok: res.ok && !p?.errors?.length, error: errMsg }
+  } catch (e) {
+    return { status: 0, ok: false, error: e?.message || 'Netzwerkfehler' }
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' })
   }
 
+  const rawKey = String(process.env.HERO_API_KEY || '')
   const result = {
     success: true,
     syncEnabled: isHeroSyncEnabled(),
@@ -68,6 +117,8 @@ module.exports = async function handler(req, res) {
     graphqlUrl: getHeroGraphqlUrl(),
     reachable: false,
     error: null,
+    keyInfo: rawKey ? analyzeKey(rawKey) : null,
+    authProbe: null,
     availableQueries: { relevant: [], total: 0 },
     projects: null
   }
@@ -83,6 +134,33 @@ module.exports = async function handler(req, res) {
     result.reachable = true
   } catch (error) {
     result.error = error?.message || 'HERO API nicht erreichbar'
+  }
+
+  // 1b) Wenn Auth fehlschlägt: verschiedene Header-/Key-Varianten testen,
+  //     um Format-Probleme (Quotes, „Bearer“ im Wert, falsches Schema) zu finden.
+  if (!result.reachable) {
+    const url = getHeroGraphqlUrl()
+    const cleaned = dequote(rawKey.trim())
+    const variants = [
+      { scheme: 'Authorization: Bearer <key>', headers: { Authorization: `Bearer ${cleaned}` } },
+      { scheme: 'Authorization: <key> (ohne Bearer)', headers: { Authorization: cleaned } },
+      { scheme: 'Authorization: Token <key>', headers: { Authorization: `Token ${cleaned}` } },
+      { scheme: 'X-Api-Key: <key>', headers: { 'X-Api-Key': cleaned } },
+      { scheme: 'apikey: <key>', headers: { apikey: cleaned } }
+    ]
+    const probe = []
+    for (const v of variants) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await probeRequest(url, v.headers)
+      probe.push({ scheme: v.scheme, ...r })
+    }
+    result.authProbe = probe
+    const working = probe.find((p) => p.ok)
+    if (working) {
+      result.error =
+        `Auth-Format-Problem: HERO akzeptiert „${working.scheme}". ` +
+        'Der Standard-Header schlägt fehl – siehe authProbe.'
+    }
     return res.status(200).json(result)
   }
 

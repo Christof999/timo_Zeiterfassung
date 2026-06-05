@@ -59,6 +59,21 @@ export interface HeroDiagnosticsResponse {
   graphqlUrl: string
   reachable: boolean
   error: string | null
+  keyInfo: {
+    rawLength: number
+    trimmedLength: number
+    hadSurroundingWhitespace: boolean
+    hasSurroundingQuotes: boolean
+    containsInnerWhitespace: boolean
+    startsWithBearer: boolean
+    looksLikeJwt: boolean
+  } | null
+  authProbe: Array<{
+    scheme: string
+    status: number
+    ok: boolean
+    error: string | null
+  }> | null
   availableQueries: { relevant: string[]; total: number; error?: string }
   projects: {
     count: number

@@ -232,6 +232,47 @@ const HeroIntegrationTab: React.FC = () => {
               </li>
             </ul>
 
+            {!diagnostics.reachable && diagnostics.keyInfo && (
+              <div className="hero-keycheck">
+                <p>
+                  <strong>Key-Format-Prüfung</strong> (Länge {diagnostics.keyInfo.trimmedLength}):
+                </p>
+                <ul className="hero-field-check">
+                  <li className={diagnostics.keyInfo.hasSurroundingQuotes ? 'error' : 'ok'}>
+                    {diagnostics.keyInfo.hasSurroundingQuotes ? '✗' : '✓'} Anführungszeichen um den Wert
+                    {diagnostics.keyInfo.hasSurroundingQuotes ? ' – in Vercel entfernen!' : ' – keine'}
+                  </li>
+                  <li className={diagnostics.keyInfo.containsInnerWhitespace ? 'error' : 'ok'}>
+                    {diagnostics.keyInfo.containsInnerWhitespace ? '✗' : '✓'} Leerzeichen/Umbruch im Key
+                    {diagnostics.keyInfo.containsInnerWhitespace ? ' – Key ist umgebrochen/kaputt!' : ' – keine'}
+                  </li>
+                  <li className={diagnostics.keyInfo.startsWithBearer ? 'error' : 'ok'}>
+                    {diagnostics.keyInfo.startsWithBearer ? '✗' : '✓'} Wort „Bearer" steht im Wert
+                    {diagnostics.keyInfo.startsWithBearer ? ' – „Bearer " aus dem Wert löschen!' : ' – nein'}
+                  </li>
+                  <li className={diagnostics.keyInfo.hadSurroundingWhitespace ? 'warn' : 'ok'}>
+                    {diagnostics.keyInfo.hadSurroundingWhitespace ? '⚠' : '✓'} Führende/abschließende Leerzeichen
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            {diagnostics.authProbe && (
+              <div className="hero-authprobe">
+                <p>
+                  <strong>Auth-Test</strong> (welches Header-Format akzeptiert HERO?):
+                </p>
+                <ul className="hero-field-check">
+                  {diagnostics.authProbe.map((p) => (
+                    <li key={p.scheme} className={p.ok ? 'ok' : 'error'}>
+                      {p.ok ? '✓' : '✗'} <code>{p.scheme}</code> – HTTP {p.status}
+                      {p.error ? ` – ${p.error}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {diagnostics.availableQueries.relevant.length > 0 && (
               <>
                 <p>
