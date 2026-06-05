@@ -1089,6 +1089,60 @@
   font-size: var(--font-size-sm);
 }
 
+.hero-integration-tab .hero-query-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.hero-integration-tab .hero-query-list code,
+.hero-integration-tab .hero-field-check code {
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+}
+
+.hero-integration-tab .hero-field-check {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+}
+
+.hero-integration-tab .hero-field-check li {
+  padding: 0.15rem 0;
+}
+
+.hero-integration-tab .hero-field-check li.ok {
+  color: var(--text-secondary);
+}
+
+.hero-integration-tab .hero-field-check li.warn {
+  color: var(--warning-color, #b8860b);
+}
+
+.hero-integration-tab .hero-field-check li.error {
+  color: var(--danger-color, #c0392b);
+}
+
+.hero-integration-tab .hero-json {
+  max-height: 320px;
+  overflow: auto;
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+  padding: var(--spacing-sm);
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  white-space: pre;
+}
+
+.hero-integration-tab details summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-sm);
+}
+
 
 /* ===== Listen-Suche (Mitarbeiter, Projekte, Material, …) ===== */
 .list-search {

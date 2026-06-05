@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DataService } from '../../../services/dataService'
-import { heroService, type HeroHealthResponse } from '../../../services/heroService'
+import {
+  heroService,
+  type HeroHealthResponse,
+  type HeroDiagnosticsResponse
+} from '../../../services/heroService'
 import type { Employee, HeroIntegrationConfig, HeroSyncLogEntry } from '../../../types'
 import { toast } from '../../ToastContainer'
 import '../../../styles/AdminTabs.css'
 
 const HeroIntegrationTab: React.FC = () => {
   const [health, setHealth] = useState<HeroHealthResponse | null>(null)
+  const [diagnostics, setDiagnostics] = useState<HeroDiagnosticsResponse | null>(null)
+  const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false)
   const [config, setConfig] = useState<HeroIntegrationConfig | null>(null)
   const [logs, setLogs] = useState<HeroSyncLogEntry[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -57,6 +63,33 @@ const HeroIntegrationTab: React.FC = () => {
       toast.error(error?.message || 'Verbindungstest fehlgeschlagen')
     } finally {
       setIsCheckingHealth(false)
+    }
+  }
+
+  const handleRunDiagnostics = async () => {
+    setIsRunningDiagnostics(true)
+    try {
+      const result = await heroService.runDiagnostics()
+      setDiagnostics(result)
+      if (result.reachable) {
+        toast.success(`HERO erreichbar – ${result.projects?.count ?? 0} Projekt(e) gelesen`)
+      } else {
+        toast.error(result.error || 'HERO nicht erreichbar')
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Feld-Diagnose fehlgeschlagen')
+    } finally {
+      setIsRunningDiagnostics(false)
+    }
+  }
+
+  const handleCopyDiagnostics = async () => {
+    if (!diagnostics) return
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2))
+      toast.success('Diagnose in die Zwischenablage kopiert')
+    } catch {
+      toast.error('Kopieren nicht möglich – bitte Text manuell markieren')
     }
   }
 
@@ -135,6 +168,14 @@ const HeroIntegrationTab: React.FC = () => {
           </button>
           <button
             type="button"
+            className="btn secondary-btn"
+            disabled={isRunningDiagnostics}
+            onClick={handleRunDiagnostics}
+          >
+            {isRunningDiagnostics ? 'Teste Felder…' : 'HERO-Felder testen'}
+          </button>
+          <button
+            type="button"
             className="btn primary-btn"
             disabled={isSyncingProjects}
             onClick={handleSyncProjects}
@@ -161,6 +202,80 @@ const HeroIntegrationTab: React.FC = () => {
 
         {!health && (
           <p className="tab-hint">Tipp: „Verbindung testen“ prüft Key und HERO GraphQL auf dem Server.</p>
+        )}
+      </section>
+
+      <section className="hero-card">
+        <h4>HERO-Felder-Diagnose</h4>
+        <p className="tab-hint">
+          „HERO-Felder testen“ liest direkt bei HERO, welche Werte für die Zeiterfassungs-Übergabe
+          verfügbar sind – ohne Firebase, nur mit dem in Vercel hinterlegten <code>HERO_API_KEY</code>.
+          Es werden keine Kundendaten angezeigt, nur die Feldstruktur.
+        </p>
+
+        {!diagnostics && (
+          <p className="tab-hint">Noch keine Diagnose ausgeführt.</p>
+        )}
+
+        {diagnostics && (
+          <div className="hero-diagnostics">
+            <ul className="hero-status-list">
+              <li>
+                API-Key hinterlegt: <strong>{diagnostics.hasApiKey ? 'ja' : 'nein'}</strong>
+              </li>
+              <li>
+                HERO erreichbar: <strong>{diagnostics.reachable ? 'ja' : 'nein'}</strong>
+                {diagnostics.error ? ` – ${diagnostics.error}` : ''}
+              </li>
+              <li>
+                Projekte gelesen: <strong>{diagnostics.projects?.count ?? 0}</strong>
+              </li>
+            </ul>
+
+            {diagnostics.availableQueries.relevant.length > 0 && (
+              <>
+                <p>
+                  <strong>Verfügbare HERO-Abfragen</strong> (relevant für Zeit/Personal/Projekt, von{' '}
+                  {diagnostics.availableQueries.total} gesamt):
+                </p>
+                <p className="hero-query-list">
+                  {diagnostics.availableQueries.relevant.map((q) => (
+                    <code key={q}>{q}</code>
+                  ))}
+                </p>
+              </>
+            )}
+
+            {diagnostics.projects && diagnostics.projects.fieldCheck.length > 0 && (
+              <>
+                <p>
+                  <strong>Pflicht-/Soll-Felder</strong> (fehlende Werte über alle Projekte):
+                </p>
+                <ul className="hero-field-check">
+                  {diagnostics.projects.fieldCheck.map((f) => {
+                    const mark = f.missing === 0 ? '✓' : f.severity === 'required' ? '✗' : '⚠'
+                    const cls =
+                      f.missing === 0 ? 'ok' : f.severity === 'required' ? 'error' : 'warn'
+                    return (
+                      <li key={f.path} className={cls}>
+                        {mark} <code>{f.path}</code> [{f.severity}] – fehlt {f.missing}/{f.total}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
+            )}
+
+            <div className="hero-actions">
+              <button type="button" className="btn secondary-btn btn-sm" onClick={handleCopyDiagnostics}>
+                Diagnose kopieren
+              </button>
+            </div>
+            <details>
+              <summary>Rohdaten (Feldstruktur als JSON)</summary>
+              <pre className="hero-json">{JSON.stringify(diagnostics, null, 2)}</pre>
+            </details>
+          </div>
         )}
       </section>
 

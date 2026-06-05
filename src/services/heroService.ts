@@ -52,9 +52,45 @@ export interface HeroProjectSyncResponse {
   }
 }
 
+export interface HeroDiagnosticsResponse {
+  success: boolean
+  syncEnabled: boolean
+  hasApiKey: boolean
+  graphqlUrl: string
+  reachable: boolean
+  error: string | null
+  availableQueries: { relevant: string[]; total: number; error?: string }
+  projects: {
+    count: number
+    sampleShape: unknown
+    fieldCheck: Array<{
+      path: string
+      severity: 'required' | 'recommended' | 'optional'
+      missing: number
+      total: number
+    }>
+  } | null
+}
+
 export const heroService = {
   async checkHealth(): Promise<HeroHealthResponse> {
     return heroApiFetch<HeroHealthResponse>('/api/hero/health', { method: 'GET' })
+  },
+
+  // Firebase-freier Diagnose-Endpunkt – braucht nur HERO_API_KEY in Vercel.
+  async runDiagnostics(): Promise<HeroDiagnosticsResponse> {
+    const response = await fetch('/api/hero/diagnostics', {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const message =
+        (payload as { error?: string })?.error ||
+        `HERO Diagnose Fehler (HTTP ${response.status})`
+      throw new Error(message)
+    }
+    return payload as HeroDiagnosticsResponse
   },
 
   async syncProjects(): Promise<HeroProjectSyncResponse> {
