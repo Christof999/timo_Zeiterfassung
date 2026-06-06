@@ -11,6 +11,7 @@ import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
 import HeroIntegrationTab from './tabs/HeroIntegrationTab'
+import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
 import '../../styles/AdminDashboard.css'
@@ -338,6 +339,8 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
         </div>
       </main>
+
+      <MoergelChat admin={{ id: currentAdmin.id, name: currentAdmin.name }} />
     </div>
   )
 }
