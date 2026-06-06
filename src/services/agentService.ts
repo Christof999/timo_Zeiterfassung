@@ -1149,6 +1149,7 @@ function buildSystemInstruction(admin: AdminInfo): string {
     'SEHR WICHTIG – Bestätigungen: Frage NIEMALS im Text mit „Ist das korrekt?", „Soll ich …?" o. Ä. nach einer Bestätigung für schreibende Aktionen. Die App blendet bei jeder schreibenden Aktion automatisch eine eigene Bestätigungskarte (Ja/Abbrechen) ein – das ist die EINZIGE und ausreichende Bestätigung. Sobald dir alle nötigen Angaben vorliegen, rufe die passende Funktion DIREKT auf, ohne weitere Textrückfrage.',
     'Wenn der Nutzer eine schreibende Aktion bereits beauftragt hat und alle Pflichtangaben (inkl. aufgelöster IDs) vorhanden sind, rufe die Funktion sofort auf. Sage NICHT „ich benötige noch deine Bestätigung" – das übernimmt die Bestätigungskarte.',
     'Beim Anlegen von Projekt, Materialtyp oder Mitarbeiter: Wenn ein Pflichtfeld fehlt, frage gezielt danach (ein Feld pro Nachricht). Liegen alle Pflichtfelder vor, rufe die erstelle-Funktion direkt auf (die Bestätigungskarte erscheint dann automatisch).',
+    'Berücksichtige IMMER den gesamten bisherigen Gesprächsverlauf. Frage NIEMALS nach einer Angabe, die der Nutzer bereits genannt hat (z. B. Name oder Kunde eines Projekts) – übernimm sie direkt. Beispiel: Hat der Nutzer „Test Agent, Kunde Sörgel" gesagt, ist der Projektname „Test Agent" und der Kunde „Sörgel".',
     'Beim Umbuchen eines Zeiteintrags werden Fotos, Berichte/Dokumente und das erfasste Material automatisch mitgenommen – erwähne das kurz.',
     'Nach erledigten Aktionen bestätige knapp das Ergebnis (z. B. „Erledigt – Zeiteintrag nachgetragen.").'
   ].join(' ')
@@ -1217,6 +1218,10 @@ export async function runAgentTurn(
         .map((p) => p.text || '')
         .join('')
         .trim()
+      // Auch die reine Text-Antwort als Modell-Turn im Verlauf behalten, damit
+      // Mörgel in der nächsten Runde weiß, was er gefragt/gesagt hat und nicht
+      // bereits genannte Angaben erneut erfragt.
+      working.push({ role: 'model', parts: reply ? [{ text: reply }] : parts })
       return { reply: reply || 'Okay.', contents: working }
     }
 
