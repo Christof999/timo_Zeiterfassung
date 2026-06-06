@@ -166,6 +166,18 @@ const toolDeclarations = [
       required: ['mitarbeiterId']
     }
   },
+  {
+    name: 'werArbeitetGerade',
+    description:
+      'Live-Übersicht: Welche Mitarbeiter sind aktuell eingestempelt (arbeiten gerade) – mit Projekt, Startzeit und bisheriger Arbeitsdauer.',
+    parameters: { type: 'object', properties: {} }
+  },
+  {
+    name: 'heutigeArbeitszeiten',
+    description:
+      'Wer hat heute wie lange gearbeitet: Arbeitszeit pro Mitarbeiter für heute (laufende Einträge werden bis jetzt gerechnet), inkl. Projekte und Status (läuft/abgeschlossen).',
+    parameters: { type: 'object', properties: {} }
+  },
 
   // --- Zeiteinträge ändern ---
   {
@@ -728,6 +740,84 @@ async function executeTool(
       }
     }
 
+    case 'werArbeitetGerade': {
+      const entries = await DataService.getCurrentTimeEntries()
+      const employees = await DataService.getAllEmployees()
+      const projects = await DataService.getAllProjects()
+      const empName = (id: string) => {
+        const e = employees.find((x) => x.id === id)
+        return e ? getEmployeeDisplayName(e) : id
+      }
+      const projName = (id: string) => projects.find((p) => p.id === id)?.name || id
+      const now = Date.now()
+      const aktiveMitarbeiter = entries
+        .map((e) => {
+          const start = toJsDate(e.clockInTime)
+          const pauseMs = typeof e.pauseTotalTime === 'number' ? e.pauseTotalTime : 0
+          const stunden = start ? Math.max(0, (now - start.getTime() - pauseMs) / 3_600_000) : null
+          return {
+            mitarbeiter: empName(e.employeeId),
+            projekt: projName(e.projectId),
+            seit: fmtDateTime(e.clockInTime),
+            bisherStunden: stunden != null ? Math.round(stunden * 100) / 100 : null
+          }
+        })
+        .sort((a, b) => (b.bisherStunden || 0) - (a.bisherStunden || 0))
+      return { anzahlAktiv: aktiveMitarbeiter.length, aktiveMitarbeiter }
+    }
+    case 'heutigeArbeitszeiten': {
+      const entries = await DataService.getTodaysTimeEntries()
+      const employees = await DataService.getAllEmployees()
+      const projects = await DataService.getAllProjects()
+      const empName = (id: string) => {
+        const e = employees.find((x) => x.id === id)
+        return e ? getEmployeeDisplayName(e) : id
+      }
+      const projName = (id: string) => projects.find((p) => p.id === id)?.name || id
+      const now = Date.now()
+      const byEmp = new Map<
+        string,
+        { mitarbeiter: string; gesamtStunden: number; laeuftNoch: boolean; eintraege: any[] }
+      >()
+      for (const e of entries) {
+        const start = toJsDate(e.clockInTime)
+        if (!start) continue
+        const laeuft = e.clockOutTime == null
+        let stunden: number
+        if (laeuft) {
+          const pauseMs = typeof e.pauseTotalTime === 'number' ? e.pauseTotalTime : 0
+          stunden = Math.max(0, (now - start.getTime() - pauseMs) / 3_600_000)
+        } else {
+          stunden = durationHours(e) || 0
+        }
+        const cur = byEmp.get(e.employeeId) || {
+          mitarbeiter: empName(e.employeeId),
+          gesamtStunden: 0,
+          laeuftNoch: false,
+          eintraege: []
+        }
+        cur.gesamtStunden += stunden
+        cur.laeuftNoch = cur.laeuftNoch || laeuft
+        cur.eintraege.push({
+          projekt: projName(e.projectId),
+          start: fmtDateTime(e.clockInTime),
+          ende: e.clockOutTime ? fmtDateTime(e.clockOutTime) : 'läuft noch',
+          stunden: Math.round(stunden * 100) / 100
+        })
+        byEmp.set(e.employeeId, cur)
+      }
+      const mitarbeiter = Array.from(byEmp.values())
+        .map((m) => ({ ...m, gesamtStunden: Math.round(m.gesamtStunden * 100) / 100 }))
+        .sort((a, b) => b.gesamtStunden - a.gesamtStunden)
+      const heute = new Date().toLocaleDateString('de-DE', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+      return { datum: heute, anzahlMitarbeiter: mitarbeiter.length, mitarbeiter }
+    }
+
     // --- Zeiteinträge ändern ---
     case 'aendereZeiten': {
       const update: Partial<TimeEntry> = {}
@@ -1050,6 +1140,7 @@ function buildSystemInstruction(admin: AdminInfo): string {
   return [
     `Du bist „Mörgel", der freundliche KI-Assistent im Admin-Panel der ${APP_DISPLAY_NAME}.`,
     `Du hilfst dem Administrator${admin.name ? ` (${admin.name})` : ''}, die App umfassend zu steuern: Zeiteinträge ändern/anlegen/umbuchen/löschen, Pausen setzen, Materialverbrauch an Zeiteinträgen eintragen/entfernen, Materialtypen (Katalog) anlegen/bearbeiten/löschen, Projekte/Mitarbeiter anlegen, bearbeiten und archivieren/deaktivieren, Urlaubsanträge anzeigen/genehmigen/ablehnen sowie Stunden- und Material-Auswertungen für Mitarbeiter und Projekte erstellen.`,
+    'Du kannst außerdem live Auskunft geben, wer gerade arbeitet (werArbeitetGerade) und wer heute wie lange gearbeitet hat (heutigeArbeitszeiten). Laufende Einträge werden dabei bis zum aktuellen Zeitpunkt gerechnet.',
     'Materialverbrauch (z. B. m², Stück, Sack) wird direkt an einem Zeiteintrag erfasst. Der Material-Katalog (Materialtypen mit Einheit und Preis) ist davon getrennt.',
     `Heutiges Datum: ${heute}. Rechne relative Angaben wie „gestern" oder „letzten Montag" in konkrete Daten um.`,
     'Antworte immer auf Deutsch, kurz und klar.',
