@@ -74,13 +74,23 @@ function analyzeKey(raw) {
   // Vorschau zum Abgleich mit der HERO-Erstellungsseite (erste 6 + letzte 2).
   const preview =
     cleaned.length > 12 ? `${cleaned.slice(0, 6)}…${cleaned.slice(-2)}` : '••••'
+  // Versteckte / nicht-druckbare / Nicht-ASCII-Zeichen erkennen (z. B. ein aus
+  // Copy&Paste eingeschlepptes Zero-Width-Space). Diese macht der Whitespace-Test
+  // (\s) NICHT sichtbar, sie machen den Key bei HERO aber ungültig.
+  const nonAscii = [...cleaned].filter((ch) => {
+    const code = ch.codePointAt(0)
+    return code < 0x20 || code > 0x7e
+  })
   return {
     rawLength: raw.length,
     trimmedLength: trimmed.length,
+    cleanedLength: cleaned.length,
     preview,
     hadSurroundingWhitespace: raw !== trimmed,
     hasSurroundingQuotes: cleaned !== trimmed,
     containsInnerWhitespace: /\s/.test(cleaned),
+    nonAsciiCharCount: nonAscii.length,
+    hasHiddenOrNonAsciiChars: nonAscii.length > 0,
     startsWithBearer: /^bearer\s/i.test(cleaned),
     looksLikeJwt: cleaned.split('.').length === 3
   }
