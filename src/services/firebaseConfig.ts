@@ -26,8 +26,11 @@ const app = initializeApp(firebaseConfig)
 
 // Explizites Long-Polling umgeht häufige WebChannel-/Proxy-Probleme (Safari, strenge Netze),
 // die sonst als "Load failed" / abgebrochene Streams (DOMException) in der Konsole erscheinen.
+// ignoreUndefinedProperties: undefined-Felder werden beim Schreiben ignoriert statt einen
+// Fehler auszulösen (Firestore lehnt undefined sonst global ab – u.a. beim Ausstempeln).
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true
+  experimentalForceLongPolling: true,
+  ignoreUndefinedProperties: true
 })
 export const storage = getStorage(app)
 export const auth = getAuth(app)

@@ -8,13 +8,22 @@ export function toFileUploadRef(upload: FileUpload): {
   filePath?: string
   imageComment?: string
 } {
-  return {
-    id: upload.id,
-    fileName: upload.fileName,
-    fileType: upload.fileType,
-    filePath: upload.filePath || undefined,
-    imageComment: upload.imageComment || undefined
-  }
+  // Firestore (ohne ignoreUndefinedProperties) lehnt undefined-Felder ab.
+  // Daher nur tatsächlich vorhandene Felder übernehmen.
+  const ref: {
+    id: string
+    fileName?: string
+    fileType?: string
+    filePath?: string
+    imageComment?: string
+  } = { id: upload.id }
+
+  if (upload.fileName) ref.fileName = upload.fileName
+  if (upload.fileType) ref.fileType = upload.fileType
+  if (upload.filePath) ref.filePath = upload.filePath
+  if (upload.imageComment) ref.imageComment = upload.imageComment
+
+  return ref
 }
 
 export function stripBase64FromUploadReturn(upload: FileUpload): FileUpload {
