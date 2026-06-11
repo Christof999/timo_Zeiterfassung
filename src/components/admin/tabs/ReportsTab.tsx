@@ -12,8 +12,8 @@ import '../../../styles/ReportPrint.css'
 type ReportType = 'employee' | 'project'
 type ReportEntrySource = 'time-entry' | 'leave-request'
 
-const VACATION_WORK_MINUTES = 10 * 60
-const VACATION_WORK_HOURS_LABEL = '10:00'
+const VACATION_WORK_MINUTES = 8 * 60
+const VACATION_WORK_HOURS_LABEL = '8:00'
 
 interface ReportEntry {
   id: string
