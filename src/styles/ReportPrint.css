@@ -304,6 +304,29 @@
   box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.1);
 }
 
+.inline-edit:disabled {
+  opacity: 1;
+  cursor: default;
+  color: var(--text-color);
+}
+
+.report-table tbody tr.vacation-report-row {
+  background: rgba(74, 124, 89, 0.08);
+}
+
+.report-table tbody tr.holiday-report-row {
+  background: rgba(255, 193, 7, 0.12);
+}
+
+.date-cell .day-marker {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: normal;
+}
+
 .time-input {
   width: 90px;
   text-align: center;

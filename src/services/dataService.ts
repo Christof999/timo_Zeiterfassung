@@ -367,6 +367,111 @@ class DataServiceClass {
     }
   }
 
+  private getDateKeyFromValue(value: unknown): string {
+    const date = this.convertToDate(value)
+    return formatDateForInputLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
+  }
+
+  private isWeekendDate(date: Date): boolean {
+    const day = date.getDay()
+    return day === 0 || day === 6
+  }
+
+  private getCancelledLeaveDateKeys(leaveRequest: LeaveRequest): Set<string> {
+    return new Set(
+      (leaveRequest.cancelledDates || [])
+        .map((value) => String(value || '').slice(0, 10))
+        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    )
+  }
+
+  private getActiveVacationDayKeys(leaveRequest: LeaveRequest): string[] {
+    const start = this.convertToDate(leaveRequest.startDate)
+    const end = this.convertToDate(leaveRequest.endDate)
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return []
+
+    const cancelled = this.getCancelledLeaveDateKeys(leaveRequest)
+    const keys: string[] = []
+    const current = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+
+    while (current <= last) {
+      const key = formatDateForInputLocal(current)
+      if (!this.isWeekendDate(current) && !cancelled.has(key)) {
+        keys.push(key)
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return keys
+  }
+
+  private leaveRequestCoversActiveVacationDate(leaveRequest: LeaveRequest, dateKey: string): boolean {
+    if (leaveRequest.type !== 'vacation' || leaveRequest.status !== 'approved') return false
+    return this.getActiveVacationDayKeys(leaveRequest).includes(dateKey)
+  }
+
+  private async getApprovedVacationRequestsForEmployeeOnDate(
+    employeeId: string | undefined,
+    dateKey: string
+  ): Promise<LeaveRequest[]> {
+    if (!employeeId || !dateKey) return []
+
+    try {
+      const leaveRequestsRef = collection(db, 'leaveRequests')
+      const q = query(
+        leaveRequestsRef,
+        where('employeeId', '==', employeeId),
+        where('status', '==', 'approved'),
+        where('type', '==', 'vacation')
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() } as LeaveRequest))
+        .filter((request) => this.leaveRequestCoversActiveVacationDate(request, dateKey))
+    } catch (error) {
+      console.error('Fehler beim Pruefen genehmigter Urlaubsantraege:', error)
+      return []
+    }
+  }
+
+  private buildVacationCancellationUpdate(
+    leaveRequest: LeaveRequest,
+    workedDateKey: string,
+    timeEntryId: string
+  ): { update: Record<string, unknown>; creditDays: number } | null {
+    if (!this.leaveRequestCoversActiveVacationDate(leaveRequest, workedDateKey)) return null
+
+    const activeKeys = this.getActiveVacationDayKeys(leaveRequest)
+    const remainingActiveKeys = activeKeys.filter((key) => key !== workedDateKey)
+    const dateLabel = new Date(`${workedDateKey}T12:00:00`).toLocaleDateString('de-DE')
+    const reason = `Automatisch storniert: Mitarbeiter hat am ${dateLabel} gestempelt.`
+    const existingWorkingDays = Number(leaveRequest.workingDays)
+
+    const update: Record<string, unknown> = {
+      cancelledDates: arrayUnion(workedDateKey),
+      autoCancelledAt: new Date(),
+      autoCancellationReason: reason,
+      autoCancelledByTimeEntryId: timeEntryId,
+      updatedAt: new Date()
+    }
+
+    if (remainingActiveKeys.length === 0) {
+      update.status = 'rejected'
+      update.rejectionReason = reason
+      update.workingDays = 0
+    } else {
+      update.workingDays = Math.max(
+        0,
+        (Number.isFinite(existingWorkingDays) && existingWorkingDays > 0
+          ? existingWorkingDays
+          : activeKeys.length) - 1
+      )
+    }
+
+    return { update, creditDays: 1 }
+  }
+
   async addTimeEntry(timeEntryData: Partial<TimeEntry>): Promise<TimeEntry> {
     await this.authReadyPromise
     try {
@@ -389,12 +494,20 @@ class DataServiceClass {
             ? Timestamp.fromDate(timeEntryData.clockInTime)
             : timeEntryData.clockInTime)
         : Timestamp.now()
+      const workedDateKey = this.getDateKeyFromValue(normalizedClockInTime)
+      const vacationRequestsToCancel = await this.getApprovedVacationRequestsForEmployeeOnDate(
+        timeEntryData.employeeId,
+        workedDateKey
+      )
 
       const entryData = {
         ...timeEntryData,
         entryId: timeEntryRef.id,
         clockInTime: normalizedClockInTime,
-        clockOutTime: null
+        clockOutTime: null,
+        ...(vacationRequestsToCancel.length > 0
+          ? { autoCancelledVacationRequestIds: vacationRequestsToCancel.map((request) => request.id).filter(Boolean) }
+          : {})
       }
 
       await runTransaction(db, async (transaction) => {
@@ -415,12 +528,46 @@ class DataServiceClass {
           }
         }
 
+        const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
+        let vacationDaysToCredit = 0
+        for (const request of vacationRequestsToCancel) {
+          if (!request.id) continue
+          const requestRef = doc(db, 'leaveRequests', request.id)
+          const requestDoc = await transaction.get(requestRef)
+          if (!requestDoc.exists()) continue
+          const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
+          const cancellation = this.buildVacationCancellationUpdate(
+            freshRequest,
+            workedDateKey,
+            timeEntryRef.id
+          )
+          if (!cancellation) continue
+          vacationDaysToCredit += cancellation.creditDays
+          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+        }
+
         transaction.set(timeEntryRef, entryData)
-        transaction.update(employeeRef, {
+        vacationUpdates.forEach(({ ref, update }) => transaction.update(ref, update))
+
+        const employeeUpdate: Record<string, unknown> = {
           activeTimeEntryId: timeEntryRef.id,
           activeClockInAt: normalizedClockInTime,
           updatedAt: new Date()
-        })
+        }
+        if (vacationDaysToCredit > 0) {
+          const vd = employeeData.vacationDays || {
+            total: 30,
+            used: 0,
+            year: new Date().getFullYear()
+          }
+          employeeUpdate.vacationDays = {
+            ...vd,
+            used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
+            year: vd.year ?? new Date().getFullYear()
+          }
+        }
+
+        transaction.update(employeeRef, employeeUpdate)
       })
       
       const newEntry = await getDoc(timeEntryRef)
@@ -466,6 +613,11 @@ class DataServiceClass {
       const clockInTs = Timestamp.fromDate(params.clockInTime)
       const clockOutTs = Timestamp.fromDate(params.clockOutTime)
       const pauseTotalTime = params.pauseTotalTimeMs ?? 0
+      const workedDateKey = this.getDateKeyFromValue(clockInTs)
+      const vacationRequestsToCancel = await this.getApprovedVacationRequestsForEmployeeOnDate(
+        params.targetEmployeeId,
+        workedDateKey
+      )
 
       const noteBase = params.notes?.trim() ?? ''
       const auditNote = `Nachtrag durch ${params.addedByDisplayName}`
@@ -483,6 +635,9 @@ class DataServiceClass {
         manualTimeEntryAddedByEmployeeId: params.addedByEmployeeId,
         manualTimeEntryAddedByDisplayName: params.addedByDisplayName,
         manualTimeEntryCreatedAt: serverTimestamp(),
+        ...(vacationRequestsToCancel.length > 0
+          ? { autoCancelledVacationRequestIds: vacationRequestsToCancel.map((request) => request.id).filter(Boolean) }
+          : {}),
         heroSyncStatus: 'pending',
         heroSyncError: null
       }
@@ -491,7 +646,48 @@ class DataServiceClass {
         Object.entries(rawPayload).filter(([, value]) => value !== undefined)
       )
 
-      await setDoc(timeEntryRef, payload)
+      await runTransaction(db, async (transaction) => {
+        const empRef = doc(db, 'employees', params.targetEmployeeId)
+        const empSnap = await transaction.get(empRef)
+        const employeeData = empSnap.exists() ? (empSnap.data() as Employee) : null
+
+        const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
+        let vacationDaysToCredit = 0
+        for (const request of vacationRequestsToCancel) {
+          if (!request.id) continue
+          const requestRef = doc(db, 'leaveRequests', request.id)
+          const requestDoc = await transaction.get(requestRef)
+          if (!requestDoc.exists()) continue
+          const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
+          const cancellation = this.buildVacationCancellationUpdate(
+            freshRequest,
+            workedDateKey,
+            timeEntryRef.id
+          )
+          if (!cancellation) continue
+          vacationDaysToCredit += cancellation.creditDays
+          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+        }
+
+        transaction.set(timeEntryRef, payload)
+        vacationUpdates.forEach(({ ref, update }) => transaction.update(ref, update))
+
+        if (employeeData && vacationDaysToCredit > 0) {
+          const vd = employeeData.vacationDays || {
+            total: 30,
+            used: 0,
+            year: new Date().getFullYear()
+          }
+          transaction.update(empRef, {
+            vacationDays: {
+              ...vd,
+              used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
+              year: vd.year ?? new Date().getFullYear()
+            },
+            updatedAt: new Date()
+          })
+        }
+      })
       const snap = await getDoc(timeEntryRef)
       return { id: timeEntryRef.id, ...snap.data() } as TimeEntry
     } catch (error) {
