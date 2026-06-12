@@ -9,7 +9,7 @@ Beide laden automatisch eine `.env` / `.env.local` im Projekt-Root.
 |----------|-------|---------|
 | `HERO_API_KEY` | Bearer-Token von HERO Support – **der Key, den du jetzt hast** | ja |
 | `HERO_SYNC_ENABLED` | `true` aktiviert Sync & API-Calls | ja (für echten Betrieb) |
-| `HERO_GRAPHQL_URL` | Endpoint, Standard `https://login.hero-software.de/api/external/v7/graphql` | nein |
+| `HERO_GRAPHQL_URL` | Endpoint, Standard `https://login.hero-software.de/api/external/v9/graphql` | nein |
 | `HERO_API_TOKEN` | Service-Token für maschinelle Aufrufe der eigenen `/api/hero/*`-Endpunkte | nur für Endpunkt-Test |
 
 > ⚠️ `HERO_API_KEY` **niemals** mit `VITE_`-Prefix anlegen – sonst landet er im

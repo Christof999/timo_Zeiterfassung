@@ -8,7 +8,7 @@ Vorbereitung der Anbindung an [HERO Handwerkersoftware](https://hero-software.de
 |----------|----------------|
 | `HERO_API_KEY` | Bearer-Token von HERO Support |
 | `HERO_SYNC_ENABLED` | `true` aktiviert Projekt-Sync und API-Calls |
-| `HERO_GRAPHQL_URL` | Optional, Standard: `https://login.hero-software.de/api/external/v7/graphql` |
+| `HERO_GRAPHQL_URL` | Optional, Standard: `https://login.hero-software.de/api/external/v9/graphql` |
 | `HERO_API_TOKEN` | Optional für maschinelle Aufrufe |
 
 Zusätzlich die bestehenden Firebase-Admin-Variablen (`FIREBASE_*`) wie bei Push.

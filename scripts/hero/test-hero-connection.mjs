@@ -11,7 +11,7 @@
  *
  * Optional:
  *   HERO_GRAPHQL_URL   abweichende Endpoint-URL
- *                      (Standard: https://login.hero-software.de/api/external/v7/graphql)
+ *                      (Standard: https://login.hero-software.de/api/external/v9/graphql)
  *   HERO_MAX_PROJECTS  wie viele Projekte detailliert validiert werden (Standard: 5)
  *
  * Lädt automatisch eine .env-Datei im Projekt-Root, falls vorhanden.
@@ -51,7 +51,7 @@ function loadDotEnv() {
 loadDotEnv()
 
 const DEFAULT_GRAPHQL_URL =
-  'https://login.hero-software.de/api/external/v7/graphql'
+  'https://login.hero-software.de/api/external/v9/graphql'
 
 const API_KEY = String(process.env.HERO_API_KEY || '').trim()
 const GRAPHQL_URL = String(process.env.HERO_GRAPHQL_URL || DEFAULT_GRAPHQL_URL).trim()

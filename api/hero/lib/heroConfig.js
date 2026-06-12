@@ -1,4 +1,4 @@
-const DEFAULT_GRAPHQL_URL = 'https://login.hero-software.de/api/external/v7/graphql'
+const DEFAULT_GRAPHQL_URL = 'https://login.hero-software.de/api/external/v9/graphql'
 
 function isHeroSyncEnabled() {
   const raw = String(process.env.HERO_SYNC_ENABLED || 'false').trim().toLowerCase()

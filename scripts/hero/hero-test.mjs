@@ -15,7 +15,7 @@
 //  Alternativ HIER den HERO-Key eintragen (in die Anführungszeichen):
 const HERO_API_KEY = process.env.HERO_API_KEY || ''
 const HERO_GRAPHQL_URL =
-  process.env.HERO_GRAPHQL_URL || 'https://login.hero-software.de/api/external/v7/graphql'
+  process.env.HERO_GRAPHQL_URL || 'https://login.hero-software.de/api/external/v9/graphql'
 // ───────────────────────────────────────────────────────────
 
 async function gql(query, variables = {}) {
