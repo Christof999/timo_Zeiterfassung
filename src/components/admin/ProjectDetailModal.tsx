@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Project, FileUpload, TimeEntry } from '../../types'
+import type { Project, FileUpload, TimeEntry, VehicleUsage } from '../../types'
 import { Timestamp } from 'firebase/firestore'
+import { toast } from '../ToastContainer'
+import { getFileImageSrc } from '../../utils/fileImageSrc'
 import '../../styles/Modal.css'
 
 interface ProjectDetailModalProps {
@@ -13,17 +15,101 @@ interface TimeEntryWithEmployee extends TimeEntry {
   employeeName?: string
 }
 
+interface VehicleUsageWithEmployee extends VehicleUsage {
+  employeeName?: string
+  createdAt?: any
+}
+
 const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'construction-site' | 'documents' | 'timeentries'>('construction-site')
+  const [activeTab, setActiveTab] = useState<
+    'construction-site' | 'documents' | 'timeentries' | 'vehicle-bookings'
+  >('construction-site')
   const [photos, setPhotos] = useState<FileUpload[]>([])
   const [documents, setDocuments] = useState<FileUpload[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
+  const [vehicleUsages, setVehicleUsages] = useState<VehicleUsageWithEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [lightboxImage, setLightboxImage] = useState<{ src: string; fileName: string; notes?: string } | null>(null)
+  const [lightboxImage, setLightboxImage] = useState<{
+    src: string
+    fileName: string
+    notes?: string
+    imageComment?: string
+  } | null>(null)
+  const [timeEntryDetail, setTimeEntryDetail] = useState<TimeEntryWithEmployee | null>(null)
+  const [allProjects, setAllProjects] = useState<Project[]>([])
+  const [moveTargetProjectId, setMoveTargetProjectId] = useState('')
+  const [moveUiOpen, setMoveUiOpen] = useState(false)
+  const [isMovingEntry, setIsMovingEntry] = useState(false)
+  const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
+  const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
+  const modalContentRef = useRef<HTMLDivElement | null>(null)
+  const detailInfoRef = useRef<HTMLDivElement | null>(null)
+
+  const setDetailHeightFromPointer = (clientY: number) => {
+    const detailsRect = detailInfoRef.current?.getBoundingClientRect()
+    const modalRect = modalContentRef.current?.getBoundingClientRect()
+    if (!detailsRect || !modalRect || modalRect.height <= 0) return
+
+    const minHeight = 120
+    const maxHeight = Math.max(minHeight, Math.floor(modalRect.height * 0.62))
+    const nextHeight = Math.round(clientY - detailsRect.top)
+    const clampedHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
+    setDetailInfoHeight(clampedHeight)
+  }
+
+  const startDetailResize = (clientY: number) => {
+    setDetailHeightFromPointer(clientY)
+    setIsDetailInfoResizing(true)
+  }
 
   useEffect(() => {
     loadProjectData()
   }, [project])
+
+  useEffect(() => {
+    setDetailInfoHeight(null)
+    setIsDetailInfoResizing(false)
+  }, [project.id])
+
+  useEffect(() => {
+    setMoveUiOpen(false)
+    setMoveTargetProjectId('')
+  }, [timeEntryDetail?.id])
+
+  useEffect(() => {
+    if (!isDetailInfoResizing) return
+
+    const handleMouseMove = (event: MouseEvent) => {
+      event.preventDefault()
+      setDetailHeightFromPointer(event.clientY)
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!event.touches.length) return
+      event.preventDefault()
+      setDetailHeightFromPointer(event.touches[0].clientY)
+    }
+
+    const stopResizing = () => {
+      setIsDetailInfoResizing(false)
+    }
+
+    document.body.style.cursor = 'row-resize'
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', stopResizing)
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', stopResizing)
+    window.addEventListener('touchcancel', stopResizing)
+
+    return () => {
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopResizing)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', stopResizing)
+      window.removeEventListener('touchcancel', stopResizing)
+    }
+  }, [isDetailInfoResizing])
 
   const loadProjectData = async () => {
     setIsLoading(true)
@@ -31,7 +117,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       console.log('Lade Projektdaten für:', project.id, project.name)
       
       // Verwende getProjectFiles wie in der alten App (lädt aus Zeiteinträgen)
-      const [allPhotos, allDocs, timeEntries, employees] = await Promise.all([
+      const [allPhotos, allDocs, timeEntries, employees, rawVehicleUsages, projectsList] = await Promise.all([
         DataService.getProjectFiles(project.id!, 'construction_site').catch(err => {
           console.error('Fehler beim Laden der Fotos:', err)
           return []
@@ -47,8 +133,18 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         DataService.getAllEmployees().catch(err => {
           console.error('Fehler beim Laden der Mitarbeiter:', err)
           return []
+        }),
+        DataService.getVehicleUsagesByProject(project.id!).catch(err => {
+          console.error('Fehler beim Laden der Fahrzeugbuchungen:', err)
+          return []
+        }),
+        DataService.getAllProjects().catch((err) => {
+          console.error('Fehler beim Laden der Projekte:', err)
+          return [] as Project[]
         })
       ])
+
+      setAllProjects(projectsList)
       
       console.log('Geladene Fotos:', allPhotos.length, allPhotos)
       console.log('Geladene Dokumente:', allDocs.length, allDocs)
@@ -57,15 +153,25 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       
       // Debug: Zeige die ersten 2 Fotos komplett mit ALLEN Feldern
       if (allPhotos.length > 0) {
-        console.log('🖼️ ERSTES FOTO KOMPLETT:', JSON.stringify(allPhotos[0], null, 2))
-        console.log('🖼️ ALLE FELDER DES ERSTEN FOTOS:', Object.keys(allPhotos[0]))
+        console.log('ERSTES FOTO KOMPLETT:', JSON.stringify(allPhotos[0], null, 2))
+        console.log('ALLE FELDER DES ERSTEN FOTOS:', Object.keys(allPhotos[0]))
         if (allPhotos.length > 1) {
-          console.log('🖼️ ZWEITES FOTO KOMPLETT:', JSON.stringify(allPhotos[1], null, 2))
+          console.log('ZWEITES FOTO KOMPLETT:', JSON.stringify(allPhotos[1], null, 2))
         }
       }
       
+      const sortedPhotos = [...allPhotos].sort((a, b) => getTimeValue(b.uploadTime) - getTimeValue(a.uploadTime))
+      const sortedDocuments = [...allDocs].sort((a, b) => getTimeValue(b.uploadTime) - getTimeValue(a.uploadTime))
+      const sortedTimeEntries = [...timeEntries].sort((a, b) => getTimeValue(b.clockInTime) - getTimeValue(a.clockInTime))
+
+      // Anzeige-URLs ergänzen (Firebase-Storage-Pfade auflösen / Legacy-Base64 nachladen)
+      const [photosWithUrls, documentsWithUrls] = await Promise.all([
+        DataService.enrichFilesForDisplay(sortedPhotos),
+        DataService.enrichFilesForDisplay(sortedDocuments)
+      ])
+
       // Mitarbeiternamen zu Zeiteinträgen hinzufügen
-      const entriesWithNames: TimeEntryWithEmployee[] = timeEntries.map(entry => {
+      const entriesWithNames: TimeEntryWithEmployee[] = sortedTimeEntries.map(entry => {
         const employee = employees.find(emp => emp.id === entry.employeeId)
         return {
           ...entry,
@@ -74,10 +180,36 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             : entry.employeeId
         }
       })
+
+      const getVehicleUsageSortTime = (u: VehicleUsageWithEmployee): number => {
+        const created = convertToDate(u.createdAt)
+        if (created) return created.getTime()
+        if (typeof u.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(u.date)) {
+          const [y, m, day] = u.date.split(/[-T]/).map(Number)
+          return new Date(y, m - 1, day).getTime()
+        }
+        const d = convertToDate(u.date)
+        return d ? d.getTime() : 0
+      }
+
+      const usagesWithNames: VehicleUsageWithEmployee[] = [...rawVehicleUsages]
+        .sort((a, b) => getVehicleUsageSortTime(b) - getVehicleUsageSortTime(a))
+        .map((usage) => {
+          const employee = employees.find((emp) => emp.id === usage.employeeId)
+          return {
+            ...usage,
+            employeeName: employee
+              ? employee.name ||
+                `${employee.firstName || ''} ${employee.lastName || ''}`.trim() ||
+                usage.employeeId
+              : usage.employeeId
+          }
+        })
       
-      setPhotos(allPhotos)
-      setDocuments(allDocs)
+      setPhotos(photosWithUrls)
+      setDocuments(documentsWithUrls)
       setTimeEntries(entriesWithNames)
+      setVehicleUsages(usagesWithNames)
     } catch (error) {
       console.error('Fehler beim Laden der Projektdaten:', error)
     } finally {
@@ -113,6 +245,26 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     return null
   }
 
+  const getTimeValue = (value: any): number => {
+    const date = convertToDate(value)
+    return date ? date.getTime() : 0
+  }
+
+  const fileCaption = (file: FileUpload): string =>
+    file.imageComment?.trim() || file.notes?.trim() || ''
+
+  const formatUploadDay = (value: any): string => {
+    const date = convertToDate(value)
+    if (!date) return 'Uploaddatum unbekannt'
+
+    return date.toLocaleDateString('de-DE', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
+
   // Hilfsfunktion zur Berechnung der Arbeitsstunden
   const calculateHours = (entry: TimeEntry): string => {
     if (!entry.clockOutTime || !entry.clockInTime) {
@@ -138,15 +290,284 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     return hours.toFixed(2) + 'h'
   }
 
+  const formatVehicleUsageBookingDate = (usage: VehicleUsage): string => {
+    if (typeof usage.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(usage.date)) {
+      const [y, m, d] = usage.date.split(/[-T]/).map(Number)
+      const local = new Date(y, m - 1, d)
+      return local.toLocaleDateString('de-DE', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+    }
+    const d = convertToDate(usage.date)
+    return d
+      ? d.toLocaleDateString('de-DE', {
+          weekday: 'short',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        })
+      : '—'
+  }
+
+  const formatVehicleHours = (usage: VehicleUsage): string => {
+    const h = usage.hoursUsed ?? usage.hours
+    if (h === undefined || h === null || Number.isNaN(Number(h))) return '—'
+    return `${Number(h).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} h`
+  }
+
+  const getClockOutLocation = (entry: TimeEntry) =>
+    entry.clockOutLocation ?? entry.locationOut ?? null
+
+  const formatLocationText = (loc: { lat: number | null; lng: number | null } | null | undefined) => {
+    if (!loc || loc.lat == null || loc.lng == null) return null
+    return `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`
+  }
+
+  const openStreetMapUrl = (lat: number, lng: number) =>
+    `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+
+  const moveTargetOptions = [...allProjects]
+    .filter((p) => p.id && p.id !== project.id)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+
+  const handleConfirmMoveTimeEntry = async () => {
+    if (!timeEntryDetail?.id || !moveTargetProjectId) {
+      toast.error('Bitte wählen Sie ein Zielprojekt.')
+      return
+    }
+    const target = allProjects.find((p) => p.id === moveTargetProjectId)
+    setIsMovingEntry(true)
+    try {
+      await DataService.moveTimeEntryToProject(timeEntryDetail.id, moveTargetProjectId, {
+        sourceProjectName: project.name,
+        targetProjectName: target?.name
+      })
+      toast.success('Stempelsatz und Dokumentation wurden umgezogen.')
+      setTimeEntryDetail(null)
+      setMoveUiOpen(false)
+      setMoveTargetProjectId('')
+      await loadProjectData()
+    } catch (e: any) {
+      toast.error(e?.message || 'Umzug fehlgeschlagen')
+    } finally {
+      setIsMovingEntry(false)
+    }
+  }
+
+  const renderTimeEntryLocationModal = () => {
+    if (!timeEntryDetail) return null
+
+    const clockInDate = convertToDate(timeEntryDetail.clockInTime)
+    const clockOutDate = convertToDate(timeEntryDetail.clockOutTime)
+    const canMoveEntry = !!clockOutDate
+    const inLoc = formatLocationText(timeEntryDetail.clockInLocation)
+    const outLocRaw = getClockOutLocation(timeEntryDetail)
+    const outLoc = formatLocationText(outLocRaw)
+
+    return (
+      <div
+        className="time-entry-location-overlay"
+        onClick={(e) => {
+          e.stopPropagation()
+          setTimeEntryDetail(null)
+        }}
+      >
+        <div
+          className="time-entry-location-modal"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="time-entry-location-close"
+            onClick={() => setTimeEntryDetail(null)}
+            aria-label="Schließen"
+          >
+            ×
+          </button>
+          <div className="time-entry-location-head">
+            <h3 className="time-entry-location-name">
+              {timeEntryDetail.employeeName || timeEntryDetail.employeeId}
+            </h3>
+            <p className="time-entry-location-date">
+              {clockInDate
+                ? clockInDate.toLocaleDateString('de-DE', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  })
+                : '—'}
+            </p>
+          </div>
+
+          <div className="time-entry-location-block">
+            <span className="time-entry-location-label">Eingestempelt</span>
+            <p className="time-entry-location-time">
+              {clockInDate
+                ? clockInDate.toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : '—'}
+            </p>
+            <span className="time-entry-location-sublabel">Ort</span>
+            {inLoc ? (
+              <>
+                <p className="time-entry-location-coords">{inLoc}</p>
+                {timeEntryDetail.clockInLocation?.lat != null &&
+                  timeEntryDetail.clockInLocation?.lng != null && (
+                    <a
+                      href={openStreetMapUrl(
+                        timeEntryDetail.clockInLocation.lat,
+                        timeEntryDetail.clockInLocation.lng
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="time-entry-location-maplink"
+                    >
+                      Auf Karte anzeigen
+                    </a>
+                  )}
+              </>
+            ) : (
+              <p className="time-entry-location-missing">Kein Standort erfasst</p>
+            )}
+          </div>
+
+          <div className="time-entry-location-block">
+            <span className="time-entry-location-label">Ausgestempelt</span>
+            <p className="time-entry-location-time">
+              {clockOutDate
+                ? clockOutDate.toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : 'Noch eingestempelt'}
+            </p>
+            <span className="time-entry-location-sublabel">Ort</span>
+            {clockOutDate ? (
+              outLoc ? (
+                <>
+                  <p className="time-entry-location-coords">{outLoc}</p>
+                  {outLocRaw?.lat != null && outLocRaw?.lng != null && (
+                    <a
+                      href={openStreetMapUrl(outLocRaw.lat, outLocRaw.lng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="time-entry-location-maplink"
+                    >
+                      Auf Karte anzeigen
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="time-entry-location-missing">Kein Standort erfasst</p>
+              )
+            ) : (
+              <p className="time-entry-location-missing">—</p>
+            )}
+          </div>
+
+          <div className="time-entry-move-section">
+            {!canMoveEntry ? (
+              <p className="time-entry-move-disabled-hint">
+                Ein Umzug ist nur bei abgeschlossenen Zeiteinträgen möglich (bereits ausgestempelt).
+              </p>
+            ) : moveTargetOptions.length === 0 ? (
+              <p className="time-entry-move-disabled-hint">
+                Es gibt kein weiteres Projekt, in das umgezogen werden könnte.
+              </p>
+            ) : !moveUiOpen ? (
+              <button
+                type="button"
+                className="btn secondary-btn time-entry-move-toggle"
+                onClick={() => setMoveUiOpen(true)}
+              >
+                Stempelsatz umziehen
+              </button>
+            ) : (
+              <div className="time-entry-move-panel">
+                <label htmlFor="time-entry-move-project" className="time-entry-move-label">
+                  Zielprojekt
+                </label>
+                <select
+                  id="time-entry-move-project"
+                  className="time-entry-move-select"
+                  value={moveTargetProjectId}
+                  onChange={(e) => setMoveTargetProjectId(e.target.value)}
+                  disabled={isMovingEntry}
+                >
+                  <option value="">— Projekt wählen —</option>
+                  {moveTargetOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || p.id}
+                    </option>
+                  ))}
+                </select>
+                <p className="time-entry-move-hint">
+                  Zeiten, Baustellenfotos, Belege und Fahrzeugbuchungen vom selben Tag werden dem
+                  gewählten Projekt zugeordnet.
+                </p>
+                <div className="time-entry-move-actions">
+                  <button
+                    type="button"
+                    className="btn primary-btn"
+                    disabled={isMovingEntry || !moveTargetProjectId}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          'Diesen Stempelsatz wirklich in das gewählte Projekt verschieben? Die Zuordnung kann nicht automatisch rückgängig gemacht werden.'
+                        )
+                      ) {
+                        return
+                      }
+                      handleConfirmMoveTimeEntry()
+                    }}
+                  >
+                    {isMovingEntry ? 'Wird umgezogen…' : 'Umziehen bestätigen'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary-btn"
+                    disabled={isMovingEntry}
+                    onClick={() => {
+                      setMoveUiOpen(false)
+                      setMoveTargetProjectId('')
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div ref={modalContentRef} className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{project.name}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         
-        <div className="project-detail-info">
+        <div
+          ref={detailInfoRef}
+          className="project-detail-info"
+          style={detailInfoHeight !== null ? { height: `${detailInfoHeight}px`, maxHeight: 'none' } : undefined}
+        >
           <p><strong>Kunde:</strong> {project.client || '-'}</p>
           <p><strong>Status:</strong> {project.status || 'Aktiv'}</p>
           {(project.address || project.location) && (
@@ -163,6 +584,24 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             </div>
           )}
         </div>
+
+        <div
+          className={`project-detail-resizer ${isDetailInfoResizing ? 'is-resizing' : ''}`}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Höhe des oberen Bereichs anpassen"
+          title="Ziehen, um den unteren Medienbereich zu vergrößern"
+          onDoubleClick={() => setDetailInfoHeight(null)}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            startDetailResize(event.clientY)
+          }}
+          onTouchStart={(event) => {
+            if (!event.touches.length) return
+            event.preventDefault()
+            startDetailResize(event.touches[0].clientY)
+          }}
+        />
 
         <div className="project-tabs">
           <button 
@@ -183,6 +622,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           >
             Zeiteinträge
           </button>
+          <button 
+            className={`project-tab-btn ${activeTab === 'vehicle-bookings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('vehicle-bookings')}
+          >
+            Fahrzeugbuchungen
+          </button>
         </div>
 
         <div className="project-tab-content">
@@ -194,30 +639,11 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 <p className="no-data">Keine Fotos vorhanden</p>
               ) : (
                 photos.map((photo) => {
-                // Prüfe verschiedene mögliche Formate für base64Data oder filePath/URL
-                const base64Data = photo.base64Data || (photo as any).base64 || (photo as any).base64DataUrl || (photo as any).base64String || ''
-                let mimeType = photo.mimeType || 'image/jpeg'
-                
-                // Falls mimeType ein data URL Präfix ist, extrahiere nur den MIME-Type
-                if (mimeType.startsWith('data:')) {
-                  const match = mimeType.match(/^data:([^;,]+)/)
-                  if (match) {
-                    mimeType = match[1]
-                  }
-                }
-                
-                const fileUrl = photo.filePath || (photo as any).url || ''
+                const imgSrc = getFileImageSrc(photo)
+                const uploadDay = formatUploadDay(photo.uploadTime)
+                const key = photo.id || `${photo.fileName || imgSrc}-${photo.employeeId || ''}`
 
-                const key = `${photo.id || photo.fileName || fileUrl}-${photo.employeeId || ''}-${Math.random()}`
-
-                // Verwende entweder base64 oder die URL (Firebase Storage)
-                let imgSrc = ''
-                if (base64Data) {
-                  imgSrc = `data:${mimeType};base64,${base64Data}`
-                } else if (fileUrl) {
-                  // fileUrl könnte bereits eine data URL oder eine Firebase Storage URL sein
-                  imgSrc = fileUrl
-                }
+                const caption = fileCaption(photo)
 
                 return (
                   <div key={key} className="photo-item">
@@ -225,29 +651,30 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       <img 
                         src={imgSrc} 
                         alt={photo.fileName}
-                        onClick={() => setLightboxImage({ src: imgSrc, fileName: photo.fileName })}
+                        onClick={() =>
+                          setLightboxImage({
+                            src: imgSrc,
+                            fileName: photo.fileName,
+                            notes: photo.notes,
+                            imageComment: photo.imageComment
+                          })
+                        }
                         style={{ cursor: 'pointer' }}
                         onError={(e) => {
-                          console.error('Fehler beim Laden des Bildes:', photo.fileName, {
-                            hasBase64: !!base64Data,
-                            base64Length: base64Data ? base64Data.length : 0,
-                            mimeType: mimeType,
-                            photo: photo
-                          })
+                          console.error('Fehler beim Laden des Bildes:', photo.fileName, photo)
                           e.currentTarget.style.display = 'none'
                         }}
                       />
                     ) : (
                       <div className="photo-placeholder">
-                        <span>📷</span>
+                        <span>Bild</span>
                         <p>Keine Bilddaten vorhanden</p>
                         <p className="photo-filename">{photo.fileName}</p>
                       </div>
                     )}
                     <p className="photo-filename">{photo.fileName}</p>
-                    {photo.imageComment && (
-                      <p className="photo-comment">{photo.imageComment}</p>
-                    )}
+                    <p className="photo-upload-date">Upload: {uploadDay}</p>
+                    {caption ? <p className="photo-comment">{caption}</p> : null}
                   </div>
                 )
                 })
@@ -259,40 +686,34 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 <p className="no-data">Keine Dokumente vorhanden</p>
               ) : (
                 documents.map((doc, index) => {
-                  const base64Data = doc.base64Data || (doc as any).base64 || (doc as any).base64String || ''
-                  let mimeType = doc.mimeType || 'image/jpeg'
-                  
-                  // Falls mimeType ein data URL Präfix ist, extrahiere nur den MIME-Type
-                  if (mimeType.startsWith('data:')) {
-                    const match = mimeType.match(/^data:([^;,]+)/)
-                    if (match) {
-                      mimeType = match[1]
-                    }
-                  }
-                  
-                  const fileUrl = doc.filePath || (doc as any).url || ''
-                  const key = `doc-${doc.id || doc.fileName || index}-${index}-${Math.random()}`
-                  
-                  // Erstelle die Bild-URL
-                  let imgSrc = ''
-                  if (base64Data) {
-                    imgSrc = `data:${mimeType};base64,${base64Data}`
-                  } else if (fileUrl) {
-                    imgSrc = fileUrl
-                  }
-                  
+                  const imgSrc = getFileImageSrc(doc)
+                  const uploadDay = formatUploadDay(doc.uploadTime)
+                  const key = doc.id || `doc-${doc.fileName || imgSrc}-${index}`
+                  const mimeType = (doc.mimeType || '').toLowerCase()
+
                   // Prüfe ob es ein Bild ist
-                  const isImage = mimeType.startsWith('image/') || 
-                    doc.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
-                    fileUrl?.startsWith('data:image/')
-                  
+                  const isImage =
+                    mimeType.startsWith('image/') ||
+                    !!doc.fileName?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+                    imgSrc.startsWith('data:image/') ||
+                    (imgSrc.startsWith('http') && mimeType.startsWith('image/'))
+
+                  const docCaption = fileCaption(doc)
+
                   return (
                     <div key={key} className="photo-item document-item-card">
                       {imgSrc && isImage ? (
                         <img 
                           src={imgSrc} 
                           alt={doc.fileName}
-                          onClick={() => setLightboxImage({ src: imgSrc, fileName: doc.fileName, notes: doc.notes })}
+                          onClick={() =>
+                            setLightboxImage({
+                              src: imgSrc,
+                              fileName: doc.fileName,
+                              notes: doc.notes,
+                              imageComment: doc.imageComment
+                            })
+                          }
                           style={{ cursor: 'pointer' }}
                           onError={(e) => {
                             console.error('Fehler beim Laden des Dokuments:', doc.fileName)
@@ -301,18 +722,19 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                             if (parent) {
                               const placeholder = document.createElement('div')
                               placeholder.className = 'photo-placeholder'
-                              placeholder.innerHTML = '<span>📄</span>'
+                              placeholder.innerHTML = '<span>Dok.</span>'
                               parent.insertBefore(placeholder, e.currentTarget)
                             }
                           }}
                         />
                       ) : (
                         <div className="photo-placeholder document-placeholder">
-                          <span>📄</span>
+                          <span>Dok.</span>
                         </div>
                       )}
                       <p className="photo-filename">{doc.fileName}</p>
-                      {doc.notes && <p className="document-notes">{doc.notes}</p>}
+                      <p className="photo-upload-date">Upload: {uploadDay}</p>
+                      {docCaption ? <p className="document-notes">{docCaption}</p> : null}
                       {imgSrc && (
                         <a 
                           href={imgSrc}
@@ -320,7 +742,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                           className="document-download-btn"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          ⬇ Download
+                          Download
                         </a>
                       )}
                     </div>
@@ -328,7 +750,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 })
               )}
             </div>
-          ) : (
+          ) : activeTab === 'timeentries' ? (
             <div className="time-entries-cards">
               {timeEntries.length === 0 ? (
                 <p className="no-data">Keine Zeiteinträge vorhanden</p>
@@ -338,7 +760,20 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   const clockOutDate = convertToDate(entry.clockOutTime)
                   
                   return (
-                    <div key={entry.id} className="time-entry-card">
+                    <div
+                      key={entry.id}
+                      className="time-entry-card time-entry-card--clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Klicken für Zeiten und Standorte"
+                      onClick={() => setTimeEntryDetail(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setTimeEntryDetail(entry)
+                        }
+                      }}
+                    >
                       <div className="time-entry-header">
                         <span className="time-entry-employee">{entry.employeeName || entry.employeeId}</span>
                         <span className="time-entry-hours">{calculateHours(entry)}</span>
@@ -374,11 +809,44 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 })
               )}
             </div>
+          ) : (
+            <div className="time-entries-cards vehicle-bookings-tab">
+              {vehicleUsages.length === 0 ? (
+                <p className="no-data">Keine Fahrzeugbuchungen für dieses Projekt vorhanden</p>
+              ) : (
+                vehicleUsages.map((usage) => {
+                  const vehicleLabel =
+                    usage.vehicleName?.trim() ||
+                    (usage.vehicleId ? `Fahrzeug-ID: ${usage.vehicleId}` : 'Unbekanntes Fahrzeug')
+                  return (
+                    <div key={usage.id} className="time-entry-card vehicle-booking-card">
+                      <div className="time-entry-header">
+                        <span className="time-entry-employee">{vehicleLabel}</span>
+                        <span className="time-entry-hours">{formatVehicleHours(usage)}</span>
+                      </div>
+                      <div className="time-entry-details">
+                        <span className="time-entry-date">
+                          {usage.employeeName || usage.employeeId}
+                        </span>
+                        <span className="time-entry-times">
+                          Buchungsdatum: {formatVehicleUsageBookingDate(usage)}
+                        </span>
+                      </div>
+                      {usage.comment?.trim() ? (
+                        <p className="photo-comment vehicle-booking-comment">{usage.comment}</p>
+                      ) : null}
+                    </div>
+                  )
+                })
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {/* Lightbox Modal für Bildvergrößerung */}
+      {renderTimeEntryLocationModal()}
+
       {lightboxImage && (
         <div 
           className="lightbox-overlay" 
@@ -396,10 +864,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               alt={lightboxImage.fileName}
             />
             <p className="lightbox-filename">{lightboxImage.fileName}</p>
-            {lightboxImage.notes && (
+            {(lightboxImage.imageComment?.trim() || lightboxImage.notes?.trim()) && (
               <div className="lightbox-notes">
-                <strong>Beschreibung:</strong>
-                <p>{lightboxImage.notes}</p>
+                <strong>Kommentar:</strong>
+                <p>{lightboxImage.imageComment?.trim() || lightboxImage.notes}</p>
               </div>
             )}
           </div>

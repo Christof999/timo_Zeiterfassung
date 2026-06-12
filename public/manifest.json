@@ -1,11 +1,11 @@
 {
-  "name": "Lauffer Zeiterfassung",
-  "short_name": "Zeiterfassung",
-  "description": "Zeiterfassungs-App für Lauffer Gartenbau • Erdbau • Natursteinhandel",
+  "name": "Fliesen Reislöhner GmbH Zeiterfassung",
+  "short_name": "Reislöhner",
+  "description": "Zeiterfassung für die Fliesen Reislöhner GmbH",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#4A7C59",
-  "theme_color": "#4A7C59",
+  "background_color": "#C41E3A",
+  "theme_color": "#C41E3A",
   "orientation": "portrait-primary",
   "icons": [
     {

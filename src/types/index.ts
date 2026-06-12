@@ -1,3 +1,28 @@
+/** Status der Rückübertragung erfasster Zeiten an HERO (Export folgt in späterer Phase). */
+export type HeroSyncStatus = 'pending' | 'synced' | 'failed' | 'skipped'
+
+export interface HeroIntegrationConfig {
+  lastProjectSyncAt?: Date | any
+  lastProjectSyncError?: string | null
+  lastProjectSyncStats?: {
+    created: number
+    updated: number
+    archived: number
+    skipped: number
+    total: number
+  }
+}
+
+export interface HeroSyncLogEntry {
+  id?: string
+  type: 'projects' | 'health' | 'times'
+  success: boolean
+  message?: string
+  stats?: Record<string, number>
+  error?: string
+  createdAt?: Date | any
+}
+
 export interface Employee {
   id?: string
   username: string
@@ -10,11 +35,16 @@ export interface Employee {
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'
+  /** HERO-Kontakt-ID für späteren Zeit-Export */
+  heroEmployeeId?: string
+  heroContactNr?: string
   vacationDays?: {
     total: number
     used: number
     year: number
   }
+  /** Optional: Überstunden-Saldo in Minuten (wird bei Zeiterfassungs-Abrechnung reduziert, falls gesetzt). */
+  overtimeBalanceMinutes?: number | null
 }
 
 export interface Project {
@@ -28,6 +58,33 @@ export interface Project {
   description?: string
   isActive?: boolean
   status?: 'active' | 'inactive' | 'aktiv' | 'planned' | 'completed' | 'archived'
+  /** HERO project_matches.id */
+  heroProjectId?: string
+  heroProjectNr?: string
+  heroLastSyncedAt?: Date | any
+  heroSyncSource?: 'hero'
+  heroStatusCode?: number
+  heroStatusName?: string
+}
+
+/** Verbrauchsmaterial beim Ausstempeln (Stückliste für Nachkalkulation) */
+export interface TimeEntryMaterialUsage {
+  materialTypeId: string
+  materialName?: string
+  unitLabel?: string
+  quantity: number
+  unitPriceEur?: number
+}
+
+export interface MaterialType {
+  id: string
+  name: string
+  /** z. B. m², Stück, Sack */
+  unitLabel?: string
+  /** Preis pro Mengeneinheit (EUR) */
+  unitPriceEur?: number
+  isActive?: boolean
+  sortOrder?: number
 }
 
 export interface TimeEntry {
@@ -40,6 +97,8 @@ export interface TimeEntry {
   clockOutLocation?: { lat: number | null; lng: number | null } | null
   locationOut?: { lat: number | null; lng: number | null } | null
   notes?: string
+  /** Beim Ausstempeln erfasstes Material (qm, Stück, …) */
+  materialUsages?: TimeEntryMaterialUsage[]
   pauseTotalTime?: number
   pauseDetails?: Array<{
     start: any
@@ -57,14 +116,27 @@ export interface TimeEntry {
   isVacationDay?: boolean
   liveDocumentation?: Array<{
     notes: string
-    images: any[]
-    documents: any[]
+    /** Legacy: volle Objekte — nicht mehr beim Speichern befüllen */
+    images?: any[]
+    documents?: any[]
+    imageIds?: string[]
+    documentIds?: string[]
     photoCount: number
     documentCount: number
     addedBy: string
     addedByName: string
     timestamp: any
   }>
+  /** Nachtrag durch befugte Kollegen (nicht Admin) */
+  manualTimeEntry?: boolean
+  manualTimeEntryAddedByEmployeeId?: string
+  manualTimeEntryAddedByDisplayName?: string
+  manualTimeEntryCreatedAt?: any
+  /** Warteschlange für HERO-Zeit-Export (noch nicht implementiert) */
+  heroSyncStatus?: HeroSyncStatus
+  heroSyncedAt?: Date | any
+  heroSyncError?: string
+  heroExternalRef?: string
 }
 
 export interface Vehicle {
@@ -79,8 +151,11 @@ export interface Vehicle {
 export interface VehicleUsage {
   id: string
   vehicleId: string
+  vehicleName?: string
   employeeId: string
   projectId: string
+  /** Optional: Zuordnung zum Stempelsatz (Umzug & Auswertung) */
+  timeEntryId?: string
   date: string | Date | any
   hours?: number
   hoursUsed?: number
@@ -94,11 +169,35 @@ export interface FileUpload {
   fileType: string
   projectId: string
   employeeId: string
+  /** Verknüpfung zum Stempelsatz (Zuordnung auch wenn Arrays im Eintrag unvollständig sind) */
+  timeEntryId?: string
   uploadTime: Date | any
   notes?: string
   imageComment?: string
   base64Data?: string
   mimeType?: string
+  /** Pfad in Firebase Storage (neue Uploads) */
+  storagePath?: string
+}
+
+/** Gespeicherte Abrechnung aus der Mitarbeiter-Zeitauswertung (Korrektur vs. Rohzeit). */
+export interface TimeReportSettlement {
+  id?: string
+  employeeId: string
+  periodStart: string
+  periodEnd: string
+  settledAt: Date | any
+  /** Summe max(0, Rohzeit − korrigierte Zeit) in Minuten — als „abgerechnet“ / ausbezahlt betrachtet. */
+  paidOutMinutes: number
+  rawTotalMinutes: number
+  correctedTotalMinutes: number
+  lines?: Array<{
+    timeEntryId: string
+    dateLabel: string
+    rawMinutes: number
+    correctedMinutes: number
+    paidOutMinutes: number
+  }>
 }
 
 export interface LeaveRequest {
@@ -115,6 +214,11 @@ export interface LeaveRequest {
   updatedAt?: Date | any
   approvedBy?: string
   approvedAt?: Date | any
+  /** Einzelne Urlaubstage, die z. B. durch tatsaechliches Stempeln wieder gutgeschrieben wurden. */
+  cancelledDates?: string[]
+  autoCancelledAt?: Date | any
+  autoCancellationReason?: string
+  autoCancelledByTimeEntryId?: string
   rejectionReason?: string
 }
 

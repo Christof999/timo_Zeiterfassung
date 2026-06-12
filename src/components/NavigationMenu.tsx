@@ -36,17 +36,17 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
   return (
     <>
       <button 
-        className="nav-toggle" 
+        className={`nav-toggle ${isOpen ? 'nav-toggle--hidden' : ''}`}
         onClick={() => setIsOpen(true)}
         aria-label="Navigation umschalten"
         aria-expanded={isOpen}
       >
-        <span className="hamburger-line"></span>
-        <span className="hamburger-line"></span>
-        <span className="hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
+        <span className="nav-hamburger-line"></span>
       </button>
 
-      <nav className={`nav-menu ${isOpen ? 'active' : ''}`} aria-hidden={!isOpen}>
+      <nav className={`nav-menu nav-menu--employee ${isOpen ? 'active' : ''}`} aria-hidden={!isOpen}>
         <button 
           className="nav-menu-close" 
           onClick={() => setIsOpen(false)}
@@ -59,7 +59,7 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
           className="nav-item btn primary-btn" 
           onClick={() => setIsOpen(false)}
         >
-          📅 Urlaubsanträge
+          Urlaubsanträge
         </Link>
         <button 
           onClick={() => {
@@ -68,7 +68,7 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
           }} 
           className="nav-item btn secondary-btn"
         >
-          🚪 Abmelden
+          Abmelden
         </button>
       </nav>
 

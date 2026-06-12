@@ -200,14 +200,14 @@ const VacationTab: React.FC = () => {
                       className="btn approve-btn"
                       title="Genehmigen"
                     >
-                      ✅ Genehmigen
+                      Genehmigen
                     </button>
                     <button 
                       onClick={() => handleRejectClick(request)}
                       className="btn reject-btn"
                       title="Ablehnen"
                     >
-                      ❌ Ablehnen
+                      Ablehnen
                     </button>
                   </div>
                 )}

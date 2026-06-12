@@ -1,0 +1,82 @@
+.save-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.save-progress-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--card-background);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  box-shadow: var(--shadow-xl);
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.save-progress-spinner {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto var(--spacing-md);
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: saveProgressSpin 0.75s linear infinite;
+}
+
+@keyframes saveProgressSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.save-progress-title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color);
+}
+
+.save-progress-message {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.save-progress-bar-track {
+  height: 8px;
+  background: var(--border-light);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+}
+
+.save-progress-bar-fill {
+  height: 100%;
+  background: var(--primary-gradient);
+  border-radius: var(--radius-full);
+  transition: width 0.35s ease;
+}
+
+.save-progress-step {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-color);
+}
+
+.save-progress-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}

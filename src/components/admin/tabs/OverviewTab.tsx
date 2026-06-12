@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { TimeEntry, Employee, Project } from '../../../types'
 import { toast } from '../../ToastContainer'
+import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
 import '../../../styles/AdminTabs.css'
 
 const OverviewTab: React.FC = () => {
   const [activeEmployeesCount, setActiveEmployeesCount] = useState(0)
   const [activeProjectsCount, setActiveProjectsCount] = useState(0)
   const [todayHours, setTodayHours] = useState('0.00')
+  const [nowTick, setNowTick] = useState(Date.now())
   const [liveActivities, setLiveActivities] = useState<Array<{
     employee: Employee
     project: Project
@@ -22,39 +24,37 @@ const OverviewTab: React.FC = () => {
     return () => clearInterval(interval)
   }, [])
 
-  // Separate useEffect für Live-Dauer-Updates (alle Minute)
+  // Aktualisiert nur die Daueranzeige in der UI, ohne neue Firestore-Reads.
   useEffect(() => {
-    if (liveActivities.length === 0) return
-    
-    const durationInterval = setInterval(() => {
-      // Aktualisiere nur die Live-Aktivitäten für die Dauer-Anzeige
-      loadDashboardData()
-    }, 60000) // Alle Minute aktualisieren für Live-Dauer
-    
+    const durationInterval = setInterval(() => setNowTick(Date.now()), 60000)
     return () => clearInterval(durationInterval)
-  }, [liveActivities.length])
+  }, [])
 
   const loadDashboardData = async () => {
     try {
+      const [currentTimeEntries, projects, todaysEntries, employees] = await Promise.all([
+        DataService.getCurrentTimeEntries(),
+        DataService.getAllProjects(),
+        DataService.getTodaysTimeEntries(),
+        DataService.getAllEmployees()
+      ])
+
       // Eingestempelte Mitarbeiter zählen
-      const currentTimeEntries = await DataService.getCurrentTimeEntries()
       const uniqueClockedInEmployees = new Set(currentTimeEntries.map(entry => entry.employeeId))
       setActiveEmployeesCount(uniqueClockedInEmployees.size)
 
       // Aktive Projekte zählen
-      const projects = await DataService.getAllProjects()
       const activeProjects = projects.filter(project => 
         project.status === 'active' || project.isActive === true
       )
       setActiveProjectsCount(activeProjects.length)
 
       // Heutige Arbeitsstunden berechnen
-      const todaysEntries = await DataService.getTodaysTimeEntries()
       const totalHours = DataService.calculateTotalWorkHours(todaysEntries)
       setTodayHours(totalHours.toFixed(2))
 
       // Live-Aktivitäten laden
-      await loadLiveActivity(currentTimeEntries)
+      loadLiveActivity(currentTimeEntries, employees, projects)
       
       setIsLoading(false)
     } catch (error) {
@@ -63,27 +63,22 @@ const OverviewTab: React.FC = () => {
     }
   }
 
-  const loadLiveActivity = async (timeEntries: TimeEntry[]) => {
-    try {
-      const employees = await DataService.getAllEmployees()
-      const projects = await DataService.getAllProjects()
-      
-      const activities = await Promise.all(
-        timeEntries.slice(0, 10).map(async (entry) => {
-          const employee = employees.find(e => e.id === entry.employeeId)
-          const project = projects.find(p => p.id === entry.projectId)
-          
-          if (employee && project) {
-            return { employee, project, timeEntry: entry }
-          }
-          return null
-        })
-      )
+  const loadLiveActivity = (timeEntries: TimeEntry[], employees: Employee[], projects: Project[]) => {
+    const activities = timeEntries
+      .slice(0, 10)
+      .map((entry) => {
+        const employee = employees.find(e => e.id === entry.employeeId)
+        const project = projects.find(p => p.id === entry.projectId)
+        if (!employee || !project) return null
+        return { employee, project, timeEntry: entry }
+      })
+      .filter((activity) => activity !== null) as Array<{
+      employee: Employee
+      project: Project
+      timeEntry: TimeEntry
+    }>
 
-      setLiveActivities(activities.filter(a => a !== null) as any)
-    } catch (error) {
-      console.error('Fehler beim Laden der Live-Aktivitäten:', error)
-    }
+    setLiveActivities(activities)
   }
 
   // Mitarbeiter ausstempeln (Admin-Funktion)
@@ -95,25 +90,29 @@ const OverviewTab: React.FC = () => {
     setClockingOut(timeEntry.id)
     
     try {
-      const now = new Date()
-      
-      // Arbeitszeit berechnen für automatische Pause
-      const clockInTime = timeEntry.clockInTime?.toDate?.() || new Date(timeEntry.clockInTime)
-      const workDurationMs = now.getTime() - clockInTime.getTime()
-      const workDurationHours = workDurationMs / (1000 * 60 * 60)
-      
-      // Automatische Pause nach deutschem Arbeitszeitgesetz
-      let pauseTotalTime = timeEntry.pauseTotalTime || 0
-      if (workDurationHours > 9 && pauseTotalTime < 45 * 60 * 1000) {
-        pauseTotalTime = 45 * 60 * 1000 // 45 Minuten
-      } else if (workDurationHours > 6 && pauseTotalTime < 30 * 60 * 1000) {
-        pauseTotalTime = 30 * 60 * 1000 // 30 Minuten
+      const pauseRaw = window.prompt(
+        `Pausenzeit für ${employeeName} in Minuten (0 wenn keine Pause):`,
+        '0'
+      )
+      if (pauseRaw === null) {
+        setClockingOut(null)
+        return
       }
+      const pauseMinutes = Number.parseInt(String(pauseRaw).trim(), 10)
+      if (Number.isNaN(pauseMinutes) || pauseMinutes < 0 || pauseMinutes > 24 * 60) {
+        toast.error('Bitte eine gültige Pausenzeit zwischen 0 und 1440 Minuten eingeben.')
+        setClockingOut(null)
+        return
+      }
+
+      const now = new Date()
+      const pauseTotalTime = pauseMinutes * 60 * 1000
 
       await DataService.updateTimeEntry(timeEntry.id, {
         clockOutTime: now,
         pauseTotalTime,
-        notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin'
+        notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin',
+        heroSyncStatus: 'pending'
       })
 
       toast.success(`${employeeName} wurde ausgestempelt`)
@@ -165,7 +164,7 @@ const OverviewTab: React.FC = () => {
                 : activity.timeEntry.clockInTime?.toDate?.() || new Date(activity.timeEntry.clockInTime)
               
               // Berechne die Dauer seit Einstempeln
-              const now = new Date()
+              const now = new Date(nowTick)
               const durationMs = now.getTime() - clockInTime.getTime()
               const durationHours = Math.floor(durationMs / (1000 * 60 * 60))
               const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60))
@@ -186,7 +185,12 @@ const OverviewTab: React.FC = () => {
               
               const employeeName = activity.employee.name || `${activity.employee.firstName} ${activity.employee.lastName}`
               const isClockingOut = clockingOut === activity.timeEntry.id
-              
+              const locationLabel = formatClockInLocationLabel(activity.timeEntry)
+              const locationCoords = getClockInCoordinates(activity.timeEntry)
+              const mapsHref = locationCoords
+                ? `https://www.google.com/maps?q=${locationCoords.lat},${locationCoords.lng}`
+                : null
+
               return (
                 <div key={activity.timeEntry.id} className="activity-item">
                   <div className="activity-main">
@@ -197,11 +201,19 @@ const OverviewTab: React.FC = () => {
                       <div className="activity-project">{activity.project.name}</div>
                       <div className="activity-details">
                         <div className="activity-date">
-                          📅 {dateString} um {timeString}
+                          {dateString} um {timeString}
                         </div>
                         <div className="activity-duration">
-                          ⏱️ Eingestempelt seit: {durationString}
+                          Eingestempelt seit: {durationString}
                         </div>
+                        {locationLabel && mapsHref && (
+                          <div className="activity-location">
+                            <span className="activity-location-label">Einstempel-Ort:</span>{' '}
+                            <a href={mapsHref} target="_blank" rel="noopener noreferrer" className="activity-location-link">
+                              {locationLabel}
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button
@@ -210,7 +222,7 @@ const OverviewTab: React.FC = () => {
                       disabled={isClockingOut}
                       title="Mitarbeiter ausstempeln"
                     >
-                      {isClockingOut ? '...' : '⏹️'}
+                      {isClockingOut ? '...' : 'Ausstempeln'}
                     </button>
                   </div>
                 </div>

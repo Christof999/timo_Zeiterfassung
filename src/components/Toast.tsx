@@ -25,11 +25,7 @@ const Toast: React.FC<ToastProps> = ({
   return (
     <div className={`toast toast-${type}`} role="alert">
       <div className="toast-content">
-        <span className="toast-icon">
-          {type === 'success' && '✅'}
-          {type === 'error' && '❌'}
-          {type === 'info' && 'ℹ️'}
-        </span>
+        <span className={`toast-icon toast-icon-${type}`} aria-hidden="true" />
         <span className="toast-message">{message}</span>
       </div>
       <button 

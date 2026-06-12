@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee } from '../../../types'
 import { toast } from '../../ToastContainer'
 import EmployeeModal from '../EmployeeModal'
+import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
 const EmployeesTab: React.FC = () => {
@@ -10,6 +11,18 @@ const EmployeesTab: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredEmployees = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return employees
+    return employees.filter((employee) => {
+      const fullName = employee.name || `${employee.firstName ?? ''} ${employee.lastName ?? ''}`
+      return [fullName, employee.username, employee.position]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(term))
+    })
+  }, [employees, searchTerm])
 
   useEffect(() => {
     loadEmployees()
@@ -66,15 +79,24 @@ const EmployeesTab: React.FC = () => {
       <div className="tab-header">
         <h3>Mitarbeiter</h3>
         <button onClick={handleAdd} className="btn primary-btn">
-          ➕ Mitarbeiter hinzufügen
+          Mitarbeiter hinzufügen
         </button>
       </div>
 
       {employees.length === 0 ? (
         <p className="no-data">Keine Mitarbeiter vorhanden</p>
       ) : (
-        <div className="data-table-container">
-          <table className="data-table">
+        <>
+          <ListSearch
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Mitarbeiter suchen (Name, Benutzername, Position)"
+          />
+          {filteredEmployees.length === 0 ? (
+            <p className="no-data">Keine Treffer für „{searchTerm}"</p>
+          ) : (
+            <div className="data-table-container">
+              <table className="data-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -85,37 +107,39 @@ const EmployeesTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {employees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <tr key={employee.id}>
-                  <td>{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
-                  <td>{employee.username}</td>
-                  <td>{employee.position || '-'}</td>
-                  <td>
+                  <td data-label="Name">{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
+                  <td data-label="Benutzername">{employee.username}</td>
+                  <td data-label="Position">{employee.position || '-'}</td>
+                  <td data-label="Status">
                     <span className={`status-badge ${employee.status === 'active' ? 'active' : 'inactive'}`}>
                       {employee.status === 'active' ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="action-buttons">
+                  <td className="action-buttons" data-label="">
                     <button 
                       onClick={() => handleEdit(employee)} 
                       className="action-btn edit-btn"
                       aria-label="Bearbeiten"
                     >
-                      ✏️
+                      Bearbeiten
                     </button>
                     <button 
                       onClick={() => handleDelete(employee.id!)} 
                       className="action-btn delete-btn"
                       aria-label="Löschen"
                     >
-                      🗑️
+                      Löschen
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {showModal && (

@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project, Employee } from '../types'
-import VehicleBookingModal from './VehicleBookingModal'
+import type { TimeEntry, Project, MaterialType, TimeEntryMaterialUsage } from '../types'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
+import ProjectSwitchModal from './ProjectSwitchModal'
+import MaterialUsageFields, {
+  buildMaterialUsagesFromRows,
+  createMaterialUsageRow,
+  type MaterialUsageRow
+} from './MaterialUsageFields'
+import { toast } from './ToastContainer'
 import '../styles/ClockOutForm.css'
 
 interface ClockOutFormProps {
   timeEntry: TimeEntry
   project: Project | null
   clockInTime: Date | null
-  onSimpleClockOut: () => void
+  onSimpleClockOut: (pauseMinutes: number, materialUsages: TimeEntryMaterialUsage[] | undefined) => void
+  onExtendedClockOutSuccess: () => void
   onUpdate: () => void
+  onProjectSwitch: (newProjectId: string) => Promise<void>
 }
 
 const ClockOutForm: React.FC<ClockOutFormProps> = ({
@@ -19,49 +27,70 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   project,
   clockInTime,
   onSimpleClockOut,
-  onUpdate
+  onExtendedClockOutSuccess,
+  onUpdate,
+  onProjectSwitch
 }) => {
-  const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showExtendedModal, setShowExtendedModal] = useState(false)
   const [showLiveDocModal, setShowLiveDocModal] = useState(false)
-  const [vehicleBookings, setVehicleBookings] = useState<any[]>([])
-
-  const documentationUsers = ['mdorner', 'plauffer', 'csoergel']
-  const [currentUser, setCurrentUser] = useState<Employee | null>(null)
-
-  useEffect(() => {
-    DataService.getCurrentUser().then(setCurrentUser)
-  }, [])
-
-  const canUseDocumentation = currentUser && 
-    (documentationUsers.includes(currentUser.username || '') || currentUser.username === 'martin')
+  const [showProjectSwitchModal, setShowProjectSwitchModal] = useState(false)
+  /** Leer = noch nicht bestätigt; „0“ ist gültig */
+  const [pauseMinutesInput, setPauseMinutesInput] = useState('')
+  /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
+  const [pauseMsForExtendedModal, setPauseMsForExtendedModal] = useState<number | null>(null)
+  const [noMaterial, setNoMaterial] = useState(false)
+  const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
 
   useEffect(() => {
-    loadVehicleBookings()
+    DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
   }, [])
-
-  const loadVehicleBookings = async () => {
-    try {
-      const bookings = await DataService.getVehicleUsagesByProject(timeEntry.projectId)
-      const today = new Date().toISOString().split('T')[0]
-      
-      const user = await DataService.getCurrentUser()
-      const myBookings = bookings.filter(booking => {
-        const bookingDate = booking.date instanceof Date
-          ? booking.date.toISOString().split('T')[0]
-          : booking.date?.toDate?.()?.toISOString().split('T')[0] || booking.date
-        return booking.employeeId === user?.id && bookingDate === today
-      })
-      
-      setVehicleBookings(myBookings)
-    } catch (error) {
-      console.error('Fehler beim Laden der Fahrzeugbuchungen:', error)
-    }
-  }
 
   const formatTime = (date: Date | null) => {
     if (!date) return '-'
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const parsePauseMinutes = (): number | null => {
+    const raw = pauseMinutesInput.trim()
+    if (raw === '') {
+      toast.error('Bitte geben Sie die Pausenzeit in Minuten ein (0, wenn keine Pause).')
+      return null
+    }
+    const n = Number.parseInt(raw, 10)
+    if (Number.isNaN(n) || n < 0 || n > 24 * 60) {
+      toast.error('Pausenzeit: bitte eine ganze Zahl zwischen 0 und 1440 Minuten.')
+      return null
+    }
+    return n
+  }
+
+  const handleSimpleClockOutClick = () => {
+    const minutes = parsePauseMinutes()
+    if (minutes === null) return
+
+    const typesById = new Map(materialTypes.map((t) => [t.id, t]))
+    let materialUsages: TimeEntryMaterialUsage[] | undefined
+    if (!noMaterial) {
+      if (materialTypes.length === 0) {
+        toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator unter „Material“ informieren.')
+        return
+      }
+      const built = buildMaterialUsagesFromRows(materialRows, typesById)
+      if (built === null) {
+        toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
+        return
+      }
+      if (built.length === 0) {
+        toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
+        return
+      }
+      materialUsages = built
+    } else {
+      materialUsages = []
+    }
+
+    onSimpleClockOut(minutes, materialUsages)
   }
 
   return (
@@ -72,86 +101,90 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           <p className="project-name">
             <strong>{project?.name || 'Unbekanntes Projekt'}</strong>
           </p>
-          <p className="project-client">📋 Kunde: {project?.client || '-'}</p>
+          <p className="project-client">Kunde: {project?.client || '-'}</p>
           <p className="project-location">
-            📍 Adresse: {project?.address || project?.location || '-'}
+            Adresse: {project?.address || project?.location || '-'}
           </p>
         </div>
       </div>
 
       <p className="clock-in-info">
-        ⏱️ Eingestempelt seit: {formatTime(clockInTime)}
+        Eingestempelt seit: {formatTime(clockInTime)}
       </p>
 
-      {vehicleBookings.length > 0 && (
-        <div className="current-vehicle-bookings">
-          <h4>🚗 Gebuchte Fahrzeuge heute:</h4>
-          <div className="vehicle-bookings-list">
-            {vehicleBookings.map((booking) => (
-              <div key={booking.id} className="booking-item">
-                <div className="booking-item-details">
-                  <div className="booking-item-vehicle">
-                    {booking.vehicleName || 'Unbekanntes Fahrzeug'}
-                  </div>
-                  {booking.hoursUsed && (
-                    <div className="booking-item-hours">
-                      ⏱️ {booking.hoursUsed} Stunde{booking.hoursUsed !== 1 ? 'n' : ''}
-                    </div>
-                  )}
-                  {booking.comment && (
-                    <div className="booking-item-comment">{booking.comment}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <MaterialUsageFields
+        noMaterial={noMaterial}
+        onNoMaterialChange={setNoMaterial}
+        rows={materialRows}
+        onRowsChange={setMaterialRows}
+      />
+
+      <div className="pause-input-section">
+        <label htmlFor="clock-out-pause-minutes" className="pause-input-label">
+          Pausenzeit gesamt (Minuten) <span className="required-mark">*</span>
+        </label>
+        <input
+          id="clock-out-pause-minutes"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={1440}
+          step={1}
+          className="pause-minutes-input"
+          value={pauseMinutesInput}
+          onChange={(e) => setPauseMinutesInput(e.target.value)}
+          placeholder="z. B. 0 oder 30"
+          autoComplete="off"
+        />
+        <p className="pause-input-hint">
+          Pflichtangabe zum Ausstempeln. Ohne Pause: <strong>0</strong> eintragen.
+        </p>
+      </div>
 
       <div className="clock-out-buttons">
-        <button onClick={onSimpleClockOut} className="btn secondary-btn">
-          Einfach Ausstempeln
-        </button>
-        <button 
-          onClick={() => setShowVehicleModal(true)} 
-          className="btn info-btn"
+        <button
+          type="button"
+          onClick={() => setShowProjectSwitchModal(true)}
+          className="btn project-switch-btn"
         >
-          🚗 Fahrzeugzeit buchen
+          Projekt wechseln
+        </button>
+        <button type="button" onClick={handleSimpleClockOutClick} className="btn secondary-btn">
+          Einfach Ausstempeln
         </button>
         <button 
           onClick={() => setShowLiveDocModal(true)} 
           className="btn info-btn"
         >
-          📝 Dokumentation hinzufügen
+          Dokumentation hinzufügen
         </button>
-        {canUseDocumentation && (
-          <button 
-            onClick={() => setShowExtendedModal(true)} 
-            className="btn primary-btn"
-          >
-            Mit Dokumentation Ausstempeln
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            const minutes = parsePauseMinutes()
+            if (minutes === null) return
+            setPauseMsForExtendedModal(minutes * 60 * 1000)
+            setShowExtendedModal(true)
+          }}
+          className="btn primary-btn"
+        >
+          Mit Dokumentation Ausstempeln
+        </button>
       </div>
 
-      {showVehicleModal && (
-        <VehicleBookingModal
-          timeEntry={timeEntry}
-          onClose={() => {
-            setShowVehicleModal(false)
-            loadVehicleBookings()
-          }}
-        />
-      )}
-
-      {showExtendedModal && (
+      {showExtendedModal && pauseMsForExtendedModal !== null && (
         <ExtendedClockOutModal
           timeEntry={timeEntry}
+          pauseTotalTimeMs={pauseMsForExtendedModal}
           onClose={() => {
             setShowExtendedModal(false)
+            setPauseMsForExtendedModal(null)
             onUpdate()
           }}
-          onClockOut={onSimpleClockOut}
+          onClockOutSuccess={() => {
+            setPauseMsForExtendedModal(null)
+            onExtendedClockOutSuccess()
+          }}
         />
       )}
 
@@ -162,6 +195,15 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
             setShowLiveDocModal(false)
             onUpdate()
           }}
+        />
+      )}
+
+      {showProjectSwitchModal && (
+        <ProjectSwitchModal
+          currentProjectId={timeEntry.projectId}
+          currentProjectName={project?.name}
+          onClose={() => setShowProjectSwitchModal(false)}
+          onSwitch={onProjectSwitch}
         />
       )}
     </div>

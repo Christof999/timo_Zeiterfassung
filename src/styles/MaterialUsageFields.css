@@ -1,0 +1,95 @@
+.material-usage-fields {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.material-usage-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-lg);
+}
+
+.material-usage-intro {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.material-usage-no-material {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.material-usage-no-material input {
+  margin-top: 3px;
+}
+
+.material-usage-loading,
+.material-usage-empty {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.material-usage-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.material-usage-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(88px, 100px) 40px;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.material-usage-select,
+.material-usage-qty {
+  min-height: var(--btn-height);
+  padding: var(--btn-padding-y) var(--btn-padding-x);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  background: var(--background-color);
+  color: var(--text-color);
+}
+
+.material-usage-remove {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--light-color);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.material-usage-remove:hover {
+  background: var(--danger-light);
+  color: var(--danger-color);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.material-usage-add {
+  margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 480px) {
+  .material-usage-row {
+    grid-template-columns: 1fr;
+  }
+
+  .material-usage-remove {
+    width: 100%;
+  }
+}

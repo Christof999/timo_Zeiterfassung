@@ -4,23 +4,189 @@ import {
   getDoc, 
   getDocs, 
   addDoc, 
+  setDoc,
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
+  writeBatch,
   query, 
   where, 
   limit,
+  runTransaction,
+  documentId,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore'
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import { db, auth } from './firebaseConfig'
-import type { Employee, Project, TimeEntry, Vehicle, VehicleUsage, FileUpload, LeaveRequest } from '../types'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, auth, storage } from './firebaseConfig'
+import type {
+  Employee,
+  Project,
+  TimeEntry,
+  TimeEntryMaterialUsage,
+  Vehicle,
+  VehicleUsage,
+  FileUpload,
+  LeaveRequest,
+  MaterialType,
+  TimeReportSettlement,
+  HeroIntegrationConfig,
+  HeroSyncLogEntry
+} from '../types'
+import { formatDateForInputLocal } from '../utils/dateUtils'
+import { withTimeout } from '../utils/withTimeout'
+import { getFileImageSrc } from '../utils/fileImageSrc'
+import { toFileUploadRef } from '../utils/fileUploadRef'
+import { sanitizeTimeEntryForRead } from '../utils/sanitizeTimeEntry'
+
+const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
+
+/** Optionen beim Laden von Datei-Uploads — bei includeBinary=false bleibt Base64 außen vor. */
+export type FileUploadLoadOptions = { includeBinary?: boolean }
+
+// Timeouts für die Bild-/Upload-Pipeline — verhindern endloses „Speichere…“ bei schlechtem Netz.
+const STORAGE_UPLOAD_TIMEOUT_MS = 25_000
+const IMAGE_PREPARE_TIMEOUT_MS = 90_000
+const IMAGE_DECODE_TIMEOUT_MS = 30_000
+const FIRESTORE_WRITE_TIMEOUT_MS = 45_000
+
+/** Firestore-Maximum pro String-Feld (base64Data) — etwas Puffer unter 1.048.487 Bytes */
+const FIRESTORE_MAX_BASE64_BYTES = 1_000_000
+
+/** Keine Firestore-Dokumente (Platzhalter aus alter Offline-/Client-Logik). */
+function isPlaceholderFileUploadId(id: string): boolean {
+  const t = id.trim().toLowerCase()
+  return (
+    t.startsWith('local_') ||
+    t.startsWith('temp_') ||
+    t.startsWith('mock_') ||
+    t.startsWith('fake_')
+  )
+}
+
+/** IDs aus verschachtelten Arrays/Objekten (sitePhotos, liveDocumentation, …) — nur id-ähnliche Felder, kein Volltext. */
+function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): void {
+  if (depth > 14) return
+  if (value == null) return
+  if (typeof value === 'string') {
+    const t = value.trim()
+    if (t.length >= 8 && t.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(t) && !isPlaceholderFileUploadId(t)) {
+      into.add(t)
+    }
+    return
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    into.add(String(value))
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectFileReferenceIds(item, into, depth + 1))
+    return
+  }
+  if (typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    for (const key of ['id', 'fileId', 'uploadId', 'docId', 'fileUploadId']) {
+      const v = o[key]
+      if (typeof v === 'string' && v.trim() && !isPlaceholderFileUploadId(v.trim())) into.add(v.trim())
+      if (typeof v === 'number' && Number.isFinite(v)) into.add(String(v))
+    }
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'notes' || k === 'imageComment' || k === 'addedByName' || k === 'base64Data' || k === 'mimeType') {
+        continue
+      }
+      if (v !== null && typeof v === 'object') collectFileReferenceIds(v, into, depth + 1)
+    }
+  }
+}
 
 class DataServiceClass {
   private authReadyPromise: Promise<void>
 
   constructor() {
     this.authReadyPromise = this.initAuth()
+  }
+
+  /** Einheitliche Abbildung fileUploads-Dokument → FileUpload (gleiche Base64-/URL-Logik wie getFileUploads). */
+  private fileUploadFromDocData(
+    docId: string,
+    data: Record<string, unknown>,
+    opts?: {
+      projectIdFallback?: string
+      fileTypeFallback?: string
+      includeBinary?: boolean
+    }
+  ): FileUpload {
+    const uploadTimeRaw = data.uploadTime
+    const uploadTime =
+      uploadTimeRaw instanceof Timestamp
+        ? uploadTimeRaw.toDate()
+        : uploadTimeRaw instanceof Date
+          ? uploadTimeRaw
+          : (uploadTimeRaw as any)?.toDate?.() || new Date((uploadTimeRaw as any) || Date.now())
+
+    const includeBinary = opts?.includeBinary === true
+    let base64 = ''
+    let fileUrl = String(data.url || data.filePath || '')
+    if (includeBinary) {
+      base64 = String(data.base64Data || data.base64String || data.base64 || '')
+      if (fileUrl.startsWith('data:')) {
+        const parts = fileUrl.split(',')
+        if (parts.length > 1) base64 = parts[1]
+        fileUrl = ''
+      }
+      if (!base64 && typeof data.mimeType === 'string' && data.mimeType.includes(',')) {
+        const parts = data.mimeType.split(',')
+        if (parts.length > 1) base64 = parts[1]
+      }
+    } else if (fileUrl.startsWith('data:')) {
+      fileUrl = ''
+    }
+
+    let mimeType = String(data.mimeType || data.contentType || '')
+    if (mimeType.startsWith('data:')) {
+      const match = mimeType.match(/^data:([^;,]+)/)
+      if (match) mimeType = match[1]
+    }
+
+    const storagePathRaw = data.storagePath || data.storage_path
+    const storagePath =
+      typeof storagePathRaw === 'string' && storagePathRaw.trim()
+        ? storagePathRaw.trim()
+        : undefined
+
+    return {
+      id: docId,
+      fileName: String(data.fileName || data.name || ''),
+      filePath: fileUrl,
+      fileType: String(data.fileType || data.type || opts?.fileTypeFallback || 'construction_site'),
+      projectId: String(data.projectId || opts?.projectIdFallback || ''),
+      employeeId: String(data.employeeId || ''),
+      timeEntryId: String(data.timeEntryId || ''),
+      uploadTime: uploadTime || new Date(),
+      notes: String(data.notes || data.comment || ''),
+      imageComment: String(data.imageComment || data.comment || ''),
+      base64Data: base64,
+      mimeType,
+      storagePath
+    } as FileUpload
+  }
+
+  /** Nur IDs, für die ein fileUploads-Dokument existiert (vermeidet Fehler bei Platzhalter-/Offline-IDs). */
+  private async filterExistingFileUploadDocIds(ids: string[]): Promise<string[]> {
+    const out: string[] = []
+    for (const rawId of ids) {
+      const id = rawId?.trim()
+      if (!id || isPlaceholderFileUploadId(id)) continue
+      try {
+        const ref = doc(db, 'fileUploads', id)
+        const snap = await getDoc(ref)
+        if (snap.exists()) out.push(id)
+      } catch {
+        /* skip */
+      }
+    }
+    return out
   }
 
   private initAuth(): Promise<void> {
@@ -34,6 +200,11 @@ class DataServiceClass {
           console.log('Kein Benutzer, starte anonyme Anmeldung...')
           signInAnonymously(auth).catch((error) => {
             console.error('❌ Fehler bei der anonymen Anmeldung:', error)
+            if (error?.code === 'auth/configuration-not-found') {
+              console.error(
+                'Firebase Auth: Im Projekt Authentication aktivieren, Provider „Anonym“ einschalten und die Vercel-Domain unter Authentication → Settings → Authorized domains eintragen. Ohne gültige Anmeldung sind Firestore-Schreibzugriffe (Admin) gesperrt.'
+              )
+            }
             resolve() // Trotzdem auflösen, damit die App weiterläuft
           })
         }
@@ -103,9 +274,12 @@ class DataServiceClass {
       let projects = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
       
       projects = projects.filter(
-        (project) =>
-          !project.isActive || project.isActive === true ||
-          !project.status || project.status === 'active' || project.status === 'aktiv'
+        (project) => {
+          const isActiveFlag = project.isActive !== false
+          const normalizedStatus = (project.status || '').toLowerCase()
+          const isActiveStatus = !project.status || normalizedStatus === 'active' || normalizedStatus === 'aktiv'
+          return isActiveFlag && isActiveStatus
+        }
       )
       
       projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
@@ -148,14 +322,27 @@ class DataServiceClass {
       const q = query(
         timeEntriesRef,
         where('employeeId', '==', employeeId),
-        where('clockOutTime', '==', null),
-        limit(1)
+        where('clockOutTime', '==', null)
       )
       
       const snapshot = await getDocs(q)
       if (!snapshot.empty) {
-        const doc = snapshot.docs[0]
-        return { id: doc.id, ...doc.data() } as TimeEntry
+        const activeEntries = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+        activeEntries.sort((a, b) => {
+          const aDate = a.clockInTime instanceof Timestamp
+            ? a.clockInTime.toDate()
+            : new Date(a.clockInTime)
+          const bDate = b.clockInTime instanceof Timestamp
+            ? b.clockInTime.toDate()
+            : new Date(b.clockInTime)
+          return bDate.getTime() - aDate.getTime()
+        })
+
+        if (isDevMode && activeEntries.length > 1) {
+          console.warn(`Mehrere offene Zeiteinträge für Mitarbeiter ${employeeId} gefunden:`, activeEntries.length)
+        }
+
+        return sanitizeTimeEntryForRead(activeEntries[0])
       }
       return null
     } catch (error) {
@@ -171,103 +358,417 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('employeeId', '==', employeeId))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der Zeiteinträge:', error)
       return []
     }
   }
 
+  private getDateKeyFromValue(value: unknown): string {
+    const date = this.convertToDate(value)
+    return formatDateForInputLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
+  }
+
+  private isWeekendDate(date: Date): boolean {
+    const day = date.getDay()
+    return day === 0 || day === 6
+  }
+
+  private getCancelledLeaveDateKeys(leaveRequest: LeaveRequest): Set<string> {
+    return new Set(
+      (leaveRequest.cancelledDates || [])
+        .map((value) => String(value || '').slice(0, 10))
+        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    )
+  }
+
+  private getActiveVacationDayKeys(leaveRequest: LeaveRequest): string[] {
+    const start = this.convertToDate(leaveRequest.startDate)
+    const end = this.convertToDate(leaveRequest.endDate)
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return []
+
+    const cancelled = this.getCancelledLeaveDateKeys(leaveRequest)
+    const keys: string[] = []
+    const current = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+
+    while (current <= last) {
+      const key = formatDateForInputLocal(current)
+      if (!this.isWeekendDate(current) && !cancelled.has(key)) {
+        keys.push(key)
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    return keys
+  }
+
+  private leaveRequestCoversActiveVacationDate(leaveRequest: LeaveRequest, dateKey: string): boolean {
+    if (leaveRequest.type !== 'vacation' || leaveRequest.status !== 'approved') return false
+    return this.getActiveVacationDayKeys(leaveRequest).includes(dateKey)
+  }
+
+  private async getApprovedVacationRequestsForEmployeeOnDate(
+    employeeId: string | undefined,
+    dateKey: string
+  ): Promise<LeaveRequest[]> {
+    if (!employeeId || !dateKey) return []
+
+    try {
+      const leaveRequestsRef = collection(db, 'leaveRequests')
+      const q = query(
+        leaveRequestsRef,
+        where('employeeId', '==', employeeId),
+        where('status', '==', 'approved'),
+        where('type', '==', 'vacation')
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() } as LeaveRequest))
+        .filter((request) => this.leaveRequestCoversActiveVacationDate(request, dateKey))
+    } catch (error) {
+      console.error('Fehler beim Pruefen genehmigter Urlaubsantraege:', error)
+      return []
+    }
+  }
+
+  private buildVacationCancellationUpdate(
+    leaveRequest: LeaveRequest,
+    workedDateKey: string,
+    timeEntryId: string
+  ): { update: Record<string, unknown>; creditDays: number } | null {
+    if (!this.leaveRequestCoversActiveVacationDate(leaveRequest, workedDateKey)) return null
+
+    const activeKeys = this.getActiveVacationDayKeys(leaveRequest)
+    const remainingActiveKeys = activeKeys.filter((key) => key !== workedDateKey)
+    const dateLabel = new Date(`${workedDateKey}T12:00:00`).toLocaleDateString('de-DE')
+    const reason = `Automatisch storniert: Mitarbeiter hat am ${dateLabel} gestempelt.`
+    const existingWorkingDays = Number(leaveRequest.workingDays)
+
+    const update: Record<string, unknown> = {
+      cancelledDates: arrayUnion(workedDateKey),
+      autoCancelledAt: new Date(),
+      autoCancellationReason: reason,
+      autoCancelledByTimeEntryId: timeEntryId,
+      updatedAt: new Date()
+    }
+
+    if (remainingActiveKeys.length === 0) {
+      update.status = 'rejected'
+      update.rejectionReason = reason
+      update.workingDays = 0
+    } else {
+      update.workingDays = Math.max(
+        0,
+        (Number.isFinite(existingWorkingDays) && existingWorkingDays > 0
+          ? existingWorkingDays
+          : activeKeys.length) - 1
+      )
+    }
+
+    return { update, creditDays: 1 }
+  }
+
   async addTimeEntry(timeEntryData: Partial<TimeEntry>): Promise<TimeEntry> {
     await this.authReadyPromise
     try {
+      if (!timeEntryData.employeeId) {
+        throw new Error('Keine gültige Mitarbeiter-ID angegeben')
+      }
+
       // Validierung: Prüfe auf doppelte Einstempelung
       const existingEntry = await this.getCurrentTimeEntry(timeEntryData.employeeId!)
       if (existingEntry) {
         throw new Error('Sie sind bereits eingestempelt. Bitte stempeln Sie zuerst aus.')
       }
 
+      const employeeRef = doc(db, 'employees', timeEntryData.employeeId)
       const timeEntriesRef = collection(db, 'timeEntries')
+      const timeEntryRef = doc(timeEntriesRef)
+
+      const normalizedClockInTime = timeEntryData.clockInTime
+        ? (timeEntryData.clockInTime instanceof Date
+            ? Timestamp.fromDate(timeEntryData.clockInTime)
+            : timeEntryData.clockInTime)
+        : Timestamp.now()
+      const workedDateKey = this.getDateKeyFromValue(normalizedClockInTime)
+      const vacationRequestsToCancel = await this.getApprovedVacationRequestsForEmployeeOnDate(
+        timeEntryData.employeeId,
+        workedDateKey
+      )
+
       const entryData = {
         ...timeEntryData,
-        clockInTime: timeEntryData.clockInTime 
-          ? (timeEntryData.clockInTime instanceof Date 
-              ? Timestamp.fromDate(timeEntryData.clockInTime)
-              : timeEntryData.clockInTime)
-          : serverTimestamp(),
-        clockOutTime: null
+        entryId: timeEntryRef.id,
+        clockInTime: normalizedClockInTime,
+        clockOutTime: null,
+        ...(vacationRequestsToCancel.length > 0
+          ? { autoCancelledVacationRequestIds: vacationRequestsToCancel.map((request) => request.id).filter(Boolean) }
+          : {})
       }
 
-      const docRef = await addDoc(timeEntriesRef, entryData)
-      await updateDoc(docRef, { entryId: docRef.id })
+      await runTransaction(db, async (transaction) => {
+        const employeeDoc = await transaction.get(employeeRef)
+        if (!employeeDoc.exists()) {
+          throw new Error('Mitarbeiter nicht gefunden')
+        }
+
+        const employeeData = employeeDoc.data() as any
+        if (employeeData.activeTimeEntryId) {
+          const activeEntryRef = doc(db, 'timeEntries', employeeData.activeTimeEntryId)
+          const activeEntryDoc = await transaction.get(activeEntryRef)
+          if (activeEntryDoc.exists()) {
+            const activeEntryData = activeEntryDoc.data() as TimeEntry
+            if (activeEntryData.clockOutTime == null) {
+              throw new Error('Sie sind bereits eingestempelt. Bitte stempeln Sie zuerst aus.')
+            }
+          }
+        }
+
+        const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
+        let vacationDaysToCredit = 0
+        for (const request of vacationRequestsToCancel) {
+          if (!request.id) continue
+          const requestRef = doc(db, 'leaveRequests', request.id)
+          const requestDoc = await transaction.get(requestRef)
+          if (!requestDoc.exists()) continue
+          const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
+          const cancellation = this.buildVacationCancellationUpdate(
+            freshRequest,
+            workedDateKey,
+            timeEntryRef.id
+          )
+          if (!cancellation) continue
+          vacationDaysToCredit += cancellation.creditDays
+          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+        }
+
+        transaction.set(timeEntryRef, entryData)
+        vacationUpdates.forEach(({ ref, update }) => transaction.update(ref, update))
+
+        const employeeUpdate: Record<string, unknown> = {
+          activeTimeEntryId: timeEntryRef.id,
+          activeClockInAt: normalizedClockInTime,
+          updatedAt: new Date()
+        }
+        if (vacationDaysToCredit > 0) {
+          const vd = employeeData.vacationDays || {
+            total: 30,
+            used: 0,
+            year: new Date().getFullYear()
+          }
+          employeeUpdate.vacationDays = {
+            ...vd,
+            used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
+            year: vd.year ?? new Date().getFullYear()
+          }
+        }
+
+        transaction.update(employeeRef, employeeUpdate)
+      })
       
-      const newEntry = await getDoc(docRef)
-      return { id: docRef.id, ...newEntry.data() } as TimeEntry
+      const newEntry = await getDoc(timeEntryRef)
+      return { id: timeEntryRef.id, ...newEntry.data() } as TimeEntry
     } catch (error) {
       console.error('Fehler beim Erstellen des Zeiteintrags:', error)
       throw error
     }
   }
 
+  /**
+   * Abgeschlossenen Zeiteintrag nachtragen (Start + Ende).
+   * Ändert nicht den Einstempel-Status des Mitarbeiters (kein activeTimeEntryId).
+   */
+  async addManualCompletedTimeEntry(params: {
+    targetEmployeeId: string
+    projectId: string
+    clockInTime: Date
+    clockOutTime: Date
+    pauseTotalTimeMs?: number
+    notes?: string
+    addedByEmployeeId: string
+    addedByDisplayName: string
+  }): Promise<TimeEntry> {
+    await this.authReadyPromise
+    try {
+      if (!params.targetEmployeeId || !params.projectId) {
+        throw new Error('Mitarbeiter und Projekt sind erforderlich')
+      }
+      if (params.clockOutTime.getTime() <= params.clockInTime.getTime()) {
+        throw new Error('Endzeit muss nach der Startzeit liegen')
+      }
+      const now = Date.now()
+      if (params.clockInTime.getTime() > now) {
+        throw new Error('Startzeit darf nicht in der Zukunft liegen')
+      }
+      if (params.clockOutTime.getTime() > now) {
+        throw new Error('Endzeit darf nicht in der Zukunft liegen')
+      }
+
+      const timeEntriesRef = collection(db, 'timeEntries')
+      const timeEntryRef = doc(timeEntriesRef)
+      const clockInTs = Timestamp.fromDate(params.clockInTime)
+      const clockOutTs = Timestamp.fromDate(params.clockOutTime)
+      const pauseTotalTime = params.pauseTotalTimeMs ?? 0
+      const workedDateKey = this.getDateKeyFromValue(clockInTs)
+      const vacationRequestsToCancel = await this.getApprovedVacationRequestsForEmployeeOnDate(
+        params.targetEmployeeId,
+        workedDateKey
+      )
+
+      const noteBase = params.notes?.trim() ?? ''
+      const auditNote = `Nachtrag durch ${params.addedByDisplayName}`
+      const notes = noteBase ? `${noteBase} | ${auditNote}` : auditNote
+
+      const rawPayload: Record<string, unknown> = {
+        entryId: timeEntryRef.id,
+        employeeId: params.targetEmployeeId,
+        projectId: params.projectId,
+        clockInTime: clockInTs,
+        clockOutTime: clockOutTs,
+        pauseTotalTime,
+        notes,
+        manualTimeEntry: true,
+        manualTimeEntryAddedByEmployeeId: params.addedByEmployeeId,
+        manualTimeEntryAddedByDisplayName: params.addedByDisplayName,
+        manualTimeEntryCreatedAt: serverTimestamp(),
+        ...(vacationRequestsToCancel.length > 0
+          ? { autoCancelledVacationRequestIds: vacationRequestsToCancel.map((request) => request.id).filter(Boolean) }
+          : {}),
+        heroSyncStatus: 'pending',
+        heroSyncError: null
+      }
+
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      await runTransaction(db, async (transaction) => {
+        const empRef = doc(db, 'employees', params.targetEmployeeId)
+        const empSnap = await transaction.get(empRef)
+        const employeeData = empSnap.exists() ? (empSnap.data() as Employee) : null
+
+        const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
+        let vacationDaysToCredit = 0
+        for (const request of vacationRequestsToCancel) {
+          if (!request.id) continue
+          const requestRef = doc(db, 'leaveRequests', request.id)
+          const requestDoc = await transaction.get(requestRef)
+          if (!requestDoc.exists()) continue
+          const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
+          const cancellation = this.buildVacationCancellationUpdate(
+            freshRequest,
+            workedDateKey,
+            timeEntryRef.id
+          )
+          if (!cancellation) continue
+          vacationDaysToCredit += cancellation.creditDays
+          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+        }
+
+        transaction.set(timeEntryRef, payload)
+        vacationUpdates.forEach(({ ref, update }) => transaction.update(ref, update))
+
+        if (employeeData && vacationDaysToCredit > 0) {
+          const vd = employeeData.vacationDays || {
+            total: 30,
+            used: 0,
+            year: new Date().getFullYear()
+          }
+          transaction.update(empRef, {
+            vacationDays: {
+              ...vd,
+              used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
+              year: vd.year ?? new Date().getFullYear()
+            },
+            updatedAt: new Date()
+          })
+        }
+      })
+      const snap = await getDoc(timeEntryRef)
+      return { id: timeEntryRef.id, ...snap.data() } as TimeEntry
+    } catch (error) {
+      console.error('Fehler beim Nachtragen des Zeiteintrags:', error)
+      throw error
+    }
+  }
+
   async clockOutEmployee(
-    timeEntryId: string, 
-    notes: string, 
-    location: { lat: number | null; lng: number | null } | null
-  ): Promise<{ automaticBreak?: { duration: number; reason: string } }> {
+    timeEntryId: string,
+    notes: string,
+    location: { lat: number | null; lng: number | null } | null,
+    pauseTotalTimeMs: number,
+    materialUsages?: TimeEntryMaterialUsage[]
+  ): Promise<void> {
     await this.authReadyPromise
     try {
       if (!timeEntryId) {
         throw new Error('Keine gültige Zeiteintrag-ID angegeben')
       }
+      if (
+        typeof pauseTotalTimeMs !== 'number' ||
+        !Number.isFinite(pauseTotalTimeMs) ||
+        pauseTotalTimeMs < 0 ||
+        pauseTotalTimeMs > 24 * 60 * 60 * 1000
+      ) {
+        throw new Error('Ungültige Pausenzeit')
+      }
 
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
-      const timeEntryDoc = await getDoc(timeEntryRef)
-      
-      if (!timeEntryDoc.exists()) {
-        throw new Error('Zeiteintrag nicht gefunden')
-      }
+      await runTransaction(db, async (transaction) => {
+        const timeEntryDoc = await transaction.get(timeEntryRef)
+        if (!timeEntryDoc.exists()) {
+          throw new Error('Zeiteintrag nicht gefunden')
+        }
 
-      const timeEntry = timeEntryDoc.data() as TimeEntry
-      if (timeEntry.clockOutTime !== null) {
-        throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
-      }
+        const timeEntry = timeEntryDoc.data() as TimeEntry
+        if (timeEntry.clockOutTime != null) {
+          throw new Error('Dieser Mitarbeiter ist bereits ausgestempelt')
+        }
 
-      const clockOutTime = Timestamp.now()
-      const clockInTime = timeEntry.clockInTime instanceof Timestamp 
-        ? timeEntry.clockInTime.toDate()
-        : new Date(timeEntry.clockInTime)
+        let employeeRef: any = null
+        let shouldClearActiveEntry = false
+        if (timeEntry.employeeId) {
+          employeeRef = doc(db, 'employees', timeEntry.employeeId)
+          const employeeDoc = await transaction.get(employeeRef)
+          if (employeeDoc.exists()) {
+            const employeeData = employeeDoc.data() as any
+            shouldClearActiveEntry = employeeData.activeTimeEntryId === timeEntryId
+          }
+        }
 
-      // Automatische Pausenberechnung nach deutschem Arbeitszeitgesetz
-      const workDurationMs = clockOutTime.toDate().getTime() - clockInTime.getTime()
-      const workDurationHours = workDurationMs / (1000 * 60 * 60)
-      
-      let pauseTotalTime = 0
-      let automaticBreak = undefined
+        const clockOutTime = Timestamp.now()
 
-      if (workDurationHours > 6) {
-        // Bei mehr als 6 Stunden: 30 Minuten Pause
-        pauseTotalTime = 30 * 60 * 1000
-        automaticBreak = { duration: 30, reason: 'Arbeitszeit über 6 Stunden' }
-      } else if (workDurationHours > 9) {
-        // Bei mehr als 9 Stunden: 45 Minuten Pause
-        pauseTotalTime = 45 * 60 * 1000
-        automaticBreak = { duration: 45, reason: 'Arbeitszeit über 9 Stunden' }
-      }
+        const updateData: any = {
+          clockOutTime,
+          notes: notes || timeEntry.notes || '',
+          pauseTotalTime: Math.round(pauseTotalTimeMs)
+        }
 
-      const updateData: any = {
-        clockOutTime,
-        notes: notes || timeEntry.notes || '',
-        pauseTotalTime
-      }
+        if (location) {
+          updateData.clockOutLocation = location
+          updateData.locationOut = location
+        }
 
-      if (location) {
-        updateData.clockOutLocation = location
-        updateData.locationOut = location
-      }
+        if (materialUsages !== undefined) {
+          updateData.materialUsages = materialUsages
+        }
 
-      await updateDoc(timeEntryRef, updateData)
+        updateData.heroSyncStatus = 'pending'
 
-      return { automaticBreak }
+        transaction.update(timeEntryRef, updateData)
+
+        if (employeeRef && shouldClearActiveEntry) {
+          transaction.update(employeeRef, {
+            activeTimeEntryId: null,
+            activeClockInAt: null,
+            updatedAt: new Date()
+          })
+        }
+      })
     } catch (error) {
       console.error('Fehler beim Ausstempeln:', error)
       throw error
@@ -282,6 +783,332 @@ class DataServiceClass {
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Zeiteintrags:', error)
       throw error
+    }
+  }
+
+  /**
+   * Wechselt das Projekt eines eingestempelten Mitarbeiters, ohne dass dieser sich ausstempeln
+   * muss: Der aktuelle Stempelsatz wird ohne Pause beendet und sofort ein neuer Stempelsatz auf
+   * dem neuen Projekt gestartet. Pausen werden erst beim regulären Ausstempeln am Tagesende erfasst.
+   */
+  async switchActiveProject(
+    employeeId: string,
+    currentTimeEntryId: string,
+    newProjectId: string,
+    location: { lat: number | null; lng: number | null } | null
+  ): Promise<TimeEntry> {
+    await this.authReadyPromise
+    try {
+      if (!employeeId || !currentTimeEntryId || !newProjectId) {
+        throw new Error('Mitarbeiter, Zeiteintrag und neues Projekt sind erforderlich')
+      }
+
+      const currentRef = doc(db, 'timeEntries', currentTimeEntryId)
+      const employeeRef = doc(db, 'employees', employeeId)
+      const newEntryRef = doc(collection(db, 'timeEntries'))
+
+      await runTransaction(db, async (transaction) => {
+        const [currentSnap, employeeSnap] = await Promise.all([
+          transaction.get(currentRef),
+          transaction.get(employeeRef)
+        ])
+
+        if (!currentSnap.exists()) {
+          throw new Error('Aktueller Zeiteintrag nicht gefunden')
+        }
+        if (!employeeSnap.exists()) {
+          throw new Error('Mitarbeiter nicht gefunden')
+        }
+
+        const current = currentSnap.data() as TimeEntry
+        if (current.clockOutTime != null) {
+          throw new Error('Sie sind nicht mehr eingestempelt')
+        }
+        if (current.projectId === newProjectId) {
+          throw new Error('Bitte wählen Sie ein anderes Projekt')
+        }
+
+        const employeeData = employeeSnap.data() as { activeTimeEntryId?: string }
+        if (employeeData.activeTimeEntryId && employeeData.activeTimeEntryId !== currentTimeEntryId) {
+          throw new Error('Aktiver Stempelsatz stimmt nicht überein. Bitte Seite neu laden.')
+        }
+
+        const clockOutTime = Timestamp.now()
+        const clockInTime = clockOutTime
+        const existingNotes = (current.notes || '').trim()
+        const switchNote = 'Projektwechsel'
+        const notes = existingNotes ? `${existingNotes} | ${switchNote}` : switchNote
+
+        const clockOutUpdate: Record<string, unknown> = {
+          clockOutTime,
+          pauseTotalTime: 0,
+          notes,
+          projectSwitchOut: true
+        }
+        if (location) {
+          clockOutUpdate.clockOutLocation = location
+          clockOutUpdate.locationOut = location
+        }
+        transaction.update(currentRef, clockOutUpdate)
+
+        const newEntryData: Record<string, unknown> = {
+          entryId: newEntryRef.id,
+          employeeId,
+          projectId: newProjectId,
+          clockInTime,
+          clockOutTime: null,
+          clockInLocation: location,
+          notes: '',
+          pauseTotalTime: 0,
+          projectSwitchIn: true
+        }
+        transaction.set(newEntryRef, newEntryData)
+
+        transaction.update(employeeRef, {
+          activeTimeEntryId: newEntryRef.id,
+          activeClockInAt: clockInTime,
+          updatedAt: new Date()
+        })
+      })
+
+      const newSnap = await getDoc(newEntryRef)
+      return { id: newEntryRef.id, ...newSnap.data() } as TimeEntry
+    } catch (error) {
+      console.error('Fehler beim Projektwechsel:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Verknüpft bereits hochgeladene Fotos/Dokumente mit einem Zeiteintrag und MERGT sie in die
+   * bestehenden Listen ein (liest den Eintrag frisch). Idempotent gegenüber bereits vorhandenen
+   * Feldern — wird sowohl online als auch vom Offline-Upload-Queue (späteres Nachreichen) genutzt.
+   */
+  async attachDocumentationUploads(
+    timeEntryId: string,
+    data: { sitePhotos?: FileUpload[]; documents?: FileUpload[]; notes?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+    const entry = await this.getTimeEntryById(timeEntryId)
+    if (!entry) throw new Error('Zeiteintrag nicht gefunden')
+
+    const sitePhotos = data.sitePhotos || []
+    const documents = data.documents || []
+
+    const mergeIds = (existing: unknown, additions: FileUpload[]): string[] => {
+      const prev = Array.isArray(existing) ? (existing as unknown[]).map(String).filter(Boolean) : []
+      return [...prev, ...additions.map((u) => u.id)]
+    }
+    const mergeRefs = (existing: unknown, additions: FileUpload[]): unknown[] => {
+      const base = Array.isArray(existing) ? [...existing] : []
+      return [...base, ...additions.map(toFileUploadRef)]
+    }
+
+    const mergedSiteUploads = mergeIds(entry.sitePhotoUploads, sitePhotos)
+    const mergedDocUploads = mergeIds(entry.documentPhotoUploads, documents)
+    const notes = typeof data.notes === 'string' ? data.notes.trim() : undefined
+
+    const update: Partial<TimeEntry> = {
+      sitePhotoUploads: mergedSiteUploads,
+      documentPhotoUploads: mergedDocUploads,
+      sitePhotos: mergeRefs(entry.sitePhotos, sitePhotos) as TimeEntry['sitePhotos'],
+      documents: mergeRefs(entry.documents, documents) as TimeEntry['documents'],
+      hasDocumentation:
+        !!entry.hasDocumentation ||
+        mergedSiteUploads.length > 0 ||
+        mergedDocUploads.length > 0 ||
+        (entry.notes || '').trim() !== '' ||
+        !!notes
+    }
+    // Notizen nur setzen, wenn übergeben und noch nicht identisch gespeichert (kein Überschreiben mit leer)
+    if (notes && notes !== (entry.notes || '').trim()) {
+      update.notes = notes
+    }
+
+    await this.updateTimeEntry(timeEntryId, update)
+  }
+
+  /**
+   * Zeiteintrag inkl. verknüpfter Dokumente (fileUploads) und Fahrzeugbuchungen am Arbeitstag
+   * auf ein anderes Projekt umhängen (Admin-Korrektur falscher Projektwahl).
+   */
+  async moveTimeEntryToProject(
+    timeEntryId: string,
+    targetProjectId: string,
+    options?: { sourceProjectName?: string; targetProjectName?: string }
+  ): Promise<void> {
+    await this.authReadyPromise
+    if (!timeEntryId?.trim() || !targetProjectId?.trim()) {
+      throw new Error('Zeiteintrag und Zielprojekt sind erforderlich')
+    }
+
+    const entry = await this.getTimeEntryById(timeEntryId)
+    if (!entry) {
+      throw new Error('Zeiteintrag nicht gefunden')
+    }
+
+    const sourceProjectId = entry.projectId
+    if (sourceProjectId === targetProjectId) {
+      throw new Error('Der Eintrag liegt bereits in diesem Projekt')
+    }
+
+    if (entry.clockOutTime == null || entry.clockOutTime === undefined) {
+      throw new Error(
+        'Einstempel-Einträge können nicht umgezogen werden. Bitte zuerst ausstempeln oder den aktiven Eintrag beenden.'
+      )
+    }
+
+    const targetProject = await this.getProjectById(targetProjectId)
+    if (!targetProject) {
+      throw new Error('Zielprojekt nicht gefunden')
+    }
+
+    const clockIn = this.convertToDate(entry.clockInTime)
+    const clockOut = this.convertToDate(entry.clockOutTime)
+    const workDayKey = formatDateForInputLocal(clockIn)
+
+    const fileIdSet = new Set<string>()
+    ;(entry.sitePhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    ;(entry.documentPhotoUploads || []).forEach((id) => collectFileReferenceIds(id, fileIdSet))
+    collectFileReferenceIds(entry.photos, fileIdSet)
+    collectFileReferenceIds(entry.sitePhotos, fileIdSet)
+    collectFileReferenceIds(entry.documents, fileIdSet)
+    collectFileReferenceIds(entry.liveDocumentation, fileIdSet)
+    fileIdSet.delete(timeEntryId)
+    if (entry.employeeId) fileIdSet.delete(String(entry.employeeId))
+
+    const uploadInWorkWindow = (uploadTime: unknown): boolean => {
+      const d = this.convertToDate(uploadTime)
+      const t = d.getTime()
+      return t >= clockIn.getTime() && t <= clockOut.getTime()
+    }
+
+    const mergeFileUploadsForEntry = async (): Promise<void> => {
+      const uploads = await this.getFileUploads(sourceProjectId)
+      for (const u of uploads) {
+        if (!u.id || u.employeeId !== entry.employeeId) continue
+        const dayOfUpload = formatDateForInputLocal(this.convertToDate(u.uploadTime))
+        if (uploadInWorkWindow(u.uploadTime) || dayOfUpload === workDayKey) {
+          fileIdSet.add(u.id)
+        }
+      }
+    }
+    await mergeFileUploadsForEntry()
+
+    const byTimeEntryLink = await this.getFileUploadsByTimeEntryIds([timeEntryId])
+    for (const u of byTimeEntryLink) {
+      if (u.id) fileIdSet.add(u.id)
+    }
+
+    const patchNestedProject = (items: any[] | undefined): any[] | undefined => {
+      if (!items || !Array.isArray(items)) return items
+      return items.map((item) => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          return { ...item, projectId: targetProjectId }
+        }
+        return item
+      })
+    }
+
+    const patchLiveDocumentationProject = (live: unknown, targetId: string): unknown[] | undefined => {
+      if (!live || !Array.isArray(live)) return undefined
+      return live.map((block: any) => {
+        if (!block || typeof block !== 'object') return block
+        const next = { ...block }
+        if (Array.isArray(next.images)) {
+          next.images = next.images.map((img: any) =>
+            img && typeof img === 'object' ? { ...img, projectId: targetId } : img
+          )
+        }
+        if (Array.isArray(next.documents)) {
+          next.documents = next.documents.map((d: any) =>
+            d && typeof d === 'object' ? { ...d, projectId: targetId } : d
+          )
+        }
+        return next
+      })
+    }
+
+    const auditLine = `Projekt geändert: ${options?.sourceProjectName || sourceProjectId} → ${options?.targetProjectName || targetProject.name || targetProjectId}`
+    const newNotes = (entry.notes || '').trim()
+      ? `${(entry.notes || '').trim()} | ${auditLine}`
+      : auditLine
+
+    const timeEntryUpdate: Record<string, unknown> = {
+      projectId: targetProjectId,
+      notes: newNotes,
+      sitePhotos: patchNestedProject(entry.sitePhotos as any[]),
+      documents: patchNestedProject(entry.documents as any[])
+    }
+
+    if (
+      entry.photos &&
+      Array.isArray(entry.photos) &&
+      entry.photos.length > 0 &&
+      typeof (entry.photos as any[])[0] === 'object'
+    ) {
+      timeEntryUpdate.photos = patchNestedProject(entry.photos as any[])
+    }
+
+    const patchedLive = patchLiveDocumentationProject(entry.liveDocumentation, targetProjectId)
+    if (patchedLive) {
+      timeEntryUpdate.liveDocumentation = patchedLive
+    }
+
+    const cleanedUpdate = Object.fromEntries(
+      Object.entries(timeEntryUpdate).filter(([, v]) => v !== undefined)
+    ) as Partial<TimeEntry>
+
+    const fileIdsRaw = [...fileIdSet].filter((id) => id && !isPlaceholderFileUploadId(id))
+    const fileIds = await this.filterExistingFileUploadDocIds(fileIdsRaw)
+    const maxBatch = 400
+    for (let i = 0; i < fileIds.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      const chunk = fileIds.slice(i, i + maxBatch)
+      for (const fid of chunk) {
+        batch.update(doc(db, 'fileUploads', fid), {
+          projectId: targetProjectId,
+          timeEntryId: timeEntryId
+        })
+      }
+      await batch.commit()
+    }
+
+    await this.updateTimeEntry(timeEntryId, cleanedUpdate)
+
+    const usageDayKey = (rawDate: any): string => {
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+        return rawDate.slice(0, 10)
+      }
+      const d = this.convertToDate(rawDate)
+      return formatDateForInputLocal(d)
+    }
+
+    const usageIdsToMoveSet = new Set<string>()
+
+    const linkedUsages = await this.getVehicleUsagesByTimeEntryId(timeEntryId)
+    for (const usage of linkedUsages) {
+      if (usage.id && usage.projectId === sourceProjectId) {
+        usageIdsToMoveSet.add(usage.id)
+      }
+    }
+
+    const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
+    for (const usage of employeeUsages) {
+      if (!usage.id || usage.projectId !== sourceProjectId) continue
+      if (usage.timeEntryId && usage.timeEntryId !== timeEntryId) continue
+      if (usageDayKey(usage.date) === workDayKey) {
+        usageIdsToMoveSet.add(usage.id)
+      }
+    }
+
+    const usageIdsToMove = [...usageIdsToMoveSet]
+    for (let i = 0; i < usageIdsToMove.length; i += maxBatch) {
+      const batch = writeBatch(db)
+      for (const uid of usageIdsToMove.slice(i, i + maxBatch)) {
+        batch.update(doc(db, 'vehicleUsages', uid), { projectId: targetProjectId })
+      }
+      await batch.commit()
     }
   }
 
@@ -312,52 +1139,139 @@ class DataServiceClass {
     }
   }
 
-  // File Upload
+  private buildStorageObjectPath(
+    projectId: string,
+    employeeId: string,
+    type: string,
+    fileName: string
+  ): string {
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'upload.jpg'
+    return `uploads/${projectId}/${employeeId}/${Date.now()}_${type}_${safeName}`
+  }
+
+  private async uploadFileToStorage(file: File, objectPath: string): Promise<string> {
+    const objectRef = storageRef(storage, objectPath)
+    await uploadBytes(objectRef, file, { contentType: file.type || 'image/jpeg' })
+    return getDownloadURL(objectRef)
+  }
+
+  private async prepareFileForStorageUpload(file: File, type: string): Promise<File> {
+    // Nicht-Bilder (z. B. PDF) niemals durch den Bild-Encoder schicken — das würde hängen.
+    if (!this.isCompressibleImage(file)) return file
+    const isDocument = this.isDocumentFileType(type)
+    // Auf Mobilgeräten schneller, in Storage trotzdem deutlich schärfer als früher
+    const maxWidth = isDocument ? 2400 : 1800
+    return this.compressImage(file, isDocument ? 0.9 : 0.85, maxWidth, { forceJpeg: true })
+  }
+
+  /** Lässt sich die Datei sinnvoll per Canvas rastern/komprimieren? */
+  private isCompressibleImage(file: File): boolean {
+    const t = (file.type || '').toLowerCase()
+    if (t.startsWith('image/')) return t !== 'image/svg+xml'
+    // Manche Kamera-/Datei-Apps liefern keinen MIME-Type — dann an der Endung erkennen
+    return /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name || '')
+  }
+
+  // File Upload — bevorzugt Firebase Storage (volle Qualität), Fallback Base64 in Firestore
   async uploadFile(
     file: File,
     projectId: string,
     employeeId: string,
     type: string = 'construction_site',
     notes: string = '',
-    comment: string = ''
+    comment: string = '',
+    options?: { timeEntryId?: string; onProgress?: (message: string) => void }
   ): Promise<FileUpload> {
     await this.authReadyPromise
+    const report = (msg: string) => options?.onProgress?.(msg)
     try {
-      // Komprimiere Bild
-      const compressedFile = await this.compressImage(file, 0.5, 600)
-      
-      // Konvertiere zu Base64
-      const base64DataUrl = await this.fileToBase64(compressedFile)
-      const base64String = base64DataUrl.split(',')[1]
-      const mimeType = base64DataUrl.split(',')[0].split(':')[1].split(';')[0]
-
-      // Speichere in Firestore
       const fileUploadsRef = collection(db, 'fileUploads')
-      const uploadData = {
-        fileName: file.name,
-        fileType: type,
-        projectId,
-        employeeId,
-        base64Data: base64String,
-        mimeType,
-        notes,
-        imageComment: comment,
-        uploadTime: serverTimestamp()
+      let uploadDataRaw: Record<string, unknown>
+      let preparedFile: File | undefined
+
+      try {
+        report('Bild wird vorbereitet…')
+        preparedFile = await withTimeout(
+          this.prepareFileForStorageUpload(file, type),
+          IMAGE_PREPARE_TIMEOUT_MS,
+          'Die Bildaufbereitung hat zu lange gedauert.'
+        )
+        const objectPath = this.buildStorageObjectPath(
+          projectId,
+          employeeId,
+          type,
+          preparedFile.name
+        )
+        report('Wird in Firebase Storage hochgeladen…')
+        const downloadUrl = await withTimeout(
+          this.uploadFileToStorage(preparedFile, objectPath),
+          STORAGE_UPLOAD_TIMEOUT_MS,
+          'Storage-Upload Zeitüberschreitung'
+        )
+        uploadDataRaw = {
+          fileName: file.name,
+          fileType: type,
+          projectId,
+          employeeId,
+          filePath: downloadUrl,
+          storagePath: objectPath,
+          mimeType: preparedFile.type,
+          notes,
+          imageComment: comment,
+          uploadTime: serverTimestamp()
+        }
+      } catch (storageError) {
+        console.warn('Storage-Upload fehlgeschlagen, Fallback Firestore Base64:', storageError)
+        report('Speichere komprimiert in der Datenbank…')
+        // Das bereits aufbereitete (verkleinerte) Bild als Ausgangspunkt nehmen, falls vorhanden —
+        // so muss das große Original nicht erneut dekodiert werden.
+        const sourceForFallback = preparedFile ?? file
+        const { base64: base64String, mimeType } = await withTimeout(
+          this.compressImageForFirestoreUpload(sourceForFallback, type),
+          IMAGE_PREPARE_TIMEOUT_MS,
+          'Die Bildkomprimierung hat zu lange gedauert.'
+        )
+        uploadDataRaw = {
+          fileName: file.name,
+          fileType: type,
+          projectId,
+          employeeId,
+          base64Data: base64String,
+          mimeType,
+          notes,
+          imageComment: comment,
+          uploadTime: serverTimestamp()
+        }
       }
 
-      const docRef = await addDoc(fileUploadsRef, uploadData)
-      const uploadDoc = await getDoc(docRef)
-      
+      if (options?.timeEntryId) {
+        uploadDataRaw.timeEntryId = options.timeEntryId
+      }
+      const uploadData = Object.fromEntries(
+        Object.entries(uploadDataRaw).filter(([, v]) => v !== undefined)
+      )
+
+      report('Metadaten werden gespeichert…')
+      // Kein zusätzlicher getDoc-Readback: spart auf der Baustelle eine Netz-Runde und
+      // verhindert ein Hängenbleiben. Die benötigten Werte stehen bereits in uploadDataRaw.
+      const docRef = await withTimeout(
+        addDoc(fileUploadsRef, uploadData),
+        FIRESTORE_WRITE_TIMEOUT_MS,
+        'Speichern hat zu lange gedauert — vermutlich schlechtes Netz. Bitte später erneut versuchen.'
+      )
+
       return {
         id: docRef.id,
         fileName: file.name,
-        filePath: '', // Wird nicht verwendet bei Base64
+        filePath: String(uploadDataRaw.filePath ?? ''),
         fileType: type,
         projectId,
         employeeId,
-        uploadTime: uploadDoc.data()?.uploadTime || new Date(),
+        timeEntryId: options?.timeEntryId,
+        uploadTime: new Date(),
         notes,
-        imageComment: comment
+        imageComment: comment,
+        mimeType: String(uploadDataRaw.mimeType ?? '')
       } as FileUpload
     } catch (error) {
       console.error('Fehler beim Hochladen der Datei:', error)
@@ -365,51 +1279,225 @@ class DataServiceClass {
     }
   }
 
-  private async compressImage(file: File, quality: number, maxWidth: number): Promise<File> {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          let width = img.width
-          let height = img.height
+  private isDocumentFileType(type: string): boolean {
+    return type === 'invoice' || type === 'delivery_note' || type === 'document'
+  }
 
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width
-            width = maxWidth
+  /**
+   * Dekodiert eine Bilddatei GENAU EINMAL in eine wiederverwendbare Zeichenquelle.
+   * Bevorzugt createImageBitmap (dekodiert ausserhalb des Main-Threads, deutlich schneller
+   * und schont das Handy), mit robustem Fallback auf ein <img>-Element.
+   */
+  private async decodeImageSource(
+    file: File
+  ): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        // imageOrientation: EXIF-Drehung anwenden (sonst liegen Handy-Fotos quer)
+        const bitmap = await createImageBitmap(file, {
+          imageOrientation: 'from-image'
+        } as ImageBitmapOptions)
+        if (bitmap.width > 0 && bitmap.height > 0) {
+          return {
+            source: bitmap,
+            width: bitmap.width,
+            height: bitmap.height,
+            release: () => bitmap.close()
           }
-
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, 0, 0, width, height)
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(new File([blob], file.name, { type: file.type }))
-              } else {
-                resolve(file)
-              }
-            },
-            file.type,
-            quality
-          )
         }
-        img.src = e.target?.result as string
+        bitmap.close()
+      } catch {
+        // Älterer Browser / nicht unterstütztes Format → <img>-Fallback
       }
-      reader.readAsDataURL(file)
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    try {
+      const img = await this.loadImageElement(objectUrl)
+      return {
+        source: img,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+        release: () => URL.revokeObjectURL(objectUrl)
+      }
+    } catch (error) {
+      URL.revokeObjectURL(objectUrl)
+      throw error
+    }
+  }
+
+  private loadImageElement(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const timer = window.setTimeout(() => {
+        img.onload = null
+        img.onerror = null
+        reject(new Error('Bild konnte nicht rechtzeitig gelesen werden.'))
+      }, IMAGE_DECODE_TIMEOUT_MS)
+      img.onload = () => {
+        window.clearTimeout(timer)
+        resolve(img)
+      }
+      img.onerror = () => {
+        window.clearTimeout(timer)
+        reject(new Error('Bild konnte nicht gelesen werden (beschädigt oder nicht unterstützt).'))
+      }
+      img.src = src
     })
   }
 
-  private fileToBase64(file: File): Promise<string> {
+  /** Zeichnet eine bereits dekodierte Quelle skaliert auf ein Canvas und liefert ein Blob. */
+  private renderToBlob(
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number,
+    quality: number,
+    maxWidth: number,
+    outputType: string
+  ): Promise<Blob | null> {
+    let width = sourceWidth
+    let height = sourceHeight
+    const maxHeight = Math.round(maxWidth * 1.35)
+    if (width > maxWidth) {
+      height = (height * maxWidth) / width
+      width = maxWidth
+    }
+    if (height > maxHeight) {
+      width = (width * maxHeight) / height
+      height = maxHeight
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(width))
+    canvas.height = Math.max(1, Math.round(height))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return Promise.resolve(null)
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), outputType, quality)
+    })
+  }
+
+  private resolveOutputType(file: File, forceJpeg?: boolean): string {
+    return forceJpeg || !(file.type || '').includes('png') ? 'image/jpeg' : 'image/png'
+  }
+
+  private blobToFile(blob: Blob, originalName: string, outputType: string): File {
+    const ext = outputType === 'image/png' ? '.png' : '.jpg'
+    const baseName = (originalName || 'upload').replace(/\.[^.]+$/, '') || 'upload'
+    return new File([blob], `${baseName}${ext}`, { type: outputType })
+  }
+
+  private async blobToBase64Parts(
+    blob: Blob,
+    fallbackMime: string
+  ): Promise<{ base64: string; mimeType: string }> {
+    const dataUrl = await this.blobToDataUrl(blob)
+    const base64 = dataUrl.split(',')[1] || ''
+    const mimeType = dataUrl.split(',')[0]?.split(':')[1]?.split(';')[0] || blob.type || fallbackMime
+    return { base64, mimeType }
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target?.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
+      reader.onerror = () => reject(new Error('Bilddaten konnten nicht gelesen werden.'))
+      reader.readAsDataURL(blob)
     })
+  }
+
+  /**
+   * Komprimiert so stark wie nötig, damit base64Data in Firestore passt (~1 MiB pro Feld).
+   * Startet mit hoher Qualität und reduziert schrittweise Breite/Qualität.
+   */
+  private async compressImageForFirestoreUpload(
+    file: File,
+    type: string
+  ): Promise<{ base64: string; mimeType: string }> {
+    const isDocument = this.isDocumentFileType(type)
+    let quality = isDocument ? 0.88 : 0.8
+    let maxWidth = isDocument ? 1800 : 1400
+    const minQuality = 0.42
+    const minWidth = 640
+    // base64 ist ~4/3 der Rohbytes — daraus die zulässige Blob-Grösse ableiten, statt
+    // bei jedem Versuch teuer base64 zu kodieren (nur das Gewinner-Blob wird kodiert).
+    const maxBlobBytes = Math.floor((FIRESTORE_MAX_BASE64_BYTES * 3) / 4)
+    const outputType = 'image/jpeg'
+
+    // Bild nur EINMAL dekodieren und für alle Versuche wiederverwenden — das war bisher
+    // der Flaschenhals (bis zu 12 Dekodierungen des Originals auf dem Handy → Timeout).
+    const decoded = await this.decodeImageSource(file)
+    try {
+      let smallestBlob: Blob | null = null
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const blob = await this.renderToBlob(
+          decoded.source,
+          decoded.width,
+          decoded.height,
+          quality,
+          maxWidth,
+          outputType
+        )
+        if (blob) {
+          if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob
+          if (blob.size <= maxBlobBytes) {
+            if (isDevMode && attempt > 0) {
+              console.log(
+                `Bild komprimiert (${attempt + 1}. Versuch): ${Math.round(blob.size / 1024)} KB`
+              )
+            }
+            return this.blobToBase64Parts(blob, outputType)
+          }
+        }
+
+        if (quality > minQuality + 0.08) {
+          quality -= 0.1
+        } else if (maxWidth > minWidth) {
+          maxWidth = Math.max(minWidth, Math.round(maxWidth * 0.72))
+          quality = isDocument ? 0.78 : 0.7
+        } else {
+          break
+        }
+      }
+
+      // Selbst die kleinste Variante nehmen, sofern sie noch unter dem harten Firestore-Limit liegt.
+      if (smallestBlob) {
+        const parts = await this.blobToBase64Parts(smallestBlob, outputType)
+        if (parts.base64.length <= FIRESTORE_MAX_BASE64_BYTES) return parts
+      }
+    } finally {
+      decoded.release()
+    }
+
+    throw new Error(
+      'Das Bild ist zu groß für die Datenbank (max. ca. 1 MB pro Foto). Bitte näher heranzoomen, weniger Bilder auf einmal speichern oder die Kamera-Auflösung reduzieren.'
+    )
+  }
+
+  private async compressImage(
+    file: File,
+    quality: number,
+    maxWidth: number,
+    options?: { forceJpeg?: boolean }
+  ): Promise<File> {
+    const decoded = await this.decodeImageSource(file)
+    try {
+      const outputType = this.resolveOutputType(file, options?.forceJpeg)
+      const blob = await this.renderToBlob(
+        decoded.source,
+        decoded.width,
+        decoded.height,
+        quality,
+        maxWidth,
+        outputType
+      )
+      // Falls toBlob fehlschlägt: lieber das Original hochladen als gar nichts.
+      return blob ? this.blobToFile(blob, file.name, outputType) : file
+    } finally {
+      decoded.release()
+    }
   }
 
   // Live Documentation
@@ -434,19 +1522,88 @@ class DataServiceClass {
         throw new Error('Zeiteintrag nicht gefunden')
       }
 
-      const existingLiveDoc = timeEntryDoc.data().liveDocumentation || []
+      // Nur IDs + Text — keine Bilddaten im timeEntry (Firestore-Max. 1 MiB pro Dokument)
       const newDocumentation = {
-        ...documentationData,
-        timestamp: serverTimestamp()
+        notes: documentationData.notes || '',
+        photoCount: documentationData.photoCount,
+        documentCount: documentationData.documentCount,
+        addedBy: documentationData.addedBy,
+        addedByName: documentationData.addedByName,
+        imageIds: (documentationData.images || [])
+          .map((img: { id?: string }) => img?.id)
+          .filter((id): id is string => !!id),
+        documentIds: (documentationData.documents || [])
+          .map((doc: { id?: string }) => doc?.id)
+          .filter((id): id is string => !!id),
+        timestamp: Timestamp.now()
       }
 
       await updateDoc(timeEntryRef, {
-        liveDocumentation: [...existingLiveDoc, newDocumentation]
+        liveDocumentation: arrayUnion(newDocumentation),
+        hasDocumentation: true,
+        lastLiveDocumentationAt: serverTimestamp()
       })
     } catch (error) {
       console.error('Fehler beim Hinzufügen der Live-Dokumentation:', error)
       throw error
     }
+  }
+
+  // Material types (Verbrauchsmaterial für Ausstempeln / Nachkalkulation)
+  async getActiveMaterialTypes(): Promise<MaterialType[]> {
+    await this.authReadyPromise
+    try {
+      const ref = collection(db, 'materialTypes')
+      const snapshot = await getDocs(ref)
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialType))
+      return list
+        .filter((m) => m.isActive !== false && (m.name || '').trim())
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Materialtypen:', error)
+      return []
+    }
+  }
+
+  async getAllMaterialTypes(): Promise<MaterialType[]> {
+    await this.authReadyPromise
+    try {
+      const ref = collection(db, 'materialTypes')
+      const snapshot = await getDocs(ref)
+      return snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() } as MaterialType))
+        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Materialtypen:', error)
+      return []
+    }
+  }
+
+  async createMaterialType(data: Partial<MaterialType>): Promise<string> {
+    await this.authReadyPromise
+    const ref = collection(db, 'materialTypes')
+    const docRef = await addDoc(ref, {
+      name: data.name || '',
+      unitLabel: data.unitLabel || 'm²',
+      unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
+      isActive: data.isActive !== false,
+      sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
+      createdAt: new Date()
+    })
+    return docRef.id
+  }
+
+  async updateMaterialType(id: string, data: Partial<MaterialType>): Promise<void> {
+    await this.authReadyPromise
+    await updateDoc(doc(db, 'materialTypes', id), {
+      ...data,
+      updatedAt: new Date()
+    })
+  }
+
+  async deleteMaterialType(id: string): Promise<void> {
+    await this.authReadyPromise
+    await deleteDoc(doc(db, 'materialTypes', id))
   }
 
   // Vehicle Management
@@ -491,6 +1648,42 @@ class DataServiceClass {
     }
   }
 
+  async deleteVehicle(id: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const vehicleRef = doc(db, 'vehicles', id)
+      const vehicleDoc = await getDoc(vehicleRef)
+      if (!vehicleDoc.exists()) {
+        return
+      }
+
+      const vehicle = vehicleDoc.data() as Vehicle
+      const vehicleName = vehicle.name || ''
+
+      if (vehicleName) {
+        const vehicleUsagesRef = collection(db, 'vehicleUsages')
+        const usageQuery = query(vehicleUsagesRef, where('vehicleId', '==', id))
+        const usageSnapshot = await getDocs(usageQuery)
+
+        const updatePromises = usageSnapshot.docs
+          .filter((usageDoc) => {
+            const usage = usageDoc.data() as VehicleUsage
+            return !usage.vehicleName
+          })
+          .map((usageDoc) => updateDoc(usageDoc.ref, { vehicleName }))
+
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises)
+        }
+      }
+
+      await deleteDoc(vehicleRef)
+    } catch (error) {
+      console.error(`Fehler beim Löschen des Fahrzeugs ${id}:`, error)
+      throw error
+    }
+  }
+
   async getVehicleUsagesByProject(projectId: string): Promise<VehicleUsage[]> {
     await this.authReadyPromise
     try {
@@ -505,11 +1698,59 @@ class DataServiceClass {
     }
   }
 
+  async getVehicleUsagesByEmployeeId(employeeId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!employeeId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('employeeId', '==', employeeId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Mitarbeiter):', error)
+      return []
+    }
+  }
+
+  async getVehicleUsagesByTimeEntryId(timeEntryId: string): Promise<VehicleUsage[]> {
+    await this.authReadyPromise
+    try {
+      if (!timeEntryId) return []
+      const vehicleUsagesRef = collection(db, 'vehicleUsages')
+      const q = query(vehicleUsagesRef, where('timeEntryId', '==', timeEntryId))
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Zeiteintrag):', error)
+      return []
+    }
+  }
+
   async addVehicleUsage(usageData: Partial<VehicleUsage>): Promise<VehicleUsage> {
     await this.authReadyPromise
     try {
       const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const docRef = await addDoc(vehicleUsagesRef, usageData)
+      const normalizedUsageData: Partial<VehicleUsage> = { ...usageData }
+
+      if (!normalizedUsageData.vehicleName && normalizedUsageData.vehicleId) {
+        const vehicleRef = doc(db, 'vehicles', normalizedUsageData.vehicleId)
+        const vehicleDoc = await getDoc(vehicleRef)
+        if (vehicleDoc.exists()) {
+          const vehicleData = vehicleDoc.data() as Vehicle
+          normalizedUsageData.vehicleName = vehicleData.name
+        }
+      }
+
+      const rawPayload = {
+        ...normalizedUsageData,
+        createdAt: serverTimestamp()
+      }
+      // Firestore lehnt undefined in Feldern ab (z. B. optionales comment)
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
+      )
+
+      const docRef = await addDoc(vehicleUsagesRef, payload)
       const usageDoc = await getDoc(docRef)
       
       return { id: docRef.id, ...usageDoc.data() } as VehicleUsage
@@ -546,6 +1787,76 @@ class DataServiceClass {
   clearCurrentAdmin() {
     localStorage.removeItem('lauffer_admin_user')
     localStorage.removeItem('lauffer_current_admin')
+  }
+
+  async saveAdminPushSubscription(
+    subscription: PushSubscriptionJSON,
+    admin: { id?: string; username?: string; name?: string }
+  ): Promise<void> {
+    if (!subscription.endpoint) {
+      throw new Error('Push-Subscription enthält keinen Endpoint')
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'upsert',
+        subscription,
+        admin,
+        permission: Notification.permission,
+        isStandalone,
+        userAgent: navigator.userAgent
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
+  }
+
+  async removeAdminPushSubscription(endpoint: string): Promise<void> {
+    if (!endpoint) {
+      return
+    }
+
+    await this.authReadyPromise
+    const currentAuthUser = auth.currentUser
+    if (!currentAuthUser) {
+      throw new Error('Kein Firebase Auth User vorhanden')
+    }
+    const idToken = await currentAuthUser.getIdToken()
+
+    const response = await fetch('/api/push/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        action: 'disable',
+        endpoint
+      })
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+      throw new Error(errorMessage)
+    }
   }
 
   async authenticateAdmin(username: string, password: string): Promise<any | null> {
@@ -713,11 +2024,16 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const projectsRef = collection(db, 'projects')
-      const docRef = await addDoc(projectsRef, {
+      const raw = {
         ...projectData,
         isActive: projectData.isActive !== false,
         status: projectData.status || 'active'
-      })
+      }
+      // Firestore verwirft Schreibvorgänge mit undefined-Feldern — optionale Daten weglassen
+      const payload = Object.fromEntries(
+        Object.entries(raw).filter(([, value]) => value !== undefined)
+      )
+      const docRef = await addDoc(projectsRef, payload)
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Projekts:', error)
@@ -725,7 +2041,10 @@ class DataServiceClass {
     }
   }
 
-  async updateProject(id: string, projectData: Partial<Project>): Promise<void> {
+  async updateProject(
+    id: string,
+    projectData: Partial<Project> & Record<string, unknown>
+  ): Promise<void> {
     await this.authReadyPromise
     try {
       if (!id) {
@@ -733,7 +2052,10 @@ class DataServiceClass {
       }
 
       const projectRef = doc(db, 'projects', id)
-      await updateDoc(projectRef, projectData)
+      const payload = Object.fromEntries(
+        Object.entries(projectData).filter(([, value]) => value !== undefined)
+      )
+      await updateDoc(projectRef, payload)
     } catch (error) {
       console.error(`Fehler beim Aktualisieren des Projekts ${id}:`, error)
       throw error
@@ -780,6 +2102,45 @@ class DataServiceClass {
     }
   }
 
+  private async triggerLeaveRequestPushNotification(payload: {
+    leaveRequestId: string
+    employeeId: string | null
+    employeeName: string
+    startDate: string | null
+    endDate: string | null
+    type: LeaveRequest['type'] | null
+    workingDays: number | null
+  }): Promise<void> {
+    try {
+      const currentAuthUser = auth.currentUser
+      if (!currentAuthUser) {
+        if (isDevMode) {
+          console.warn('Push-Trigger übersprungen: kein Firebase Auth User vorhanden')
+        }
+        return
+      }
+
+      const idToken = await currentAuthUser.getIdToken()
+      const response = await fetch('/api/push/leave-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null)
+        const errorMessage = errorPayload?.error || `HTTP ${response.status}`
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      // Push-Fehler dürfen den Urlaubsantrag nicht blockieren.
+      console.error('Fehler beim Auslösen der Push-Benachrichtigung:', error)
+    }
+  }
+
   async createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
     await this.authReadyPromise
     try {
@@ -789,6 +2150,17 @@ class DataServiceClass {
         status: 'pending',
         createdAt: new Date()
       })
+
+      await this.triggerLeaveRequestPushNotification({
+        leaveRequestId: docRef.id,
+        employeeId: requestData.employeeId || null,
+        employeeName: requestData.employeeName || 'Mitarbeiter',
+        startDate: requestData.startDate ? new Date(requestData.startDate as any).toISOString() : null,
+        endDate: requestData.endDate ? new Date(requestData.endDate as any).toISOString() : null,
+        type: requestData.type || null,
+        workingDays: typeof requestData.workingDays === 'number' ? requestData.workingDays : null
+      })
+
       return docRef.id
     } catch (error) {
       console.error('Fehler beim Erstellen des Urlaubsantrags:', error)
@@ -814,11 +2186,23 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await updateDoc(leaveRequestRef, {
-        status: 'approved',
-        approvedBy,
-        approvedAt: new Date(),
-        updatedAt: new Date()
+      await runTransaction(db, async (transaction) => {
+        const leaveRequestDoc = await transaction.get(leaveRequestRef)
+        if (!leaveRequestDoc.exists()) {
+          throw new Error('Urlaubsantrag nicht gefunden')
+        }
+
+        const leaveRequest = leaveRequestDoc.data() as LeaveRequest
+        if (leaveRequest.status === 'approved') {
+          return
+        }
+
+        transaction.update(leaveRequestRef, {
+          status: 'approved',
+          approvedBy,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        })
       })
     } catch (error) {
       console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
@@ -852,6 +2236,65 @@ class DataServiceClass {
     }
   }
 
+  settlementDocId(employeeId: string, periodStart: string, periodEnd: string): string {
+    return `${employeeId}_${periodStart}_${periodEnd}`.replace(/\//g, '-')
+  }
+
+  async saveTimeReportSettlement(data: Omit<TimeReportSettlement, 'id' | 'settledAt'>): Promise<void> {
+    await this.authReadyPromise
+    const id = this.settlementDocId(data.employeeId, data.periodStart, data.periodEnd)
+    const settlementRef = doc(db, 'timeReportSettlements', id)
+
+    try {
+      await setDoc(settlementRef, {
+        ...data,
+        settledAt: new Date()
+      })
+    } catch (error: unknown) {
+      console.error('Fehler beim Speichern der Zeiterfassungs-Abrechnung:', error)
+      const code = (error as { code?: string })?.code
+      if (code === 'permission-denied') {
+        throw new Error(
+          'Keine Berechtigung für „timeReportSettlements“ in Firestore. Bitte in den Security Rules Lesen/Schreiben für angemeldete Nutzer erlauben.'
+        )
+      }
+      throw error
+    }
+
+    try {
+      const empRef = doc(db, 'employees', data.employeeId)
+      const empSnap = await getDoc(empRef)
+      if (empSnap.exists()) {
+        const emp = empSnap.data() as Employee
+        const paid = Number(data.paidOutMinutes) || 0
+        if (emp.overtimeBalanceMinutes != null && typeof emp.overtimeBalanceMinutes === 'number') {
+          const next = Math.max(0, emp.overtimeBalanceMinutes - paid)
+          await updateDoc(empRef, { overtimeBalanceMinutes: next })
+        }
+      }
+    } catch (error) {
+      console.warn('Abrechnung gespeichert, aber Überstunden-Saldo am Mitarbeiter konnte nicht angepasst werden:', error)
+    }
+  }
+
+  async getTimeReportSettlement(
+    employeeId: string,
+    periodStart: string,
+    periodEnd: string
+  ): Promise<TimeReportSettlement | null> {
+    await this.authReadyPromise
+    try {
+      const id = this.settlementDocId(employeeId, periodStart, periodEnd)
+      const settlementRef = doc(db, 'timeReportSettlements', id)
+      const snap = await getDoc(settlementRef)
+      if (!snap.exists()) return null
+      return { id: snap.id, ...snap.data() } as TimeReportSettlement
+    } catch (error) {
+      console.error('Fehler beim Laden der Zeiterfassungs-Abrechnung:', error)
+      return null
+    }
+  }
+
   // Hilfsfunktion: Arbeitstage berechnen (ohne Wochenenden)
   calculateWorkingDays(startDate: Date, endDate: Date): number {
     let count = 0
@@ -878,7 +2321,9 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('clockOutTime', '==', null))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der aktuellen Zeiteinträge:', error)
       return []
@@ -901,7 +2346,9 @@ class DataServiceClass {
       )
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen der heutigen Zeiteinträge:', error)
       return []
@@ -943,7 +2390,9 @@ class DataServiceClass {
       const q = query(timeEntriesRef, where('projectId', '==', projectId))
       const snapshot = await getDocs(q)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error(`Fehler beim Abrufen der Zeiteinträge für Projekt ${projectId}:`, error)
       return []
@@ -951,17 +2400,95 @@ class DataServiceClass {
   }
 
   // Projekt-Dateien laden (wie in der alten App - aus Zeiteinträgen und zusätzlich direkt per projectId)
-  async getProjectFiles(projectId: string, type: string = 'construction_site'): Promise<FileUpload[]> {
+  async getFileUploadById(
+    id: string,
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload | null> {
     await this.authReadyPromise
+    if (!id?.trim() || isPlaceholderFileUploadId(id)) return null
+    try {
+      const snap = await getDoc(doc(db, 'fileUploads', id.trim()))
+      if (!snap.exists()) return null
+      return this.fileUploadFromDocData(snap.id, snap.data() as Record<string, unknown>, {
+        includeBinary: opts?.includeBinary === true
+      })
+    } catch (error) {
+      console.error(`Fehler beim Laden von fileUpload ${id}:`, error)
+      return null
+    }
+  }
+
+
+  /**
+   * Ergänzt Anzeige-URLs für Dateien, die ohne includeBinary geladen wurden
+   * (Firebase-Storage-Pfad, fehlende Download-URL oder Legacy-Base64).
+   */
+  async enrichFilesForDisplay(files: FileUpload[]): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    return Promise.all(
+      files.map(async (file) => {
+        if (getFileImageSrc(file)) return file
+
+        if (file.storagePath) {
+          try {
+            const url = await getDownloadURL(storageRef(storage, file.storagePath))
+            return { ...file, filePath: url }
+          } catch (error) {
+            if (isDevMode) {
+              console.warn('Storage-URL konnte nicht aufgelöst werden:', file.storagePath, error)
+            }
+          }
+        }
+
+        if (file.id) {
+          const full = await this.getFileUploadById(file.id, { includeBinary: true })
+          if (full && getFileImageSrc(full)) return full
+        }
+
+        return file
+      })
+    )
+  }
+
+  // Projekt-Dateien laden (wie in der alten App - aus Zeiteinträgen und zusätzlich direkt per projectId)
+  async getProjectFiles(
+    projectId: string,
+    type: string = 'construction_site',
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    const includeBinary = opts?.includeBinary === true
     try {
       if (!projectId) {
         console.error('Keine Projekt-ID angegeben')
         return []
       }
 
+      const normalizedType = type === 'photo' ? 'construction_site' : type
+      const files: FileUpload[] = []
+      const seenIds = new Set<string>()
+
+      try {
+        const uploadsByProject = await this.getFileUploads(projectId, undefined, {
+          includeBinary
+        })
+        for (const u of uploadsByProject) {
+          if (u.id && !seenIds.has(u.id)) {
+            seenIds.add(u.id)
+            files.push(u)
+          }
+        }
+      } catch (extraErr) {
+        if (isDevMode) {
+          console.warn('Konnte Dateien über projectId nicht laden:', extraErr)
+        }
+      }
+
       const timeEntries = await this.getTimeEntriesByProject(projectId)
       if (!timeEntries || timeEntries.length === 0) {
-        console.log('Keine Zeiteinträge für Projekt gefunden:', projectId)
+        if (isDevMode) {
+          console.log('Keine Zeiteinträge für Projekt gefunden:', projectId)
+        }
       }
 
       let fileIds: string[] = []
@@ -969,7 +2496,7 @@ class DataServiceClass {
 
       timeEntries.forEach((entry) => {
         try {
-          if (type === 'construction_site') {
+          if (normalizedType === 'construction_site') {
             // Sammle sitePhotoUploads IDs
             if (entry.sitePhotoUploads && Array.isArray(entry.sitePhotoUploads)) {
               fileIds = [...fileIds, ...entry.sitePhotoUploads.filter((id: any) => id && typeof id === 'string')]
@@ -1013,7 +2540,7 @@ class DataServiceClass {
                 }
               })
             }
-          } else if (type === 'document' || type === 'delivery_note') {
+          } else if (normalizedType === 'document' || normalizedType === 'delivery_note') {
             // Sammle documentPhotoUploads IDs
             if (entry.documentPhotoUploads && Array.isArray(entry.documentPhotoUploads)) {
               fileIds = [...fileIds, ...entry.documentPhotoUploads.filter((id: any) => id && typeof id === 'string')]
@@ -1045,107 +2572,99 @@ class DataServiceClass {
         }
       })
 
-      // Entferne Duplikate
-      fileIds = [...new Set(fileIds)]
-
-      // Lade Dateien aus fileUploads Collection basierend auf IDs
-      const files: FileUpload[] = []
-      
-      if (fileIds.length > 0) {
-        console.log(`Lade ${fileIds.length} Dateien für Projekt ${projectId}, Typ: ${type}`)
-        // Lade Dateien einzeln (Firestore unterstützt keine IN-Queries mit vielen IDs)
-        const promises = fileIds.map(async (fileId) => {
-          try {
-            if (!fileId || typeof fileId !== 'string') {
-              console.warn('Ungültige Datei-ID:', fileId)
-              return null
-            }
-            
-            const fileRef = doc(db, 'fileUploads', fileId)
-            const fileDoc = await getDoc(fileRef)
-            if (fileDoc.exists()) {
-              const data = fileDoc.data() as any
-              const uploadTime = data.uploadTime instanceof Timestamp
-                ? data.uploadTime.toDate()
-                : (data.uploadTime instanceof Date 
-                    ? data.uploadTime 
-                    : data.uploadTime?.toDate?.() || new Date(data.uploadTime || Date.now()))
-              
-              return {
-                id: fileDoc.id,
-                fileName: data.fileName || '',
-                filePath: data.filePath || '',
-                fileType: data.fileType || type,
-                projectId: data.projectId || projectId,
-                employeeId: data.employeeId || '',
-                uploadTime: uploadTime || new Date(),
-                notes: data.notes || '',
-                imageComment: data.imageComment || '',
-                base64Data: data.base64Data,
-                mimeType: data.mimeType
-              } as FileUpload
-            } else {
-              console.warn(`Datei ${fileId} nicht gefunden in fileUploads`)
-              return null
-            }
-          } catch (error) {
-            console.error(`Fehler beim Laden der Datei ${fileId}:`, error)
-            return null
-          }
+      // Alle Uploads mit timeEntryId zu Stempelsätzen dieses Projekts (falls Arrays im Eintrag unvollständig sind)
+      const entryIdsForProject = timeEntries.map((e) => e.id).filter(Boolean) as string[]
+      if (entryIdsForProject.length > 0) {
+        const linkedByTimeEntry = await this.getFileUploadsByTimeEntryIds(entryIdsForProject, {
+          includeBinary
         })
-        
-        const loadedFiles = await Promise.all(promises)
-        const validFiles = loadedFiles.filter(f => f !== null) as FileUpload[]
-        files.push(...validFiles)
-        console.log(`${validFiles.length} von ${fileIds.length} Dateien erfolgreich geladen`)
+        for (const u of linkedByTimeEntry) {
+          if (u.id) fileIds.push(u.id)
+        }
       }
 
-      // Zusätzliche Dateien direkt über projectId (falls nicht in Zeiteinträgen referenziert)
-      try {
-        const uploadsByProject = await this.getFileUploads(projectId)
-        console.log(`Zusätzliche Dateien direkt über projectId (${projectId}):`, uploadsByProject.length)
-        uploadsByProject.forEach((u) => files.push(u))
-      } catch (extraErr) {
-        console.warn('Konnte zusätzliche Dateien über projectId nicht laden:', extraErr)
+      // Entferne Duplikate und bereits geladene IDs
+      fileIds = [...new Set(fileIds)].filter((id) => !seenIds.has(id))
+
+      if (fileIds.length > 0) {
+        if (isDevMode) {
+          console.log(`Lade ${fileIds.length} Dateien für Projekt ${projectId}, Typ: ${normalizedType}`)
+        }
+
+        const chunkSize = 10
+        for (let i = 0; i < fileIds.length; i += chunkSize) {
+          const chunk = fileIds.slice(i, i + chunkSize).filter((id) => !!id)
+          if (chunk.length === 0) continue
+
+          const chunkQuery = query(collection(db, 'fileUploads'), where(documentId(), 'in', chunk))
+          const chunkSnapshot = await getDocs(chunkQuery)
+
+          chunkSnapshot.forEach((fileDoc) => {
+            const data = fileDoc.data() as Record<string, unknown>
+            files.push(
+              this.fileUploadFromDocData(fileDoc.id, data, {
+                projectIdFallback: projectId,
+                fileTypeFallback: normalizedType,
+                includeBinary
+              })
+            )
+            seenIds.add(fileDoc.id)
+          })
+
+          if (isDevMode && chunkSnapshot.size < chunk.length) {
+            console.warn(
+              `Nicht alle Datei-IDs wurden gefunden (Projekt ${projectId}):`,
+              { expected: chunk.length, loaded: chunkSnapshot.size }
+            )
+          }
+        }
+
+        if (isDevMode) {
+          console.log(`${files.length} Datei-Datensätze für Referenz-IDs geladen`)
+        }
       }
 
-      // Füge direkte Dateien hinzu
+      // Füge direkte Dateien hinzu (Legacy in Zeiteinträgen eingebettet)
       directFiles.forEach((file) => {
+        const filePath = String(file.url || file.filePath || '')
+        const legacyBase64 = includeBinary ? file.base64Data || file.base64 : undefined
         files.push({
           id: file.id || `direct-${Date.now()}-${Math.random()}`,
           fileName: file.fileName || file.name || 'Unbekannt',
-          filePath: file.url || file.filePath || '',
-          fileType: file.fileType || type,
+          filePath: filePath.startsWith('data:') ? '' : filePath,
+          fileType: file.fileType || normalizedType,
           projectId: file.projectId || projectId,
           employeeId: file.employeeId || '',
           uploadTime: file.timestamp ? this.convertToDate(file.timestamp) : new Date(),
           notes: file.notes || file.comment || '',
           imageComment: file.imageComment || file.comment || '',
-          base64Data: file.base64Data || file.base64,
+          base64Data: legacyBase64,
           mimeType: file.mimeType || file.type || 'image/jpeg'
         } as FileUpload)
       })
 
-      // Debug: Zeige alle Dateien VOR dem Filtern mit ALLEN Feldern
-      console.log(`📋 Alle Dateien für Projekt ${projectId} VOR Filterung (${files.length}):`, files.map(f => ({
-        id: f.id,
-        fileName: f.fileName,
-        fileType: f.fileType,
-        mimeType: f.mimeType,
-        hasBase64Data: !!f.base64Data,
-        hasFilePath: !!f.filePath,
-        hasData: !!(f as any).data,
-        hasUrl: !!(f as any).url,
-        allKeys: Object.keys(f)
-      })))
-      
-      // Zeige die ersten 2 Fotos komplett
-      const photoFiles = files.filter(f => {
-        const fileName = (f.fileName || '').toLowerCase()
-        return fileName.match(/\.(jpg|jpeg|png|gif)$/i)
-      }).slice(0, 2)
-      if (photoFiles.length > 0) {
-        console.log(`🖼️ Beispiel-Foto-Objekte (erste 2):`, photoFiles)
+      if (isDevMode) {
+        // Debug: Zeige alle Dateien VOR dem Filtern mit ALLEN Feldern
+        console.log(`📋 Alle Dateien für Projekt ${projectId} VOR Filterung (${files.length}):`, files.map(f => ({
+          id: f.id,
+          fileName: f.fileName,
+          fileType: f.fileType,
+          mimeType: f.mimeType,
+          hasBase64Data: !!f.base64Data,
+          hasFilePath: !!f.filePath,
+          hasData: !!(f as any).data,
+          hasUrl: !!(f as any).url,
+          allKeys: Object.keys(f)
+        })))
+        
+        // Zeige die ersten 2 Fotos komplett
+        const photoFiles = files.filter(f => {
+          const fileName = (f.fileName || '').toLowerCase()
+          return fileName.match(/\.(jpg|jpeg|png|gif)$/i)
+        }).slice(0, 2)
+        if (photoFiles.length > 0) {
+          console.log(`🖼️ Beispiel-Foto-Objekte (erste 2):`, photoFiles)
+        }
       }
 
       // Endgültig nach Typ filtern (falls kein typ gesetzt, anhand mimeType raten)
@@ -1162,7 +2681,7 @@ class DataServiceClass {
           }
         }
 
-        if (type === 'construction_site') {
+        if (normalizedType === 'construction_site') {
           // Prüfe verschiedene Kriterien für Fotos
           const isPhotoByType = fileType === 'construction_site' || fileType === 'site_photo' || fileType === 'photo' || fileType === 'baustellenfoto' || fileType === 'baustelle'
           const isPhotoByMime = mime.startsWith('image/') || fileType.startsWith('image/')
@@ -1170,11 +2689,13 @@ class DataServiceClass {
           const isPhotoByBase64 = f.base64Data && (!mime || mime.startsWith('image/'))
           
           const isPhoto = isPhotoByType || isPhotoByMime || isPhotoByExtension || isPhotoByBase64
-          console.log(`🔍 Prüfe Foto ${f.fileName}: fileType="${fileType}", mime="${mime}", fileName="${fileName}", isPhoto=${isPhoto} (byType=${isPhotoByType}, byMime=${isPhotoByMime}, byExt=${!!isPhotoByExtension}, byBase64=${isPhotoByBase64})`)
+          if (isDevMode) {
+            console.log(`🔍 Prüfe Foto ${f.fileName}: fileType="${fileType}", mime="${mime}", fileName="${fileName}", isPhoto=${isPhoto} (byType=${isPhotoByType}, byMime=${isPhotoByMime}, byExt=${!!isPhotoByExtension}, byBase64=${isPhotoByBase64})`)
+          }
           return isPhoto
         }
 
-        if (type === 'document' || type === 'delivery_note') {
+        if (normalizedType === 'document' || normalizedType === 'delivery_note') {
           // Dokumente: alles was KEIN Bild ist
           const isImage = mime.startsWith('image/') || fileType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)
           const isDoc = fileType === 'document' || fileType === 'invoice' || fileType === 'delivery_note' || fileType === 'rechnung' || fileType === 'lieferschein' || fileType === 'dokument' || !isImage
@@ -1186,11 +2707,11 @@ class DataServiceClass {
       })
 
       // Dedupliziere nach id (falls über Zeiteinträge + direct + projectId doppelt)
-      const seenIds = new Set<string>()
+      const dedupeKeys = new Set<string>()
       filteredFiles = filteredFiles.filter((f) => {
         const key = f.id || `${f.fileName}-${f.projectId}`
-        if (seenIds.has(key)) return false
-        seenIds.add(key)
+        if (dedupeKeys.has(key)) return false
+        dedupeKeys.add(key)
         return true
       })
 
@@ -1241,14 +2762,53 @@ class DataServiceClass {
       const timeEntriesRef = collection(db, 'timeEntries')
       const snapshot = await getDocs(timeEntriesRef)
       
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TimeEntry))
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
     } catch (error) {
       console.error('Fehler beim Abrufen aller Zeiteinträge:', error)
       return []
     }
   }
 
-  async getFileUploads(projectId?: string, type?: string): Promise<FileUpload[]> {
+  /** Alle fileUploads, die explizit an einen Stempelsatz gebunden sind (auch wenn projectId/Arrays abweichen). */
+  async getFileUploadsByTimeEntryIds(
+    timeEntryIds: string[],
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
+    await this.authReadyPromise
+    if (!timeEntryIds || timeEntryIds.length === 0) return []
+    const includeBinary = opts?.includeBinary === true
+    const out: FileUpload[] = []
+    const chunkSize = 10
+    for (let i = 0; i < timeEntryIds.length; i += chunkSize) {
+      const chunk = timeEntryIds.slice(i, i + chunkSize).filter((id) => !!id)
+      if (chunk.length === 0) continue
+      try {
+        const fileUploadsRef = collection(db, 'fileUploads')
+        const q = query(fileUploadsRef, where('timeEntryId', 'in', chunk))
+        const snapshot = await getDocs(q)
+        snapshot.docs.forEach((fileDoc) => {
+          const data = fileDoc.data() as Record<string, unknown>
+          out.push(
+            this.fileUploadFromDocData(fileDoc.id, data, {
+              fileTypeFallback: 'construction_site',
+              includeBinary
+            })
+          )
+        })
+      } catch (e) {
+        console.error('getFileUploadsByTimeEntryIds:', e)
+      }
+    }
+    return out
+  }
+
+  async getFileUploads(
+    projectId?: string,
+    type?: string,
+    opts?: FileUploadLoadOptions
+  ): Promise<FileUpload[]> {
     await this.authReadyPromise
     try {
       const fileUploadsRef = collection(db, 'fileUploads')
@@ -1260,72 +2820,73 @@ class DataServiceClass {
       
       const snapshot = await getDocs(q)
       let uploads = snapshot.docs.map((doc, index) => {
-        const data = doc.data() as any
-        const uploadTime = data.uploadTime instanceof Timestamp
-          ? data.uploadTime.toDate()
-          : (data.uploadTime as Date | undefined)
-        
+        const data = doc.data() as Record<string, unknown>
+
         // Debug: Zeige die ersten 3 Firestore-Dokumente KOMPLETT als JSON
-        if (index < 3) {
-          // Finde Felder, die groß sind (könnten base64 sein)
-          const largeFields = Object.keys(data).filter(key => {
+        if (isDevMode && index < 1) {
+          const largeFields = Object.keys(data).filter((key) => {
             const val = data[key]
             return typeof val === 'string' && val.length > 1000
           })
-          
-          // Erstelle eine Kopie mit gekürzten großen Feldern für das Log
           const dataCopy = { ...data }
-          largeFields.forEach(key => {
-            dataCopy[key] = `[${data[key].length} Zeichen] ${data[key].substring(0, 50)}...`
+          largeFields.forEach((key) => {
+            const v = data[key]
+            dataCopy[key] =
+              typeof v === 'string' ? `[${v.length} Zeichen] ${v.substring(0, 50)}...` : v
           })
-          
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - ALLE KEYS: ${Object.keys(data).join(', ')}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - GROSSE FELDER: ${largeFields.length > 0 ? largeFields.join(', ') : 'KEINE!'}`)
           console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - DATEN:`, JSON.stringify(dataCopy, null, 2))
         }
-        
-        // Suche nach base64-Daten in verschiedenen möglichen Feldern
-        let base64 = data.base64Data || data.base64String || data.base64 || ''
-        let fileUrl = data.url || data.filePath || ''
-        
-        // Falls url eine data URL ist, extrahiere base64 daraus
-        if (fileUrl && fileUrl.startsWith('data:')) {
-          const parts = fileUrl.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        // Falls mimeType ein data URL ist, könnte base64 direkt darin sein
-        if (!base64 && data.mimeType && data.mimeType.includes(',')) {
-          const parts = data.mimeType.split(',')
-          if (parts.length > 1) {
-            base64 = parts[1]
-          }
-        }
-        
-        return { 
-          id: doc.id,
-          fileName: data.fileName || data.name || '',
-          filePath: fileUrl,
-          fileType: data.fileType || data.type || data.contentType || '',
-          projectId: data.projectId || '',
-          employeeId: data.employeeId || '',
-          uploadTime: uploadTime || new Date(),
-          notes: data.notes || data.comment || '',
-          imageComment: data.imageComment || data.comment || '',
-          base64Data: base64,
-          mimeType: data.mimeType || data.contentType || ''
-        } as FileUpload
+
+        return this.fileUploadFromDocData(doc.id, data, {
+          includeBinary: opts?.includeBinary === true
+        })
       })
-      
+
       if (type) {
-        uploads = uploads.filter(upload => upload.fileType === type)
+        uploads = uploads.filter((upload) => upload.fileType === type)
       }
-      
+
       return uploads
     } catch (error) {
       console.error('Fehler beim Abrufen der Datei-Uploads:', error)
+      return []
+    }
+  }
+
+  async getHeroIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
+    await this.authReadyPromise
+    try {
+      const configRef = doc(db, 'integrations', 'hero')
+      const snap = await getDoc(configRef)
+      if (!snap.exists()) return null
+      return snap.data() as HeroIntegrationConfig
+    } catch (error) {
+      console.error('Fehler beim Laden der HERO-Integration:', error)
+      return null
+    }
+  }
+
+  async getHeroSyncLogs(limit = 10): Promise<HeroSyncLogEntry[]> {
+    await this.authReadyPromise
+    try {
+      const logsRef = collection(db, 'heroSyncLogs')
+      const snapshot = await getDocs(logsRef)
+      const logs = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      })) as HeroSyncLogEntry[]
+
+      logs.sort((a, b) => {
+        const aTime = this.convertToDate(a.createdAt)?.getTime() ?? 0
+        const bTime = this.convertToDate(b.createdAt)?.getTime() ?? 0
+        return bTime - aTime
+      })
+
+      return logs.slice(0, limit)
+    } catch (error) {
+      console.error('Fehler beim Laden der HERO-Sync-Logs:', error)
       return []
     }
   }
