@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Vehicle, FileUpload } from '../types'
+import type { TimeEntry, FileUpload } from '../types'
 import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
 import SaveProgressOverlay from './SaveProgressOverlay'
-import { VehicleBookingFormFields } from './VehicleBookingFormFields'
 import { uploadDocumentationWithOfflineFallback } from '../utils/saveDocumentationPhotos'
 import { withTimeout } from '../utils/withTimeout'
 import { toFileUploadRef } from '../utils/fileUploadRef'
@@ -16,22 +15,6 @@ interface AppendDocumentationModalProps {
   timeEntry: TimeEntry
   onClose: () => void
   onSaved: () => void
-}
-
-type VehicleBookingRow = {
-  id: string
-  vehicleId: string
-  hours: number
-  comment: string
-}
-
-function createVehicleBookingRow(): VehicleBookingRow {
-  return {
-    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-    vehicleId: '',
-    hours: 1,
-    comment: ''
-  }
 }
 
 function clockInToLocalDateString(clockIn: TimeEntry['clockInTime']): string {
@@ -62,37 +45,8 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
   const [progressMessage, setProgressMessage] = useState('')
   const [progressStep, setProgressStep] = useState(0)
   const [progressTotal, setProgressTotal] = useState(0)
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [vehicleRows, setVehicleRows] = useState<VehicleBookingRow[]>(() => [createVehicleBookingRow()])
 
   const bookingDateForEntry = clockInToLocalDateString(timeEntry.clockInTime)
-
-  useEffect(() => {
-    const loadVehicles = async () => {
-      try {
-        const allVehicles = await DataService.getAllVehicles()
-        setVehicles(allVehicles.filter((v) => v.isActive !== false))
-      } catch (error) {
-        console.error('Fehler beim Laden der Fahrzeuge:', error)
-      }
-    }
-    loadVehicles()
-  }, [])
-
-  const updateVehicleRow = (id: string, patch: Partial<Omit<VehicleBookingRow, 'id'>>) => {
-    setVehicleRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)))
-  }
-
-  const addVehicleRow = () => {
-    setVehicleRows((rows) => [...rows, createVehicleBookingRow()])
-  }
-
-  const removeVehicleRow = (id: string) => {
-    setVehicleRows((rows) => {
-      const next = rows.filter((r) => r.id !== id)
-      return next.length > 0 ? next : [createVehicleBookingRow()]
-    })
-  }
 
   const mergeFileList = (existing: unknown, additions: FileUpload[]): unknown[] => {
     const base = Array.isArray(existing) ? [...existing] : []
@@ -107,26 +61,15 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const bookingsToSave = vehicleRows.filter((r) => r.vehicleId.trim() !== '')
-
-    if (bookingsToSave.length > 0) {
-      for (const row of bookingsToSave) {
-        if (!Number.isFinite(row.hours) || row.hours < 0.25 || row.hours > 24) {
-          toast.error('Bitte gültige Betriebsstunden (0,25–24) für alle gewählten Fahrzeuge eingeben.')
-          return
-        }
-      }
-    }
-
     const notesChanged = notes.trim() !== (timeEntry.notes || '').trim()
     const hasNewPhotos = sitePhotoItems.length > 0 || documentPhotoItems.length > 0
-    if (!notesChanged && !hasNewPhotos && bookingsToSave.length === 0) {
-      toast.error('Bitte ergänzen Sie Notizen, Fotos/Dokumente oder Fahrzeugbuchungen.')
+    if (!notesChanged && !hasNewPhotos) {
+      toast.error('Bitte ergänzen Sie Notizen oder Fotos/Dokumente.')
       return
     }
 
     const fileCount = sitePhotoItems.length + documentPhotoItems.length
-    const totalSteps = bookingsToSave.length + fileCount + 1
+    const totalSteps = fileCount + 1
 
     setIsSubmitting(true)
     setProgressTotal(totalSteps)
@@ -134,32 +77,6 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
     setProgressMessage('Speichern wird vorbereitet…')
 
     try {
-      let step = 0
-
-      if (bookingsToSave.length > 0) {
-        const currentUser = await DataService.getCurrentUser()
-        if (!currentUser) {
-          throw new Error('Benutzer nicht gefunden.')
-        }
-        for (const row of bookingsToSave) {
-          setProgressMessage(`Fahrzeugbuchung ${step + 1} von ${bookingsToSave.length}`)
-          const selectedVehicle = vehicles.find((v) => String(v.id) === String(row.vehicleId))
-          await DataService.addVehicleUsage({
-            vehicleId: row.vehicleId,
-            vehicleName: selectedVehicle?.name,
-            employeeId: currentUser.id,
-            projectId: timeEntry.projectId,
-            timeEntryId: timeEntry.id,
-            date: bookingDateForEntry,
-            hours: row.hours,
-            hoursUsed: row.hours,
-            comment: row.comment.trim() || undefined
-          })
-          step += 1
-          setProgressStep(step)
-        }
-      }
-
       const { siteUploads, documentUploads, deferredPhotos } =
         await uploadDocumentationWithOfflineFallback({
           batches: [
@@ -181,7 +98,7 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
           employeeId: timeEntry.employeeId,
           timeEntryId: timeEntry.id,
           notes: notes.trim(),
-          initialStep: step,
+          initialStep: 0,
           onProgress: ({ message, step: s }) => {
             setProgressMessage(message)
             setProgressStep(s)
@@ -263,8 +180,8 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
         </div>
         <div className="modal-body">
           <p className="form-hint" style={{ marginTop: 0 }}>
-            Gleicher Umfang wie beim Ausstempeln mit Dokumentation (Notizen, Baustellenfotos, Belege,
-            optionale Fahrzeugzeit für den Tag des Eintrags: {bookingDateForEntry}).
+            Gleicher Umfang wie beim Ausstempeln mit Dokumentation (Notizen, Baustellenfotos und
+            Belege für den Tag des Eintrags: {bookingDateForEntry}).
           </p>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
@@ -286,57 +203,6 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
               commentFieldLabel="Kommentar zu diesem Dokument (optional)"
               captureMode="document"
             />
-
-            <div className="form-group">
-              <h4 className="extended-doc-vehicle-heading">Fahrzeugzeit buchen (optional)</h4>
-              <p className="form-hint" style={{ marginTop: 0 }}>
-                Buchungen werden dem Kalendertag des Zeiteintrags zugeordnet ({bookingDateForEntry}).
-              </p>
-              {vehicleRows.map((row, index) => (
-                <div
-                  key={row.id}
-                  className="extended-vehicle-booking-row"
-                  style={
-                    index > 0
-                      ? { marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color, #e0e0e0)' }
-                      : undefined
-                  }
-                >
-                  {vehicleRows.length > 1 && (
-                    <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                      <strong>Buchung {index + 1}</strong>
-                    </div>
-                  )}
-                  <VehicleBookingFormFields
-                    vehicles={vehicles}
-                    selectedVehicleId={row.vehicleId}
-                    hours={row.hours}
-                    comment={row.comment}
-                    onVehicleChange={(vehicleId) => updateVehicleRow(row.id, { vehicleId })}
-                    onHoursChange={(hours) => updateVehicleRow(row.id, { hours })}
-                    onCommentChange={(comment) => updateVehicleRow(row.id, { comment })}
-                    idPrefix={`retro-doc-vehicle-${row.id}`}
-                  />
-                  {vehicleRows.length > 1 && (
-                    <div className="form-group">
-                      <button
-                        type="button"
-                        className="btn secondary-btn"
-                        onClick={() => removeVehicleRow(row.id)}
-                        disabled={isSubmitting}
-                      >
-                        Diese Buchung entfernen
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div className="form-group">
-                <button type="button" className="btn info-btn" onClick={addVehicleRow} disabled={isSubmitting}>
-                  Weitere Fahrzeugbuchung hinzufügen
-                </button>
-              </div>
-            </div>
 
             <div className="form-group text-center">
               <button type="submit" className="btn primary-btn" disabled={isSubmitting}>

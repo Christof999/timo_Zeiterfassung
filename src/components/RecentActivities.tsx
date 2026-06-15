@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
 import type { TimeEntry, Project } from '../types'
 import { Timestamp } from 'firebase/firestore'
+import { getReturnTravelCreditMs } from '../utils/returnTravel'
 import '../styles/RecentActivities.css'
 
 interface RecentActivitiesProps {
@@ -93,7 +94,7 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
 
     const diffMs = clockOut.getTime() - clockIn.getTime()
     const pauseTotalTime = entry.pauseTotalTime || 0
-    const actualWorkTime = diffMs - pauseTotalTime
+    const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
     const hours = actualWorkTime / (1000 * 60 * 60)
     return hours.toFixed(2).replace('.', ',')
   }

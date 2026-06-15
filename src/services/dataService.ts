@@ -39,6 +39,7 @@ import { withTimeout } from '../utils/withTimeout'
 import { getFileImageSrc } from '../utils/fileImageSrc'
 import { toFileUploadRef } from '../utils/fileUploadRef'
 import { sanitizeTimeEntryForRead } from '../utils/sanitizeTimeEntry'
+import { estimateReturnTravel, getReturnTravelCreditMs } from '../utils/returnTravel'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
 
@@ -751,6 +752,15 @@ class DataServiceClass {
         if (location) {
           updateData.clockOutLocation = location
           updateData.locationOut = location
+
+          // Halbe Rückfahrt (Baustelle ≈ Ausstempel-Ort → Firmenstandort) als
+          // Arbeitszeit gutschreiben.
+          const travel = estimateReturnTravel(location)
+          if (travel) {
+            updateData.returnTravelDistanceKm = Math.round(travel.distanceKm * 10) / 10
+            updateData.returnTravelMinutes = Math.round(travel.oneWayMinutes)
+            updateData.returnTravelCreditMs = travel.creditMs
+          }
         }
 
         if (materialUsages !== undefined) {
@@ -2374,7 +2384,7 @@ class DataServiceClass {
         
         const diffMs = clockOut.getTime() - clockIn.getTime()
         const pauseTotalTime = entry.pauseTotalTime || 0
-        const actualWorkTime = diffMs - pauseTotalTime
+        const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
         const hours = actualWorkTime / (1000 * 60 * 60)
         totalHours += hours
       }

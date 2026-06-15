@@ -12,6 +12,7 @@ import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
+import { formatReturnTravelCreditNote } from '../utils/returnTravel'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
@@ -154,7 +155,7 @@ const TimeTracking: React.FC = () => {
       )
 
       resetClockOutState()
-      toast.success('Sie wurden erfolgreich ausgestempelt!')
+      toast.success(`Sie wurden erfolgreich ausgestempelt!${formatReturnTravelCreditNote(location)}`)
     } catch (error: any) {
       toast.error('Fehler beim Ausstempeln: ' + error.message)
     }

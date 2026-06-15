@@ -10,6 +10,7 @@ import MaterialUsageFields, {
 import SaveProgressOverlay from './SaveProgressOverlay'
 import { uploadDocumentationWithOfflineFallback } from '../utils/saveDocumentationPhotos'
 import { withTimeout } from '../utils/withTimeout'
+import { formatReturnTravelCreditNote } from '../utils/returnTravel'
 import { toast } from './ToastContainer'
 import '../styles/Modal.css'
 
@@ -136,12 +137,13 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
       }
 
       setProgressStep(totalSteps)
+      const creditNote = formatReturnTravelCreditNote(location)
       if (deferredPhotos > 0) {
         toast.success(
-          `Ausgestempelt. ${deferredPhotos} Foto(s) werden automatisch hochgeladen, sobald wieder Netz da ist.`
+          `Ausgestempelt.${creditNote} ${deferredPhotos} Foto(s) werden automatisch hochgeladen, sobald wieder Netz da ist.`
         )
       } else {
-        toast.success('Erfolgreich ausgestempelt mit Dokumentation!')
+        toast.success(`Erfolgreich ausgestempelt mit Dokumentation!${creditNote}`)
       }
 
       onClockOutSuccess()

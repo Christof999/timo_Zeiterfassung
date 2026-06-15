@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, Vehicle, VehicleUsage, FileUpload, TimeReportSettlement, LeaveRequest } from '../../../types'
+import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, LeaveRequest } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
+import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
 import { getBavariaHolidayName } from '../../../utils/bavariaHolidays'
 import { collectEntryDocumentation } from '../../../utils/entryDocumentation'
 import { getFileImageSrc } from '../../../utils/fileImageSrc'
@@ -44,14 +45,6 @@ interface EmployeeSummary {
   totalCost: number
 }
 
-interface VehicleSummary {
-  vehicleId: string
-  vehicleName: string
-  totalHours: number
-  hourlyRate: number
-  totalCost: number
-}
-
 interface ReportsTabProps {
   defaultReportType?: ReportType
   allowedReportTypes?: ReportType[]
@@ -79,7 +72,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [employees, setEmployees] = useState<Employee[]>([])
   const [allEmployees, setAllEmployees] = useState<Employee[]>([])
   const [projects, setProjects] = useState<Project[]>([])
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -97,11 +89,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [employeeSummaries, setEmployeeSummaries] = useState<EmployeeSummary[]>([])
-  const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([])
   const [projectPhotos, setProjectPhotos] = useState<FileUpload[]>([])
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
-  const [projectVehicleUsagesList, setProjectVehicleUsagesList] = useState<VehicleUsage[]>([])
   const [expandedProjectDays, setExpandedProjectDays] = useState<Set<string>>(new Set())
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [useTimeFilter, setUseTimeFilter] = useState(false)
@@ -151,22 +141,19 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setEmployeeSettlement(null)
     setEmployeeReportView('full')
     setEmployeeSummaries([])
-    setVehicleSummaries([])
     setProjectPhotos([])
     setProjectDocuments([])
     setProjectRawEntries([])
-    setProjectVehicleUsagesList([])
     setExpandedProjectDays(new Set())
   }, [reportType])
 
   const loadInitialData = async () => {
     try {
-      const [fetchedEmployees, fetchedProjects, fetchedVehicles] = await Promise.all([
+      const [fetchedEmployees, fetchedProjects] = await Promise.all([
         DataService.getAllEmployees(),
-        DataService.getAllProjects(),
-        DataService.getAllVehicles()
+        DataService.getAllProjects()
       ])
-      
+
       setAllEmployees(fetchedEmployees)
       
       const filteredEmployees = fetchedEmployees.filter(e => {
@@ -178,7 +165,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       })
       setEmployees(filteredEmployees)
       setProjects(fetchedProjects)
-      setVehicles(fetchedVehicles)
     } catch (error) {
       console.error('Fehler beim Laden:', error)
       toast.error('Fehler beim Laden der Daten')
@@ -301,19 +287,29 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     return project?.name || projectId
   }
 
-  const calculateWorkHours = (clockIn: string, clockOut: string, pauseMinutes: number): string => {
+  const calculateWorkHours = (
+    clockIn: string,
+    clockOut: string,
+    pauseMinutes: number,
+    extraMinutes = 0
+  ): string => {
     if (!clockIn || !clockOut) return '-'
     const [inH, inM] = clockIn.split(':').map(Number)
     const [outH, outM] = clockOut.split(':').map(Number)
     if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return '-'
     let totalMinutes = (outH * 60 + outM) - (inH * 60 + inM) - pauseMinutes
     if (totalMinutes < 0) totalMinutes += 24 * 60
+    totalMinutes += extraMinutes
     const hours = Math.floor(totalMinutes / 60)
     const minutes = Math.abs(totalMinutes % 60)
     return `${hours}:${minutes.toString().padStart(2, '0')}`
   }
 
   const msToMinutes = (ms: number): number => Math.round(ms / (1000 * 60))
+
+  /** Beim Ausstempeln gutgeschriebene halbe Rückfahrt (in Minuten). */
+  const entryCreditMinutes = (entry: TimeEntry): number =>
+    msToMinutes(getReturnTravelCreditMs(entry))
 
   const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMinutes: number): number => {
     if (!clockIn || !clockOut) return 0
@@ -338,7 +334,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const cin = formatTimeForInput(clockInDate)
     const cout = formatTimeForInput(clockOutDate)
     const pauseMinutes = msToMinutes(entry.pauseTotalTime || 0)
-    return workMinutesFromParts(cin, cout, pauseMinutes)
+    return workMinutesFromParts(cin, cout, pauseMinutes) + entryCreditMinutes(entry)
   }
 
   const formatCurrency = (amount: number): string => {
@@ -416,7 +412,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           clockOut,
           pauseMinutes,
           pauseMs,
-          workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
+          workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes, entryCreditMinutes(entry)),
           notes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
           originalNotes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
           isEdited: false,
@@ -508,7 +504,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       else if (field === 'clockOut') entry.clockOut = value as string
       else if (field === 'pauseMinutes') entry.pauseMinutes = Number(value) || 0
       else if (field === 'projectName') entry.projectName = value as string
-      entry.workHours = calculateWorkHours(entry.clockIn, entry.clockOut, entry.pauseMinutes)
+      entry.workHours = calculateWorkHours(
+        entry.clockIn,
+        entry.clockOut,
+        entry.pauseMinutes,
+        entryCreditMinutes(entry.originalEntry)
+      )
       entry.isEdited = true
       updated[index] = entry
       return updated
@@ -530,7 +531,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         projectName: getProjectName(original.projectId),
         clockIn, clockOut, pauseMinutes, pauseMs,
         notes: updated[index].originalNotes,
-        workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes),
+        workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes, entryCreditMinutes(original)),
         isEdited: false
       }
       return updated
@@ -552,8 +553,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const buildSettlementLinesFromEntries = () =>
     reportEntries.map(re => {
+      const creditMinutes = entryCreditMinutes(re.originalEntry)
       const rawMinutes = workMinutesFromOriginalEntry(re.originalEntry)
-      const correctedMinutes = workMinutesFromParts(re.clockIn, re.clockOut, re.pauseMinutes)
+      const correctedMinutes =
+        workMinutesFromParts(re.clockIn, re.clockOut, re.pauseMinutes) + creditMinutes
       const paidOutMinutes = Math.max(0, rawMinutes - correctedMinutes)
       return {
         timeEntryId: re.id,
@@ -653,7 +656,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       bucket.entries.push(entry)
       const diffMs = clockOut.getTime() - clockIn.getTime()
       const pauseMs = entry.pauseTotalTime || 0
-      const workMs = Math.max(0, diffMs - pauseMs)
+      const workMs = Math.max(0, diffMs - pauseMs) + getReturnTravelCreditMs(entry)
       const hours = workMs / (1000 * 60 * 60)
       const prev = bucket.empHours.get(entry.employeeId) || 0
       bucket.empHours.set(entry.employeeId, prev + hours)
@@ -738,7 +741,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const handleProjectStaffPrint = () => {
-    if (projectRawEntries.length === 0 && projectVehicleUsagesList.length === 0) {
+    if (projectRawEntries.length === 0) {
       toast.error('Keine Buchungen zum Drucken')
       return
     }
@@ -780,30 +783,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       })
       .join('')
 
-    const vehRows = projectVehicleUsagesList
-      .slice()
-      .sort((a, b) => {
-        const da = convertToDate(a.date)?.getTime() || 0
-        const db = convertToDate(b.date)?.getTime() || 0
-        return da - db
-      })
-      .map(u => {
-        const ud = convertToDate(u.date)
-        const dateStr = ud ? ud.toLocaleDateString('de-DE') : '-'
-        const vname =
-          vehicles.find(v => v.id === u.vehicleId)?.name || u.vehicleName || u.vehicleId
-        const h = u.hours ?? u.hoursUsed ?? 0
-        const name = getEmployeeDisplayName(u.employeeId)
-        return `<tr>
-  <td>${esc(dateStr)}</td>
-  <td>${esc(vname)}</td>
-  <td>${esc(name)}</td>
-  <td class="right">${esc(String(h))}</td>
-  <td>${esc((u.comment || '').trim())}</td>
-</tr>`
-      })
-      .join('')
-
     const period =
       useTimeFilter && startDate && endDate
         ? `${new Date(startDate).toLocaleDateString('de-DE')} – ${new Date(endDate).toLocaleDateString('de-DE')}`
@@ -826,16 +805,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 </head>
 <body>
   <h1>${esc(projName)}</h1>
-  <p class="muted">Gebuchte Zeiten und Fahrzeuge (ohne Stundensätze, ohne Gesamtkosten, ohne Bilder). Zeitraum: ${esc(period)}</p>
+  <p class="muted">Gebuchte Zeiten (ohne Stundensätze, ohne Gesamtkosten, ohne Bilder). Zeitraum: ${esc(period)}</p>
   <h2>Zeiten</h2>
   <table>
     <thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Kommen</th><th>Gehen</th><th>Pause (min)</th><th>Arbeitszeit</th><th>Kommentar</th></tr></thead>
     <tbody>${timeRows || '<tr><td colspan="7">Keine Zeiten</td></tr>'}</tbody>
-  </table>
-  <h2>Fahrzeuge</h2>
-  <table>
-    <thead><tr><th>Datum</th><th>Fahrzeug</th><th>Mitarbeiter</th><th>Stunden</th><th>Kommentar</th></tr></thead>
-    <tbody>${vehRows || '<tr><td colspan="5">Keine Fahrzeugbuchungen</td></tr>'}</tbody>
   </table>
 </body>
 </html>`
@@ -898,9 +872,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         
         const diffMs = clockOut.getTime() - clockIn.getTime()
         const pauseMs = entry.pauseTotalTime || 0
-        const workMs = diffMs - pauseMs
+        const workMs = diffMs - pauseMs + getReturnTravelCreditMs(entry)
         const hours = workMs / (1000 * 60 * 60)
-        
+
         const employee = allEmployees.find(e => e.id === entry.employeeId)
         const hourlyRate = employee?.hourlyWage || employee?.hourlyRate || 0
         const employeeName = employee?.name || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || entry.employeeId
@@ -923,57 +897,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       empSummaries.sort((a, b) => b.totalCost - a.totalCost)
       setEmployeeSummaries(empSummaries)
 
-      // Fahrzeugbuchungen laden
-      let vehicleUsages: VehicleUsage[] = []
-      try {
-        vehicleUsages = await DataService.getVehicleUsagesByProject(selectedProjectId)
-        
-        // Optional nach Zeitraum filtern
-        if (useTimeFilter && startDate && endDate) {
-          const start = new Date(startDate)
-          start.setHours(0, 0, 0, 0)
-          const end = new Date(endDate)
-          end.setHours(23, 59, 59, 999)
-          
-          vehicleUsages = vehicleUsages.filter(usage => {
-            const usageDate = convertToDate(usage.date)
-            if (!usageDate) return false
-            return usageDate >= start && usageDate <= end
-          })
-        }
-      } catch (e) {
-        console.log('Keine Fahrzeugbuchungen gefunden')
-      }
-
-      // Nach Fahrzeug gruppieren
-      const vehicleMap = new Map<string, { hours: number; rate: number; name: string }>()
-      
-      vehicleUsages.forEach(usage => {
-        const hours = usage.hours || usage.hoursUsed || 0
-        const vehicle = vehicles.find(v => v.id === usage.vehicleId)
-        const hourlyRate = vehicle?.hourlyRate || 0
-        const vehicleName = vehicle?.name || usage.vehicleName || usage.vehicleId
-        
-        const existing = vehicleMap.get(usage.vehicleId)
-        if (existing) {
-          existing.hours += hours
-        } else {
-          vehicleMap.set(usage.vehicleId, { hours, rate: hourlyRate, name: vehicleName })
-        }
-      })
-
-      const vehSummaries: VehicleSummary[] = Array.from(vehicleMap.entries()).map(([id, data]) => ({
-        vehicleId: id,
-        vehicleName: data.name,
-        totalHours: Math.round(data.hours * 100) / 100,
-        hourlyRate: data.rate,
-        totalCost: Math.round(data.hours * data.rate * 100) / 100
-      }))
-      vehSummaries.sort((a, b) => b.totalCost - a.totalCost)
-      setVehicleSummaries(vehSummaries)
-
       setProjectRawEntries(timeEntries)
-      setProjectVehicleUsagesList(vehicleUsages)
 
       // Fotos und Dokumente laden
       try {
@@ -1007,8 +931,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const getEmployeeTotalCost = () => employeeSummaries.reduce((sum, e) => sum + e.totalCost, 0)
-  const getVehicleTotalCost = () => vehicleSummaries.reduce((sum, v) => sum + v.totalCost, 0)
-  const getProjectTotalCost = () => getEmployeeTotalCost() + getVehicleTotalCost()
+  const getProjectTotalCost = () => getEmployeeTotalCost()
 
   const getImageSrc = (file: FileUpload): string => getFileImageSrc(file)
 
@@ -1826,41 +1749,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr className="subtotal-row">
                         <td colSpan={3}><strong>Summe Personalkosten:</strong></td>
                         <td className="number-cell"><strong>{formatCurrency(getEmployeeTotalCost())}</strong></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                )}
-              </div>
-
-              {/* Fahrzeugkosten */}
-              <div className="cost-section">
-                <h4>Fahrzeugkosten</h4>
-                {vehicleSummaries.length === 0 ? (
-                  <p className="no-data">Keine Fahrzeugbuchungen vorhanden</p>
-                ) : (
-                  <table className="cost-table">
-                    <thead>
-                      <tr>
-                        <th>Fahrzeug</th>
-                        <th className="number-cell">Stunden</th>
-                        <th className="number-cell">Stundensatz</th>
-                        <th className="number-cell">Kosten</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {vehicleSummaries.map(veh => (
-                        <tr key={veh.vehicleId}>
-                          <td>{veh.vehicleName}</td>
-                          <td className="number-cell">{veh.totalHours.toFixed(2)} h</td>
-                          <td className="number-cell">{formatCurrency(veh.hourlyRate)}</td>
-                          <td className="number-cell">{formatCurrency(veh.totalCost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="subtotal-row">
-                        <td colSpan={3}><strong>Summe Fahrzeugkosten:</strong></td>
-                        <td className="number-cell"><strong>{formatCurrency(getVehicleTotalCost())}</strong></td>
                       </tr>
                     </tfoot>
                   </table>

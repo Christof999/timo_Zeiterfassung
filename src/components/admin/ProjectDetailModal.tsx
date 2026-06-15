@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Project, FileUpload, TimeEntry, VehicleUsage } from '../../types'
+import type { Project, FileUpload, TimeEntry } from '../../types'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from '../ToastContainer'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
+import { getReturnTravelCreditMs } from '../../utils/returnTravel'
 import '../../styles/Modal.css'
 
 interface ProjectDetailModalProps {
@@ -15,19 +16,13 @@ interface TimeEntryWithEmployee extends TimeEntry {
   employeeName?: string
 }
 
-interface VehicleUsageWithEmployee extends VehicleUsage {
-  employeeName?: string
-  createdAt?: any
-}
-
 const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClose }) => {
   const [activeTab, setActiveTab] = useState<
-    'construction-site' | 'documents' | 'timeentries' | 'vehicle-bookings'
+    'construction-site' | 'documents' | 'timeentries'
   >('construction-site')
   const [photos, setPhotos] = useState<FileUpload[]>([])
   const [documents, setDocuments] = useState<FileUpload[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
-  const [vehicleUsages, setVehicleUsages] = useState<VehicleUsageWithEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lightboxImage, setLightboxImage] = useState<{
     src: string
@@ -117,7 +112,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       console.log('Lade Projektdaten für:', project.id, project.name)
       
       // Verwende getProjectFiles wie in der alten App (lädt aus Zeiteinträgen)
-      const [allPhotos, allDocs, timeEntries, employees, rawVehicleUsages, projectsList] = await Promise.all([
+      const [allPhotos, allDocs, timeEntries, employees, projectsList] = await Promise.all([
         DataService.getProjectFiles(project.id!, 'construction_site').catch(err => {
           console.error('Fehler beim Laden der Fotos:', err)
           return []
@@ -132,10 +127,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         }),
         DataService.getAllEmployees().catch(err => {
           console.error('Fehler beim Laden der Mitarbeiter:', err)
-          return []
-        }),
-        DataService.getVehicleUsagesByProject(project.id!).catch(err => {
-          console.error('Fehler beim Laden der Fahrzeugbuchungen:', err)
           return []
         }),
         DataService.getAllProjects().catch((err) => {
@@ -181,35 +172,9 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         }
       })
 
-      const getVehicleUsageSortTime = (u: VehicleUsageWithEmployee): number => {
-        const created = convertToDate(u.createdAt)
-        if (created) return created.getTime()
-        if (typeof u.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(u.date)) {
-          const [y, m, day] = u.date.split(/[-T]/).map(Number)
-          return new Date(y, m - 1, day).getTime()
-        }
-        const d = convertToDate(u.date)
-        return d ? d.getTime() : 0
-      }
-
-      const usagesWithNames: VehicleUsageWithEmployee[] = [...rawVehicleUsages]
-        .sort((a, b) => getVehicleUsageSortTime(b) - getVehicleUsageSortTime(a))
-        .map((usage) => {
-          const employee = employees.find((emp) => emp.id === usage.employeeId)
-          return {
-            ...usage,
-            employeeName: employee
-              ? employee.name ||
-                `${employee.firstName || ''} ${employee.lastName || ''}`.trim() ||
-                usage.employeeId
-              : usage.employeeId
-          }
-        })
-      
       setPhotos(photosWithUrls)
       setDocuments(documentsWithUrls)
       setTimeEntries(entriesWithNames)
-      setVehicleUsages(usagesWithNames)
     } catch (error) {
       console.error('Fehler beim Laden der Projektdaten:', error)
     } finally {
@@ -280,7 +245,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
 
     const diffMs = clockOut.getTime() - clockIn.getTime()
     const pauseTotalTime = entry.pauseTotalTime || 0
-    const actualWorkTime = diffMs - pauseTotalTime
+    const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
     const hours = actualWorkTime / (1000 * 60 * 60)
 
     if (isNaN(hours) || hours < 0) {
@@ -288,34 +253,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
 
     return hours.toFixed(2) + 'h'
-  }
-
-  const formatVehicleUsageBookingDate = (usage: VehicleUsage): string => {
-    if (typeof usage.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(usage.date)) {
-      const [y, m, d] = usage.date.split(/[-T]/).map(Number)
-      const local = new Date(y, m - 1, d)
-      return local.toLocaleDateString('de-DE', {
-        weekday: 'short',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      })
-    }
-    const d = convertToDate(usage.date)
-    return d
-      ? d.toLocaleDateString('de-DE', {
-          weekday: 'short',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        })
-      : '—'
-  }
-
-  const formatVehicleHours = (usage: VehicleUsage): string => {
-    const h = usage.hoursUsed ?? usage.hours
-    if (h === undefined || h === null || Number.isNaN(Number(h))) return '—'
-    return `${Number(h).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} h`
   }
 
   const getClockOutLocation = (entry: TimeEntry) =>
@@ -514,7 +451,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   ))}
                 </select>
                 <p className="time-entry-move-hint">
-                  Zeiten, Baustellenfotos, Belege und Fahrzeugbuchungen vom selben Tag werden dem
+                  Zeiten, Baustellenfotos und Belege vom selben Tag werden dem
                   gewählten Projekt zugeordnet.
                 </p>
                 <div className="time-entry-move-actions">
@@ -616,17 +553,11 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           >
             Dokumente
           </button>
-          <button 
+          <button
             className={`project-tab-btn ${activeTab === 'timeentries' ? 'active' : ''}`}
             onClick={() => setActiveTab('timeentries')}
           >
             Zeiteinträge
-          </button>
-          <button 
-            className={`project-tab-btn ${activeTab === 'vehicle-bookings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('vehicle-bookings')}
-          >
-            Fahrzeugbuchungen
           </button>
         </div>
 
@@ -809,38 +740,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 })
               )}
             </div>
-          ) : (
-            <div className="time-entries-cards vehicle-bookings-tab">
-              {vehicleUsages.length === 0 ? (
-                <p className="no-data">Keine Fahrzeugbuchungen für dieses Projekt vorhanden</p>
-              ) : (
-                vehicleUsages.map((usage) => {
-                  const vehicleLabel =
-                    usage.vehicleName?.trim() ||
-                    (usage.vehicleId ? `Fahrzeug-ID: ${usage.vehicleId}` : 'Unbekanntes Fahrzeug')
-                  return (
-                    <div key={usage.id} className="time-entry-card vehicle-booking-card">
-                      <div className="time-entry-header">
-                        <span className="time-entry-employee">{vehicleLabel}</span>
-                        <span className="time-entry-hours">{formatVehicleHours(usage)}</span>
-                      </div>
-                      <div className="time-entry-details">
-                        <span className="time-entry-date">
-                          {usage.employeeName || usage.employeeId}
-                        </span>
-                        <span className="time-entry-times">
-                          Buchungsdatum: {formatVehicleUsageBookingDate(usage)}
-                        </span>
-                      </div>
-                      {usage.comment?.trim() ? (
-                        <p className="photo-comment vehicle-booking-comment">{usage.comment}</p>
-                      ) : null}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
 
