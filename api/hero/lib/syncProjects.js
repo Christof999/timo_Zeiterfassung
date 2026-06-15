@@ -44,6 +44,64 @@ async function loadProjectsByHeroId(db) {
   return map
 }
 
+async function loadCustomersByHeroId(db) {
+  const snapshot = await db.collection('customers').get()
+  const map = new Map()
+  snapshot.forEach((docSnap) => {
+    const data = docSnap.data() || {}
+    if (data.heroCustomerId != null && data.heroCustomerId !== '') {
+      map.set(String(data.heroCustomerId), { id: docSnap.id, data })
+    }
+  })
+  return map
+}
+
+/**
+ * Legt/aktualisiert einen Kunden in Firestore an und liefert dessen Doc-ID.
+ * Kunden werden aus den eingebetteten HERO-Kundendaten der project_matches
+ * abgeleitet (keine zusätzliche, unbestätigte HERO-Query nötig).
+ */
+async function upsertHeroCustomer(db, customer, ctx) {
+  const customerId = customer?.id != null ? String(customer.id) : ''
+  if (!customerId) return null
+
+  // Pro Sync nur einmal je Kunde schreiben
+  if (ctx.docIdByHeroCustomerId.has(customerId)) {
+    return ctx.docIdByHeroCustomerId.get(customerId)
+  }
+
+  const name = formatHeroClient(customer)
+  const payload = {
+    name: name || `HERO Kunde ${customerId}`,
+    companyName: customer.company_name ? String(customer.company_name).trim() : undefined,
+    firstName: customer.first_name || undefined,
+    lastName: customer.last_name || undefined,
+    email: customer.email || undefined,
+    source: 'hero',
+    heroCustomerId: customerId,
+    heroLastSyncedAt: ctx.now,
+    isActive: true
+  }
+  const cleaned = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  )
+
+  const existing = ctx.existingCustomersByHeroId.get(customerId)
+  let docId
+  if (existing) {
+    await db.collection('customers').doc(existing.id).set(cleaned, { merge: true })
+    docId = existing.id
+    ctx.customerStats.updated += 1
+  } else {
+    const ref = await db.collection('customers').add({ ...cleaned, createdAt: ctx.now })
+    docId = ref.id
+    ctx.customerStats.created += 1
+  }
+
+  ctx.docIdByHeroCustomerId.set(customerId, docId)
+  return docId
+}
+
 async function syncHeroProjectsToFirestore() {
   const db = getFirestore()
   const heroProjects = await fetchHeroProjectMatches()
@@ -59,12 +117,23 @@ async function syncHeroProjectsToFirestore() {
 
   const now = new Date()
 
+  // Kontext für den eingebetteten Kunden-Sync
+  const customerCtx = {
+    now,
+    existingCustomersByHeroId: await loadCustomersByHeroId(db),
+    docIdByHeroCustomerId: new Map(),
+    customerStats: { created: 0, updated: 0, total: 0 }
+  }
+
   for (const heroProject of heroProjects) {
     const heroId = heroProject?.id != null ? String(heroProject.id) : ''
     if (!heroId) {
       stats.skipped += 1
       continue
     }
+
+    // Kunde zuerst anlegen/aktualisieren, damit wir die Verknüpfung setzen können
+    const customerDocId = await upsertHeroCustomer(db, heroProject.customer, customerCtx)
 
     const statusInfo = heroProject.current_project_match_status || {}
     const mappedStatus = mapHeroProjectStatus(statusInfo.status_code, statusInfo.name)
@@ -79,6 +148,10 @@ async function syncHeroProjectsToFirestore() {
         : heroProject.measure?.short
           ? `Gewerk: ${heroProject.measure.short}`
           : undefined,
+      customerId: customerDocId || undefined,
+      customerName: customerDocId
+        ? formatHeroClient(heroProject.customer) || `HERO Kunde ${heroProject.customer.id}`
+        : undefined,
       heroProjectId: heroId,
       heroProjectNr: heroProject.project_nr != null ? String(heroProject.project_nr) : null,
       heroLastSyncedAt: now,
@@ -110,6 +183,9 @@ async function syncHeroProjectsToFirestore() {
     }
   }
 
+  customerCtx.customerStats.total = customerCtx.docIdByHeroCustomerId.size
+  const customerStats = customerCtx.customerStats
+
   await updateHeroIntegrationConfig({
     lastProjectSyncAt: now,
     lastProjectSyncError: null,
@@ -119,11 +195,13 @@ async function syncHeroProjectsToFirestore() {
   await writeHeroSyncLog({
     type: 'projects',
     success: true,
-    message: `Projekt-Sync abgeschlossen (${stats.created} neu, ${stats.updated} aktualisiert).`,
+    message:
+      `Projekt-Sync abgeschlossen (${stats.created} neu, ${stats.updated} aktualisiert; ` +
+      `Kunden: ${customerStats.created} neu, ${customerStats.updated} aktualisiert).`,
     stats
   })
 
-  return stats
+  return { stats, customerStats }
 }
 
 module.exports = { syncHeroProjectsToFirestore }

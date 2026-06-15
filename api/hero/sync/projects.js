@@ -14,11 +14,12 @@ module.exports = async function handler(req, res) {
     await authorizeRequest(req)
     assertHeroConfigured()
 
-    const stats = await syncHeroProjectsToFirestore()
+    const { stats, customerStats } = await syncHeroProjectsToFirestore()
 
     return res.status(200).json({
       success: true,
-      stats
+      stats,
+      customerStats
     })
   } catch (error) {
     if (error?.message === 'Unauthorized') {

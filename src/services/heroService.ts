@@ -50,6 +50,11 @@ export interface HeroProjectSyncResponse {
     skipped: number
     total: number
   }
+  customerStats?: {
+    created: number
+    updated: number
+    total: number
+  }
 }
 
 export interface HeroCustomerSyncResponse {
@@ -57,7 +62,6 @@ export interface HeroCustomerSyncResponse {
   stats?: {
     created: number
     updated: number
-    skipped: number
     total: number
   }
 }
@@ -125,10 +129,13 @@ export const heroService = {
     })
   },
 
+  // Kunden werden im selben Lauf wie die Projekte synchronisiert (spart einen
+  // Serverless-Function-Slot auf dem Hobby-Plan).
   async syncCustomers(): Promise<HeroCustomerSyncResponse> {
-    return heroApiFetch<HeroCustomerSyncResponse>('/api/hero/sync/customers', {
+    const response = await heroApiFetch<HeroProjectSyncResponse>('/api/hero/sync/projects', {
       method: 'POST'
     })
+    return { success: response.success, stats: response.customerStats }
   },
 
   getIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
