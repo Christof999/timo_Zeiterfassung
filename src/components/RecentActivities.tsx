@@ -111,7 +111,11 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
       ) : (
         <ul className="recent-activities-list">
           {activities.map((entry) => {
-            const projectName = entry.isVacationDay ? 'Urlaub' : getProjectName(entry.projectId)
+            const projectName = entry.isVacationDay
+              ? 'Urlaub'
+              : entry.customerId && !entry.projectId
+                ? `Kleinauftrag: ${entry.customerName || 'Kunde'}`
+                : getProjectName(entry.projectId)
             const workHours = calculateWorkHours(entry)
 
             return (

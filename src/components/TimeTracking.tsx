@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
-import ClockInForm from './ClockInForm'
+import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
 import RetroactiveDocumentationListModal from './RetroactiveDocumentationListModal'
@@ -15,6 +15,13 @@ import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import { formatReturnTravelCreditNote } from '../utils/returnTravel'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
+
+/** Synthetisches Projekt-Objekt für Direkt-Buchungen auf einen Kunden (Kleinauftrag). */
+const buildCustomerProject = (customerName?: string): Project => ({
+  id: '',
+  name: customerName ? `Kleinauftrag: ${customerName}` : 'Kleinauftrag (Kunde)',
+  client: customerName || ''
+})
 
 const TimeTracking: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
@@ -46,7 +53,9 @@ const TimeTracking: React.FC = () => {
       const timeEntry = await DataService.getCurrentTimeEntry(user.id)
       if (timeEntry) {
         setCurrentTimeEntry(timeEntry)
-        const project = await DataService.getProjectById(timeEntry.projectId)
+        const project = timeEntry.customerId && !timeEntry.projectId
+          ? buildCustomerProject(timeEntry.customerName)
+          : await DataService.getProjectById(timeEntry.projectId)
         setCurrentProject(project)
         
         // Berechne Einstempelzeit
@@ -80,24 +89,31 @@ const TimeTracking: React.FC = () => {
     return () => clearInterval(interval)
   }, [clockInTime])
 
-  const handleClockIn = async (projectId: string) => {
+  const handleClockIn = async (target: ClockInTarget) => {
     try {
       const location = await getCurrentLocation()
       const now = new Date()
 
+      const isCustomerEntry = !target.projectId && !!target.customerId
+
       const timeEntry = await DataService.addTimeEntry({
         employeeId: currentUser!.id,
-        projectId,
+        projectId: target.projectId || '',
+        ...(isCustomerEntry
+          ? { customerId: target.customerId, customerName: target.customerName || '' }
+          : {}),
         clockInTime: now,
         clockInLocation: location,
         notes: ''
       })
 
       setCurrentTimeEntry(timeEntry)
-      const project = await DataService.getProjectById(projectId)
+      const project = isCustomerEntry
+        ? buildCustomerProject(target.customerName)
+        : await DataService.getProjectById(target.projectId!)
       setCurrentProject(project)
       setClockInTime(now)
-      
+
       toast.success('Sie wurden erfolgreich eingestempelt!')
     } catch (error: any) {
       toast.error('Fehler beim Einstempeln: ' + error.message)

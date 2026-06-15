@@ -15,7 +15,7 @@ export interface HeroIntegrationConfig {
 
 export interface HeroSyncLogEntry {
   id?: string
-  type: 'projects' | 'health' | 'times'
+  type: 'projects' | 'customers' | 'health' | 'times'
   success: boolean
   message?: string
   stats?: Record<string, number>
@@ -58,6 +58,10 @@ export interface Project {
   description?: string
   isActive?: boolean
   status?: 'active' | 'inactive' | 'aktiv' | 'planned' | 'completed' | 'archived'
+  /** Verknüpfter Kunde (customers.id) */
+  customerId?: string
+  /** Anzeigename des verknüpften Kunden (denormalisiert) */
+  customerName?: string
   /** HERO project_matches.id */
   heroProjectId?: string
   heroProjectNr?: string
@@ -65,6 +69,28 @@ export interface Project {
   heroSyncSource?: 'hero'
   heroStatusCode?: number
   heroStatusName?: string
+}
+
+/** Kunde – manuell angelegt oder aus HERO synchronisiert */
+export interface Customer {
+  id: string
+  /** Anzeigename (Firma oder Vor-/Nachname) */
+  name: string
+  companyName?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  phone?: string
+  address?: string
+  notes?: string
+  isActive?: boolean
+  /** 'hero' = aus HERO importiert, sonst manuell angelegt */
+  source?: 'hero' | 'manual'
+  /** HERO customer.id (für Sync/Abgleich) */
+  heroCustomerId?: string
+  heroLastSyncedAt?: Date | any
+  createdAt?: Date | any
+  updatedAt?: Date | any
 }
 
 /** Verbrauchsmaterial beim Ausstempeln (Stückliste für Nachkalkulation) */
@@ -90,7 +116,12 @@ export interface MaterialType {
 export interface TimeEntry {
   id: string
   employeeId: string
+  /** Projekt-ID; bei Kleinaufträgen direkt am Kunden leer */
   projectId: string
+  /** Direkt-Buchung auf einen Kunden (Kleinauftrag ohne Projekt) */
+  customerId?: string
+  /** Anzeigename des Kunden bei Direkt-Buchung (denormalisiert) */
+  customerName?: string
   clockInTime: Date | any
   clockOutTime?: Date | any | null
   clockInLocation?: { lat: number | null; lng: number | null } | null

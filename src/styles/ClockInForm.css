@@ -113,3 +113,13 @@
     min-height: var(--btn-height);
   }
 }
+
+.clock-in-mode-toggle {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.clock-in-mode-toggle .btn {
+  flex: 1;
+}

@@ -14,6 +14,12 @@
   line-height: var(--line-height-tight);
 }
 
+.tab-header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
 .tab-hint.projects-archive-hint {
   margin: -0.5rem 0 var(--spacing-lg) 0;
   font-size: var(--font-size-sm);

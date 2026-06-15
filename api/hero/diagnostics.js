@@ -184,7 +184,7 @@ module.exports = async function handler(req, res) {
     const names = (data.__schema?.queryType?.fields || []).map((f) => f.name)
     result.availableQueries.total = names.length
     result.availableQueries.relevant = names.filter((n) =>
-      /time|zeit|hour|stunde|work|arbeit|employee|mitarbeit|staff|person|contact|kontakt|cost|kalkul|project|projekt/i.test(
+      /time|zeit|hour|stunde|work|arbeit|employee|mitarbeit|staff|person|contact|kontakt|cost|kalkul|project|projekt|customer|kunde|client|article|artikel|material|product|produkt|item|position/i.test(
         n
       )
     )

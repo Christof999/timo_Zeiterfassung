@@ -52,6 +52,16 @@ export interface HeroProjectSyncResponse {
   }
 }
 
+export interface HeroCustomerSyncResponse {
+  success: boolean
+  stats?: {
+    created: number
+    updated: number
+    skipped: number
+    total: number
+  }
+}
+
 export interface HeroDiagnosticsResponse {
   success: boolean
   syncEnabled: boolean
@@ -111,6 +121,12 @@ export const heroService = {
 
   async syncProjects(): Promise<HeroProjectSyncResponse> {
     return heroApiFetch<HeroProjectSyncResponse>('/api/hero/sync/projects', {
+      method: 'POST'
+    })
+  },
+
+  async syncCustomers(): Promise<HeroCustomerSyncResponse> {
+    return heroApiFetch<HeroCustomerSyncResponse>('/api/hero/sync/customers', {
       method: 'POST'
     })
   },

@@ -407,7 +407,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           dateRaw: clockInDate,
           dateKey: clockInDate ? getDateKey(clockInDate) : '',
           projectId: entry.projectId,
-          projectName: getProjectName(entry.projectId),
+          projectName:
+            entry.customerId && !entry.projectId
+              ? `Kleinauftrag: ${entry.customerName || 'Kunde'}`
+              : getProjectName(entry.projectId),
           clockIn,
           clockOut,
           pauseMinutes,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { deleteField, type FieldValue } from 'firebase/firestore'
 import { DataService } from '../../services/dataService'
-import type { Project } from '../../types'
+import type { Project, Customer } from '../../types'
 import { toast } from '../ToastContainer'
 import { toDateInputValue } from '../../utils/dateUtils'
 import '../../styles/Modal.css'
@@ -18,11 +18,19 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
     client: '',
     description: '',
     address: '',
+    customerId: '',
     status: 'active' as 'active' | 'planned' | 'completed' | 'archived',
     startDate: '',
     endDate: ''
   })
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    DataService.getActiveCustomers()
+      .then(setCustomers)
+      .catch(() => setCustomers([]))
+  }, [])
 
   // Hilfsfunktion um Datum aus verschiedenen Formaten zu konvertieren
   const convertToDateString = (date: any): string => {
@@ -43,6 +51,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
         client: project.client || '',
         description: project.description || '',
         address: (project as any).address || (project as any).location || '',
+        customerId: project.customerId || '',
         status: normalizedStatus,
         startDate: convertToDateString(project.startDate),
         endDate: convertToDateString(project.endDate)
@@ -55,11 +64,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
     setIsLoading(true)
 
     try {
-      type ProjectWrite = Partial<Project> & {
+      type ProjectWrite = Omit<Partial<Project>, 'customerId' | 'customerName'> & {
         address?: string
+        customerId?: string | FieldValue
+        customerName?: string | FieldValue
         startDate?: Date | FieldValue
         endDate?: Date | FieldValue
       }
+      const selectedCustomer = customers.find((c) => c.id === formData.customerId)
       const projectData: ProjectWrite = {
         name: formData.name,
         client: formData.client,
@@ -67,6 +79,13 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
         address: formData.address,
         status: formData.status,
         isActive: formData.status === 'active'
+      }
+      if (formData.customerId && selectedCustomer) {
+        projectData.customerId = formData.customerId
+        projectData.customerName = selectedCustomer.name
+      } else if (project?.id) {
+        projectData.customerId = deleteField()
+        projectData.customerName = deleteField()
       }
       if (formData.startDate) {
         projectData.startDate = new Date(formData.startDate)
@@ -80,10 +99,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
       }
 
       if (project?.id) {
-        await DataService.updateProject(project.id, projectData)
+        await DataService.updateProject(project.id, projectData as Partial<Project> & Record<string, unknown>)
         toast.success('Projekt erfolgreich aktualisiert')
       } else {
-        await DataService.createProject(projectData)
+        await DataService.createProject(projectData as Partial<Project>)
         toast.success('Projekt erfolgreich erstellt')
       }
 
@@ -113,12 +132,26 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
             />
           </div>
           <div className="form-group">
-            <label>Kunde:</label>
+            <label>Kunde (Freitext):</label>
             <input
               type="text"
               value={formData.client}
               onChange={(e) => setFormData({ ...formData, client: e.target.value })}
             />
+          </div>
+          <div className="form-group">
+            <label>Verknüpfter Kunde:</label>
+            <select
+              value={formData.customerId}
+              onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+            >
+              <option value="">— Kein Kunde verknüpft —</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label>Beschreibung:</label>

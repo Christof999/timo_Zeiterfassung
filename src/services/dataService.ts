@@ -23,6 +23,7 @@ import { db, auth, storage } from './firebaseConfig'
 import type {
   Employee,
   Project,
+  Customer,
   TimeEntry,
   TimeEntryMaterialUsage,
   Vehicle,
@@ -1617,6 +1618,86 @@ class DataServiceClass {
   }
 
   // Vehicle Management
+  // ==================== KUNDEN ====================
+
+  async getAllCustomers(): Promise<Customer[]> {
+    await this.authReadyPromise
+    try {
+      const customersRef = collection(db, 'customers')
+      const snapshot = await getDocs(customersRef)
+      const customers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Customer))
+      return customers.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Kunden:', error)
+      return []
+    }
+  }
+
+  async getActiveCustomers(): Promise<Customer[]> {
+    const customers = await this.getAllCustomers()
+    return customers.filter((c) => c.isActive !== false)
+  }
+
+  async getCustomerById(id: string): Promise<Customer | null> {
+    await this.authReadyPromise
+    if (!id) return null
+    try {
+      const customerRef = doc(db, 'customers', id)
+      const customerDoc = await getDoc(customerRef)
+      if (!customerDoc.exists()) return null
+      return { id: customerDoc.id, ...customerDoc.data() } as Customer
+    } catch (error) {
+      console.error('Fehler beim Abrufen des Kunden:', error)
+      return null
+    }
+  }
+
+  async createCustomer(customerData: Partial<Customer>): Promise<string> {
+    await this.authReadyPromise
+    try {
+      const customersRef = collection(db, 'customers')
+      const payload = {
+        ...customerData,
+        source: customerData.source || 'manual',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+      const cleaned = Object.fromEntries(
+        Object.entries(payload).filter(([, value]) => value !== undefined)
+      )
+      const docRef = await addDoc(customersRef, cleaned)
+      return docRef.id
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Kunden:', error)
+      throw error
+    }
+  }
+
+  async updateCustomer(id: string, customerData: Partial<Customer>): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const customerRef = doc(db, 'customers', id)
+      const payload = { ...customerData, updatedAt: new Date() }
+      const cleaned = Object.fromEntries(
+        Object.entries(payload).filter(([, value]) => value !== undefined)
+      )
+      await updateDoc(customerRef, cleaned)
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren des Kunden:', error)
+      throw error
+    }
+  }
+
+  async deleteCustomer(id: string): Promise<void> {
+    await this.authReadyPromise
+    try {
+      await deleteDoc(doc(db, 'customers', id))
+    } catch (error) {
+      console.error(`Fehler beim Löschen des Kunden ${id}:`, error)
+      throw error
+    }
+  }
+
   async getAllVehicles(): Promise<Vehicle[]> {
     await this.authReadyPromise
     try {

@@ -7,6 +7,7 @@ import ThemeToggle from '../ThemeToggle'
 import OverviewTab from './tabs/OverviewTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
+import CustomersTab from './tabs/CustomersTab'
 import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
@@ -22,6 +23,7 @@ type TabType =
   | 'employees'
   | 'projects'
   | 'projectsArchived'
+  | 'customers'
   | 'material'
   | 'costing'
   | 'hero'
@@ -171,6 +173,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'employees' as TabType, label: 'Mitarbeiter' },
     { id: 'projects' as TabType, label: 'Projekte' },
     { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
+    { id: 'customers' as TabType, label: 'Kunden' },
     { id: 'material' as TabType, label: 'Material' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     ...(HERO_INTEGRATION_UI_ENABLED
@@ -332,6 +335,7 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'employees' && <EmployeesTab />}
           {currentTab === 'projects' && <ProjectsTab variant="active" />}
           {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
+          {currentTab === 'customers' && <CustomersTab />}
           {currentTab === 'material' && <MaterialTypesTab />}
           {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
