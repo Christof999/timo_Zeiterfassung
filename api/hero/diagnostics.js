@@ -134,6 +134,7 @@ module.exports = async function handler(req, res) {
     keyInfo: rawKey ? analyzeKey(rawKey) : null,
     authProbe: null,
     availableQueries: { relevant: [], total: 0 },
+    typeShapes: null,
     projects: null
   }
 
@@ -190,6 +191,78 @@ module.exports = async function handler(req, res) {
     )
   } catch (error) {
     result.availableQueries.error = error?.message || 'Introspection nicht verfügbar'
+  }
+
+  // 2b) Feld-Struktur der für Artikel/Kunden relevanten Queries ermitteln,
+  //     damit der Import (z. B. Artikel → Materialliste) mit echten Feldnamen
+  //     gebaut werden kann. Nur Schema-Namen, keine Geschäftsdaten.
+  try {
+    const unwrapName = (typeRef) => {
+      let t = typeRef
+      while (t && !t.name && t.ofType) t = t.ofType
+      return t?.name || null
+    }
+    const fmtFieldType = (typeRef) => {
+      let t = typeRef
+      while (t && !t.name && t.ofType) t = t.ofType
+      return t?.name ? `${t.name}${t.kind === 'OBJECT' ? ' (obj)' : ''}` : t?.kind || '?'
+    }
+
+    const CANDIDATE_QUERIES = [
+      'supply_product_versions',
+      'new_supply_product_version',
+      'contacts',
+      'costcenters',
+      'tracking_times',
+      'tracking_times_categories'
+    ]
+
+    const schemaData = await heroGraphqlRequest(
+      `query {
+        __schema {
+          queryType {
+            fields {
+              name
+              type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+            }
+          }
+        }
+      }`
+    )
+    const queryFields = schemaData.__schema?.queryType?.fields || []
+    const typeByQuery = {}
+    for (const name of CANDIDATE_QUERIES) {
+      const field = queryFields.find((f) => f.name === name)
+      if (field) typeByQuery[name] = unwrapName(field.type)
+    }
+
+    const typeShapes = {}
+    const seenTypes = new Set()
+    for (const [queryName, typeName] of Object.entries(typeByQuery)) {
+      if (!typeName || seenTypes.has(typeName)) {
+        typeShapes[queryName] = { typeName, fields: typeName ? 'siehe oben' : null }
+        continue
+      }
+      seenTypes.add(typeName)
+      // eslint-disable-next-line no-await-in-loop
+      const typeData = await heroGraphqlRequest(
+        `query Shape($n: String!) {
+          __type(name: $n) {
+            name
+            fields { name type { kind name ofType { kind name ofType { kind name } } } }
+          }
+        }`,
+        { n: typeName }
+      )
+      const fields = (typeData.__type?.fields || []).map((f) => ({
+        name: f.name,
+        type: fmtFieldType(f.type)
+      }))
+      typeShapes[queryName] = { typeName, fields }
+    }
+    result.typeShapes = typeShapes
+  } catch (error) {
+    result.typeShapes = { error: error?.message || 'Typ-Introspection nicht verfügbar' }
   }
 
   // 3) Projektfelder prüfen
