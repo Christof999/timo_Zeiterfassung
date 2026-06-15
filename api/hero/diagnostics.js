@@ -135,6 +135,7 @@ module.exports = async function handler(req, res) {
     authProbe: null,
     availableQueries: { relevant: [], total: 0 },
     typeShapes: null,
+    nestedTypeShapes: null,
     projects: null
   }
 
@@ -195,17 +196,21 @@ module.exports = async function handler(req, res) {
 
   // 2b) Feld-Struktur der für Artikel/Kunden relevanten Queries ermitteln,
   //     damit der Import (z. B. Artikel → Materialliste) mit echten Feldnamen
-  //     gebaut werden kann. Nur Schema-Namen, keine Geschäftsdaten.
+  //     gebaut werden kann. Inkl. Query-Argumente und einer Ebene verschachtelter
+  //     Objekt-Typen (z. B. base_data, sales_prices). Nur Schema-Namen.
   try {
-    const unwrapName = (typeRef) => {
+    const unwrap = (typeRef) => {
       let t = typeRef
       while (t && !t.name && t.ofType) t = t.ofType
-      return t?.name || null
+      return t || {}
     }
     const fmtFieldType = (typeRef) => {
-      let t = typeRef
-      while (t && !t.name && t.ofType) t = t.ofType
-      return t?.name ? `${t.name}${t.kind === 'OBJECT' ? ' (obj)' : ''}` : t?.kind || '?'
+      const t = unwrap(typeRef)
+      return t.name ? `${t.name}${t.kind === 'OBJECT' ? ' (obj)' : ''}` : t.kind || '?'
+    }
+    const objTypeName = (typeRef) => {
+      const t = unwrap(typeRef)
+      return t.kind === 'OBJECT' ? t.name : null
     }
 
     const CANDIDATE_QUERIES = [
@@ -216,35 +221,10 @@ module.exports = async function handler(req, res) {
       'tracking_times',
       'tracking_times_categories'
     ]
+    // Verschachtelte Objekt-Typen nur für diese Queries auflösen (begrenzt Payload)
+    const DEEP_QUERIES = new Set(['supply_product_versions', 'new_supply_product_version'])
 
-    const schemaData = await heroGraphqlRequest(
-      `query {
-        __schema {
-          queryType {
-            fields {
-              name
-              type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
-            }
-          }
-        }
-      }`
-    )
-    const queryFields = schemaData.__schema?.queryType?.fields || []
-    const typeByQuery = {}
-    for (const name of CANDIDATE_QUERIES) {
-      const field = queryFields.find((f) => f.name === name)
-      if (field) typeByQuery[name] = unwrapName(field.type)
-    }
-
-    const typeShapes = {}
-    const seenTypes = new Set()
-    for (const [queryName, typeName] of Object.entries(typeByQuery)) {
-      if (!typeName || seenTypes.has(typeName)) {
-        typeShapes[queryName] = { typeName, fields: typeName ? 'siehe oben' : null }
-        continue
-      }
-      seenTypes.add(typeName)
-      // eslint-disable-next-line no-await-in-loop
+    const introspectType = async (typeName) => {
       const typeData = await heroGraphqlRequest(
         `query Shape($n: String!) {
           __type(name: $n) {
@@ -254,13 +234,72 @@ module.exports = async function handler(req, res) {
         }`,
         { n: typeName }
       )
-      const fields = (typeData.__type?.fields || []).map((f) => ({
+      return (typeData.__type?.fields || []).map((f) => ({
         name: f.name,
-        type: fmtFieldType(f.type)
+        type: fmtFieldType(f.type),
+        _objType: objTypeName(f.type)
       }))
-      typeShapes[queryName] = { typeName, fields }
     }
+
+    const schemaData = await heroGraphqlRequest(
+      `query {
+        __schema {
+          queryType {
+            fields {
+              name
+              args { name type { kind name ofType { kind name ofType { kind name } } } }
+              type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+            }
+          }
+        }
+      }`
+    )
+    const queryFields = schemaData.__schema?.queryType?.fields || []
+
+    const typeShapes = {}
+    const nestedTypeShapes = {}
+    const seenTypes = new Set()
+    const nestedToFetch = new Set()
+
+    for (const queryName of CANDIDATE_QUERIES) {
+      const field = queryFields.find((f) => f.name === queryName)
+      if (!field) continue
+      const typeName = unwrap(field.type).name
+      const args = (field.args || []).map((a) => ({ name: a.name, type: fmtFieldType(a.type) }))
+
+      if (!typeName || seenTypes.has(typeName)) {
+        typeShapes[queryName] = { typeName, args, fields: typeName ? 'siehe oben' : null }
+        continue
+      }
+      seenTypes.add(typeName)
+      // eslint-disable-next-line no-await-in-loop
+      const fields = await introspectType(typeName)
+      typeShapes[queryName] = {
+        typeName,
+        args,
+        fields: fields.map(({ name, type }) => ({ name, type }))
+      }
+
+      if (DEEP_QUERIES.has(queryName)) {
+        for (const f of fields) {
+          if (f._objType) nestedToFetch.add(f._objType)
+        }
+      }
+    }
+
+    // Eine Ebene verschachtelter Objekt-Typen auflösen (Name/Einheit/Preis-Details)
+    let budget = 12
+    for (const typeName of nestedToFetch) {
+      if (budget-- <= 0) break
+      if (seenTypes.has(typeName)) continue
+      seenTypes.add(typeName)
+      // eslint-disable-next-line no-await-in-loop
+      const fields = await introspectType(typeName)
+      nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
+    }
+
     result.typeShapes = typeShapes
+    result.nestedTypeShapes = nestedTypeShapes
   } catch (error) {
     result.typeShapes = { error: error?.message || 'Typ-Introspection nicht verfügbar' }
   }
