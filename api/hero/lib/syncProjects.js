@@ -1,5 +1,5 @@
 const { getFirestore } = require('firebase-admin/firestore')
-const { fetchHeroProjectMatches } = require('./heroGraphql')
+const { fetchHeroProjectMatches, fetchHeroSupplyProducts } = require('./heroGraphql')
 const { updateHeroIntegrationConfig, writeHeroSyncLog } = require('./syncLog')
 
 function formatHeroAddress(address) {
@@ -204,4 +204,106 @@ async function syncHeroProjectsToFirestore() {
   return { stats, customerStats }
 }
 
-module.exports = { syncHeroProjectsToFirestore }
+// ==================== ARTIKEL → MATERIALLISTE ====================
+
+function pickSalesPrice(salesPrices) {
+  if (Array.isArray(salesPrices)) {
+    const first = salesPrices.find((s) => s && typeof s.net_price_per_unit === 'number')
+    return first || salesPrices[0] || null
+  }
+  return salesPrices || null
+}
+
+function buildMaterialFromProduct(product) {
+  const productId = product?.product_id != null ? String(product.product_id) : ''
+  if (!productId) return null
+
+  const base = product.base_data || {}
+  const name = (base.name && String(base.name).trim()) || (product.nr && String(product.nr).trim())
+  if (!name) return null
+
+  const salesPrice = pickSalesPrice(product.sales_prices)
+  const price =
+    (salesPrice && typeof salesPrice.net_price_per_unit === 'number'
+      ? salesPrice.net_price_per_unit
+      : undefined) ??
+    (typeof product.list_price === 'number' ? product.list_price : undefined) ??
+    (typeof product.base_price === 'number' ? product.base_price : undefined)
+
+  return {
+    heroArticleId: productId,
+    name,
+    unitLabel: (base.unit_type && String(base.unit_type).trim()) || 'Stück',
+    unitPriceEur: typeof price === 'number' ? Math.round(price * 100) / 100 : undefined
+  }
+}
+
+async function loadMaterialsByHeroArticleId(db) {
+  const snapshot = await db.collection('materialTypes').get()
+  const map = new Map()
+  snapshot.forEach((docSnap) => {
+    const data = docSnap.data() || {}
+    if (data.heroArticleId != null && data.heroArticleId !== '') {
+      map.set(String(data.heroArticleId), { id: docSnap.id, data })
+    }
+  })
+  return map
+}
+
+async function syncHeroMaterialsToFirestore() {
+  const db = getFirestore()
+  const products = await fetchHeroSupplyProducts()
+  const existingByHeroId = await loadMaterialsByHeroArticleId(db)
+
+  const stats = { created: 0, updated: 0, skipped: 0, total: products.length }
+  const now = new Date()
+
+  for (const product of products) {
+    if (product?.is_deleted === true) {
+      stats.skipped += 1
+      continue
+    }
+    const mapped = buildMaterialFromProduct(product)
+    if (!mapped) {
+      stats.skipped += 1
+      continue
+    }
+
+    const payload = {
+      name: mapped.name,
+      unitLabel: mapped.unitLabel,
+      unitPriceEur: mapped.unitPriceEur,
+      source: 'hero',
+      heroArticleId: mapped.heroArticleId,
+      heroLastSyncedAt: now
+    }
+    const cleaned = Object.fromEntries(
+      Object.entries(payload).filter(([, value]) => value !== undefined)
+    )
+
+    const existing = existingByHeroId.get(mapped.heroArticleId)
+    if (existing) {
+      await db.collection('materialTypes').doc(existing.id).set(cleaned, { merge: true })
+      stats.updated += 1
+    } else {
+      await db.collection('materialTypes').add({
+        ...cleaned,
+        isActive: true,
+        sortOrder: 100,
+        createdAt: now
+      })
+      stats.created += 1
+    }
+  }
+
+  await writeHeroSyncLog({
+    type: 'materials',
+    success: true,
+    message: `Artikel-Import abgeschlossen (${stats.created} neu, ${stats.updated} aktualisiert).`,
+    stats
+  })
+
+  return stats
+}
+
+module.exports = { syncHeroProjectsToFirestore, syncHeroMaterialsToFirestore }

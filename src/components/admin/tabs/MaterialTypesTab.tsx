@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
+import { heroService } from '../../../services/heroService'
 import type { MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
 import MaterialTypeModal from '../MaterialTypeModal'
@@ -13,6 +14,25 @@ const MaterialTypesTab: React.FC = () => {
   const [editing, setEditing] = useState<MaterialType | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+
+  const handleHeroImport = async () => {
+    setIsImporting(true)
+    try {
+      const result = await heroService.syncMaterials()
+      const stats = result.materialStats
+      toast.success(
+        stats
+          ? `Artikel-Import: ${stats.created} neu, ${stats.updated} aktualisiert.`
+          : 'Artikel aus HERO importiert.'
+      )
+      await load()
+    } catch (error: any) {
+      toast.error('HERO-Artikel-Import fehlgeschlagen: ' + (error?.message || 'Unbekannter Fehler'))
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
@@ -53,9 +73,14 @@ const MaterialTypesTab: React.FC = () => {
             Hier legen Sie Verbrauchsmaterial mit Einheit und optional Preis fest. Mitarbeiter wählen beim Ausstempeln aus dieser Liste.
           </p>
         </div>
-        <button type="button" onClick={() => { setEditing(null); setShowModal(true) }} className="btn primary-btn">
-          Material hinzufügen
-        </button>
+        <div className="tab-header-actions">
+          <button type="button" onClick={handleHeroImport} className="btn secondary-btn" disabled={isImporting}>
+            {isImporting ? 'Importiere…' : 'Aus HERO importieren'}
+          </button>
+          <button type="button" onClick={() => { setEditing(null); setShowModal(true) }} className="btn primary-btn">
+            Material hinzufügen
+          </button>
+        </div>
       </div>
 
       {items.length === 0 ? (

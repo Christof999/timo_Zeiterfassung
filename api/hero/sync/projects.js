@@ -1,8 +1,23 @@
 const { initFirebaseAdmin } = require('../lib/firebaseAdmin')
 const { authorizeRequest } = require('../lib/auth')
 const { assertHeroConfigured } = require('../lib/heroConfig')
-const { syncHeroProjectsToFirestore } = require('../lib/syncProjects')
+const {
+  syncHeroProjectsToFirestore,
+  syncHeroMaterialsToFirestore
+} = require('../lib/syncProjects')
 const { writeHeroSyncLog, updateHeroIntegrationConfig } = require('../lib/syncLog')
+
+function getRequestAction(req) {
+  let body = req.body
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body)
+    } catch {
+      body = null
+    }
+  }
+  return body && typeof body === 'object' ? body.action : undefined
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,6 +28,13 @@ module.exports = async function handler(req, res) {
     initFirebaseAdmin()
     await authorizeRequest(req)
     assertHeroConfigured()
+
+    // Gemeinsamer Sync-Endpunkt (spart Serverless-Function-Slots auf dem Hobby-Plan):
+    // action 'materials' importiert HERO-Artikel, sonst Projekte + Kunden.
+    if (getRequestAction(req) === 'materials') {
+      const materialStats = await syncHeroMaterialsToFirestore()
+      return res.status(200).json({ success: true, materialStats })
+    }
 
     const { stats, customerStats } = await syncHeroProjectsToFirestore()
 
@@ -34,20 +56,30 @@ module.exports = async function handler(req, res) {
       return res.status(503).json({ success: false, error: error.message, code: error.code })
     }
 
-    console.error('HERO Projekt-Sync Fehler:', error)
+    const isMaterials = getRequestAction(req) === 'materials'
+    console.error(`HERO ${isMaterials ? 'Artikel' : 'Projekt'}-Sync Fehler:`, error)
 
     try {
       initFirebaseAdmin()
-      await updateHeroIntegrationConfig({
-        lastProjectSyncError: error?.message || 'Unbekannter Fehler',
-        lastProjectSyncAt: new Date()
-      })
-      await writeHeroSyncLog({
-        type: 'projects',
-        success: false,
-        message: 'Projekt-Sync fehlgeschlagen',
-        error: error?.message || 'Unbekannter Fehler'
-      })
+      if (isMaterials) {
+        await writeHeroSyncLog({
+          type: 'materials',
+          success: false,
+          message: 'Artikel-Import fehlgeschlagen',
+          error: error?.message || 'Unbekannter Fehler'
+        })
+      } else {
+        await updateHeroIntegrationConfig({
+          lastProjectSyncError: error?.message || 'Unbekannter Fehler',
+          lastProjectSyncAt: new Date()
+        })
+        await writeHeroSyncLog({
+          type: 'projects',
+          success: false,
+          message: 'Projekt-Sync fehlgeschlagen',
+          error: error?.message || 'Unbekannter Fehler'
+        })
+      }
     } catch (logError) {
       console.error('HERO Sync-Log Fehler:', logError)
     }

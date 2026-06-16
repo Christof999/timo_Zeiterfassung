@@ -15,7 +15,7 @@ export interface HeroIntegrationConfig {
 
 export interface HeroSyncLogEntry {
   id?: string
-  type: 'projects' | 'customers' | 'health' | 'times'
+  type: 'projects' | 'customers' | 'materials' | 'health' | 'times'
   success: boolean
   message?: string
   stats?: Record<string, number>
@@ -111,6 +111,11 @@ export interface MaterialType {
   unitPriceEur?: number
   isActive?: boolean
   sortOrder?: number
+  /** 'hero' = aus HERO-Artikel importiert, sonst manuell */
+  source?: 'hero' | 'manual'
+  /** HERO supply_product_versions.product_id (für Abgleich) */
+  heroArticleId?: string
+  heroLastSyncedAt?: Date | any
 }
 
 export interface TimeEntry {

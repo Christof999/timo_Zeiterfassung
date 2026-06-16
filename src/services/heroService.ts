@@ -66,6 +66,16 @@ export interface HeroCustomerSyncResponse {
   }
 }
 
+export interface HeroMaterialSyncResponse {
+  success: boolean
+  materialStats?: {
+    created: number
+    updated: number
+    skipped: number
+    total: number
+  }
+}
+
 export interface HeroDiagnosticsResponse {
   success: boolean
   syncEnabled: boolean
@@ -136,6 +146,15 @@ export const heroService = {
       method: 'POST'
     })
     return { success: response.success, stats: response.customerStats }
+  },
+
+  // Artikel-Import läuft über denselben Endpunkt (action: 'materials'), um das
+  // 12-Functions-Limit des Hobby-Plans nicht zu überschreiten.
+  async syncMaterials(): Promise<HeroMaterialSyncResponse> {
+    return heroApiFetch<HeroMaterialSyncResponse>('/api/hero/sync/projects', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'materials' })
+    })
   },
 
   getIntegrationConfig(): Promise<HeroIntegrationConfig | null> {

@@ -82,8 +82,52 @@ async function fetchHeroProjectMatches() {
   return Array.isArray(data.project_matches) ? data.project_matches : []
 }
 
+const SUPPLY_PRODUCTS_QUERY = `
+  query HeroSupplyProducts($first: Int, $offset: Int) {
+    supply_product_versions(first: $first, offset: $offset) {
+      product_id
+      nr
+      base_price
+      list_price
+      vat_percent
+      price_quantity
+      is_deleted
+      base_data {
+        name
+        unit_type
+        description
+        matchcode
+        category
+      }
+      sales_prices {
+        net_price_per_unit
+        label
+      }
+    }
+  }
+`
+
+/**
+ * Lädt HERO-Artikel (Verbrauchsprodukte) seitenweise. Begrenzt durch maxItems,
+ * damit ein sehr großer Katalog die Materialliste nicht sprengt.
+ */
+async function fetchHeroSupplyProducts({ pageSize = 200, maxItems = 5000 } = {}) {
+  const all = []
+  let offset = 0
+  for (let page = 0; page < 100; page += 1) {
+    const data = await heroGraphqlRequest(SUPPLY_PRODUCTS_QUERY, { first: pageSize, offset })
+    const batch = Array.isArray(data.supply_product_versions) ? data.supply_product_versions : []
+    all.push(...batch)
+    if (batch.length < pageSize || all.length >= maxItems) break
+    offset += pageSize
+  }
+  return all.slice(0, maxItems)
+}
+
 module.exports = {
   heroGraphqlRequest,
   fetchHeroProjectMatches,
-  PROJECT_MATCHES_QUERY
+  fetchHeroSupplyProducts,
+  PROJECT_MATCHES_QUERY,
+  SUPPLY_PRODUCTS_QUERY
 }
