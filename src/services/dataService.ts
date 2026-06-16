@@ -1796,7 +1796,36 @@ class DataServiceClass {
     await deleteDoc(doc(db, 'materialTypes', id))
   }
 
-  // Vehicle Management
+  /**
+   * Löscht Materialarten. Ohne Filter werden alle gelöscht; mit
+   * { onlyHero: true } nur die aus HERO importierten Artikel.
+   * Liefert die Anzahl gelöschter Einträge.
+   */
+  async deleteAllMaterialTypes(options?: { onlyHero?: boolean }): Promise<number> {
+    await this.authReadyPromise
+    const snapshot = await getDocs(collection(db, 'materialTypes'))
+    const docs = snapshot.docs.filter((d) =>
+      options?.onlyHero ? (d.data() as MaterialType).source === 'hero' : true
+    )
+    let batch = writeBatch(db)
+    let inBatch = 0
+    let deleted = 0
+    for (const d of docs) {
+      batch.delete(d.ref)
+      inBatch += 1
+      deleted += 1
+      if (inBatch >= 450) {
+        await batch.commit()
+        batch = writeBatch(db)
+        inBatch = 0
+      }
+    }
+    if (inBatch > 0) {
+      await batch.commit()
+    }
+    return deleted
+  }
+
   // ==================== KUNDEN ====================
 
   async getAllCustomers(): Promise<Customer[]> {

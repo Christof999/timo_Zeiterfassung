@@ -15,6 +15,27 @@ const MaterialTypesTab: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isImporting, setIsImporting] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
+
+  const handleDeleteAll = async () => {
+    if (items.length === 0) {
+      toast.error('Keine Artikel zum Löschen vorhanden')
+      return
+    }
+    if (!confirm(`Wirklich ALLE ${items.length} Artikel/Materialarten löschen? Das kann nicht rückgängig gemacht werden.`)) {
+      return
+    }
+    setIsDeletingAll(true)
+    try {
+      const deleted = await DataService.deleteAllMaterialTypes()
+      toast.success(`${deleted} Artikel gelöscht`)
+      await load()
+    } catch (error: any) {
+      toast.error('Löschen fehlgeschlagen: ' + (error?.message || 'Unbekannter Fehler'))
+    } finally {
+      setIsDeletingAll(false)
+    }
+  }
 
   const handleHeroImport = async () => {
     setIsImporting(true)
@@ -77,6 +98,16 @@ const MaterialTypesTab: React.FC = () => {
           <button type="button" onClick={handleHeroImport} className="btn secondary-btn" disabled={isImporting}>
             {isImporting ? 'Importiere…' : 'Aus HERO importieren'}
           </button>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              className="btn delete-btn"
+              disabled={isDeletingAll}
+            >
+              {isDeletingAll ? 'Lösche…' : `Alle Artikel löschen (${items.length})`}
+            </button>
+          )}
           <button type="button" onClick={() => { setEditing(null); setShowModal(true) }} className="btn primary-btn">
             Material hinzufügen
           </button>
