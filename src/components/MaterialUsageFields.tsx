@@ -5,7 +5,7 @@ import '../styles/MaterialUsageFields.css'
 
 export type MaterialUsageRow = {
   key: string
-  /** Gewählte Materialart (falls aus der Liste); leer bei Freitext/Angebot */
+  /** Gewählte Materialart (falls aus dem Katalog); leer bei Freitext/Angebot */
   materialTypeId: string
   /** Angezeigter/eingegebener Text (Listentreffer oder Freitext) */
   label: string
@@ -18,6 +18,9 @@ export type MaterialUsageRow = {
 
 /** Angebots-Materialposition (kurze, projektbezogene Auswahl beim Einstempeln) */
 export type OfferMaterialOption = { name: string; unit?: string; unitPriceEur?: number }
+
+/** Vereinheitlichte Auswahl-Option (Angebot oder globaler Katalog) */
+type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string }
 
 function newRow(): MaterialUsageRow {
   return {
@@ -74,6 +77,72 @@ export function buildMaterialUsagesFromRows(
   return out
 }
 
+/** Eingabefeld mit aufklappbarer, durchsuchbarer Auswahlliste (mobil-tauglich). */
+const MaterialCombobox: React.FC<{
+  value: string
+  options: PickOption[]
+  onText: (v: string) => void
+  onPick: (o: PickOption) => void
+}> = ({ value, options, onText, onPick }) => {
+  const [open, setOpen] = useState(false)
+
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase()
+    const list = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
+    return list.slice(0, 60)
+  }, [options, value])
+
+  return (
+    <div className="material-combobox">
+      <input
+        type="text"
+        className="material-usage-select"
+        placeholder="Material wählen oder eingeben"
+        value={value}
+        onChange={(e) => {
+          onText(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="Material"
+      />
+      <button
+        type="button"
+        className="material-combobox-toggle"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          setOpen((o) => !o)
+        }}
+        aria-label="Liste öffnen"
+        tabIndex={-1}
+      >
+        ▾
+      </button>
+      {open && filtered.length > 0 && (
+        <ul className="material-combobox-list" role="listbox">
+          {filtered.map((o, i) => (
+            <li
+              key={`${o.id || o.name}-${i}`}
+              role="option"
+              aria-selected={o.name === value}
+              className="material-combobox-item"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onPick(o)
+                setOpen(false)
+              }}
+            >
+              <span className="mc-name">{o.name}</span>
+              {o.unit ? <span className="mc-unit">{o.unit}</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   noMaterial,
   onNoMaterialChange,
@@ -106,22 +175,28 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     }
   }, [hasOffer])
 
-  // Name → Materialart (für Treffer-Auflösung bei der Eingabe)
-  const typeByName = useMemo(() => {
-    const map = new Map<string, MaterialType>()
-    for (const t of types) {
-      if (t.name) map.set(t.name.trim().toLowerCase(), t)
+  // Auswahl-Optionen (Angebot bevorzugt, sonst globaler Katalog)
+  const options: PickOption[] = useMemo(() => {
+    if (hasOffer) {
+      return (offerMaterials || []).map((o) => ({
+        name: o.name,
+        unit: o.unit,
+        unitPriceEur: o.unitPriceEur
+      }))
     }
-    return map
-  }, [types])
+    return types.map((t) => ({
+      name: t.name,
+      unit: t.unitLabel,
+      unitPriceEur: t.unitPriceEur,
+      id: t.id
+    }))
+  }, [hasOffer, offerMaterials, types])
 
-  const offerByName = useMemo(() => {
-    const map = new Map<string, OfferMaterialOption>()
-    for (const o of offerMaterials || []) {
-      if (o.name) map.set(o.name.trim().toLowerCase(), o)
-    }
+  const optionByName = useMemo(() => {
+    const map = new Map<string, PickOption>()
+    for (const o of options) map.set(o.name.trim().toLowerCase(), o)
     return map
-  }, [offerMaterials])
+  }, [options])
 
   const addRow = () => onRowsChange([...rows, newRow()])
   const removeRow = (key: string) => {
@@ -132,20 +207,24 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     onRowsChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
 
-  const onLabelChange = (key: string, value: string) => {
-    const norm = value.trim().toLowerCase()
-    const offer = offerByName.get(norm)
-    if (offer) {
-      patchRow(key, { label: value, materialTypeId: '', unit: offer.unit, unitPriceEur: offer.unitPriceEur })
+  const applyOption = (key: string, o: PickOption) => {
+    patchRow(key, {
+      label: o.name,
+      materialTypeId: o.id || '',
+      unit: o.id ? undefined : o.unit,
+      unitPriceEur: o.id ? undefined : o.unitPriceEur
+    })
+  }
+
+  const onText = (key: string, value: string) => {
+    const exact = optionByName.get(value.trim().toLowerCase())
+    if (exact) {
+      applyOption(key, exact)
+      patchRow(key, { label: value })
       return
     }
-    const match = typeByName.get(norm)
-    patchRow(key, {
-      label: value,
-      materialTypeId: match?.id || '',
-      unit: undefined,
-      unitPriceEur: undefined
-    })
+    // Freitext (kein Treffer)
+    patchRow(key, { label: value, materialTypeId: '', unit: undefined, unitPriceEur: undefined })
   }
 
   return (
@@ -153,8 +232,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
       <h4 className="material-usage-title">Verbrauchsmaterial</h4>
       <p className="material-usage-intro">
         {hasOffer
-          ? 'Material aus dem Angebot wählen (tippen zum Filtern) – oder eigenen Text eingeben.'
-          : 'Bitte angeben, welches Material verbaut wurde (z. B. Fliesen in m²). Tippen, um aus der Liste zu wählen – oder eigenen Text eingeben.'}
+          ? 'Material aus dem Angebot wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'
+          : 'Material wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'}
       </p>
 
       <label className="material-usage-no-material">
@@ -172,30 +251,14 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
             <p className="material-usage-loading">Materialarten werden geladen…</p>
           ) : (
             <>
-              <datalist id="material-usage-options">
-                {hasOffer
-                  ? (offerMaterials || []).map((o, i) => (
-                      <option key={`${o.name}-${i}`} value={o.name}>
-                        {o.unit ? `Einheit: ${o.unit}` : ''}
-                      </option>
-                    ))
-                  : types.map((t) => (
-                      <option key={t.id} value={t.name}>
-                        {t.unitLabel ? `Einheit: ${t.unitLabel}` : ''}
-                      </option>
-                    ))}
-              </datalist>
               <div className="material-usage-rows">
                 {rows.map((row) => (
                   <div key={row.key} className="material-usage-row">
-                    <input
-                      type="text"
-                      list="material-usage-options"
-                      className="material-usage-select"
-                      placeholder="Material wählen oder eingeben"
+                    <MaterialCombobox
                       value={row.label}
-                      onChange={(e) => onLabelChange(row.key, e.target.value)}
-                      aria-label="Material"
+                      options={options}
+                      onText={(v) => onText(row.key, v)}
+                      onPick={(o) => applyOption(row.key, o)}
                     />
                     <input
                       type="text"
