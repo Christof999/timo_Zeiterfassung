@@ -76,6 +76,18 @@ export interface HeroMaterialSyncResponse {
   }
 }
 
+export interface HeroOfferSyncResponse {
+  success: boolean
+  offerResult?: {
+    found: boolean
+    message?: string
+    offerNr?: string | null
+    positionCount?: number
+    materialCount?: number
+    laborCount?: number
+  }
+}
+
 export interface HeroOfferProbeResponse {
   success: boolean
   probe?: {
@@ -199,6 +211,14 @@ export const heroService = {
     return heroApiFetch<HeroOfferProbeResponse>('/api/hero/sync/projects', {
       method: 'POST',
       body: JSON.stringify({ action: 'offer-probe', projectMatchId })
+    })
+  },
+
+  // Importiert das aktuellste Angebot eines Projekts (Soll-Positionen am Projekt).
+  async syncProjectOffer(projectMatchId: string | number): Promise<HeroOfferSyncResponse> {
+    return heroApiFetch<HeroOfferSyncResponse>('/api/hero/sync/projects', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'offer-sync', projectMatchId })
     })
   },
 

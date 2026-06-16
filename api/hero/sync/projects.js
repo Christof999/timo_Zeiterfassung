@@ -4,7 +4,8 @@ const { assertHeroConfigured } = require('../../../lib/hero/heroConfig')
 const {
   syncHeroProjectsToFirestore,
   syncHeroMaterialsToFirestore,
-  probeProjectOffers
+  probeProjectOffers,
+  syncProjectOfferToFirestore
 } = require('../../../lib/hero/syncProjects')
 const { writeHeroSyncLog, updateHeroIntegrationConfig } = require('../../../lib/hero/syncLog')
 
@@ -45,6 +46,13 @@ module.exports = async function handler(req, res) {
       const probe = await probeProjectOffers(body.projectMatchId)
       return res.status(200).json({ success: true, probe })
     }
+    if (body.action === 'offer-sync') {
+      if (body.projectMatchId == null || body.projectMatchId === '') {
+        return res.status(400).json({ success: false, error: 'projectMatchId fehlt' })
+      }
+      const offerResult = await syncProjectOfferToFirestore(body.projectMatchId)
+      return res.status(200).json({ success: true, offerResult })
+    }
 
     const { stats, customerStats } = await syncHeroProjectsToFirestore()
 
@@ -69,10 +77,14 @@ module.exports = async function handler(req, res) {
     const requestAction = getRequestBody(req).action
     const isMaterials = requestAction === 'materials'
     const isProbe = requestAction === 'offer-probe'
-    console.error(`HERO ${isProbe ? 'Angebots-Probe' : isMaterials ? 'Artikel' : 'Projekt'}-Fehler:`, error)
+    const isOfferSync = requestAction === 'offer-sync'
+    console.error(
+      `HERO ${isProbe ? 'Angebots-Probe' : isOfferSync ? 'Angebots-Import' : isMaterials ? 'Artikel' : 'Projekt'}-Fehler:`,
+      error
+    )
 
-    // Angebots-Probe schreibt keine Sync-Logs (reine Lese-Diagnose)
-    if (isProbe) {
+    // Angebots-Probe/-Import schreiben keine Projekt-Sync-Logs
+    if (isProbe || isOfferSync) {
       return res.status(500).json({ success: false, error: error?.message || 'Interner Serverfehler' })
     }
 

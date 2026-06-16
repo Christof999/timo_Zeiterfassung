@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Project, FileUpload, TimeEntry } from '../../types'
+import { heroService } from '../../services/heroService'
+import type { Project, FileUpload, TimeEntry, OfferPosition } from '../../types'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from '../ToastContainer'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
@@ -37,6 +38,9 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [isMovingEntry, setIsMovingEntry] = useState(false)
   const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
   const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
+  const [offerPositions, setOfferPositions] = useState<OfferPosition[]>(project.offerPositions || [])
+  const [offerMeta, setOfferMeta] = useState<Project['offerMeta'] | null>(project.offerMeta || null)
+  const [isImportingOffer, setIsImportingOffer] = useState(false)
   const modalContentRef = useRef<HTMLDivElement | null>(null)
   const detailInfoRef = useRef<HTMLDivElement | null>(null)
 
@@ -294,6 +298,28 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
   }
 
+  const handleImportOffer = async () => {
+    if (!project.heroProjectId) return
+    setIsImportingOffer(true)
+    try {
+      const res = await heroService.syncProjectOffer(project.heroProjectId)
+      if (res.offerResult && res.offerResult.found === false) {
+        toast.error(res.offerResult.message || 'Kein Angebot für dieses Projekt gefunden.')
+        return
+      }
+      const refreshed = await DataService.getProjectById(project.id!)
+      setOfferPositions(refreshed?.offerPositions || [])
+      setOfferMeta(refreshed?.offerMeta || null)
+      toast.success(
+        `Angebot übernommen: ${res.offerResult?.materialCount ?? 0} Material-, ${res.offerResult?.laborCount ?? 0} Lohnposition(en).`
+      )
+    } catch (e: any) {
+      toast.error('Angebots-Import fehlgeschlagen: ' + (e?.message || 'Unbekannter Fehler'))
+    } finally {
+      setIsImportingOffer(false)
+    }
+  }
+
   const renderTimeEntryLocationModal = () => {
     if (!timeEntryDetail) return null
 
@@ -518,6 +544,67 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   <p key={index}>{line || '\u00A0'}</p>
                 ))}
               </div>
+            </div>
+          )}
+
+          {project.heroProjectId && (
+            <div className="project-offer-section">
+              <div className="project-offer-head">
+                <strong>HERO-Angebot (Soll):</strong>
+                <button
+                  type="button"
+                  className="btn secondary-btn btn-sm"
+                  onClick={handleImportOffer}
+                  disabled={isImportingOffer}
+                >
+                  {isImportingOffer
+                    ? 'Lade\u2026'
+                    : offerMeta
+                      ? 'Angebot aktualisieren'
+                      : 'Angebot von HERO laden'}
+                </button>
+              </div>
+              {offerMeta ? (
+                <>
+                  <p className="project-offer-meta">
+                    {offerMeta.nr ? `${offerMeta.nr} \u00B7 ` : ''}
+                    {offerMeta.date || ''} \u00B7 {offerMeta.materialCount ?? 0} Material / {(offerMeta.positionCount ?? 0) - (offerMeta.materialCount ?? 0)} Lohn
+                  </p>
+                  <table className="project-offer-table">
+                    <thead>
+                      <tr>
+                        <th>Position</th>
+                        <th>Art</th>
+                        <th className="num">Soll-Menge</th>
+                        <th className="num">\u20AC/Einheit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {offerPositions.map((p, i) => (
+                        <tr key={`${p.nr || p.name}-${i}`}>
+                          <td>{p.name}</td>
+                          <td>
+                            <span className={`status-badge ${p.kind === 'material' ? 'active' : 'inactive'}`}>
+                              {p.kind === 'material' ? 'Material' : 'Lohn'}
+                            </span>
+                          </td>
+                          <td className="num">
+                            {(p.quantity ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                            {p.unit ? ` ${p.unit}` : ''}
+                          </td>
+                          <td className="num">
+                            {typeof p.unitPriceEur === 'number' ? `${p.unitPriceEur.toFixed(2)} \u20AC` : '\u2014'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              ) : (
+                <p className="project-offer-empty">
+                  Noch kein Angebot \u00FCbernommen. \u201EAngebot von HERO laden\u201C holt das aktuellste Angebot.
+                </p>
+              )}
             </div>
           )}
         </div>

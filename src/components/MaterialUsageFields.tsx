@@ -5,12 +5,19 @@ import '../styles/MaterialUsageFields.css'
 
 export type MaterialUsageRow = {
   key: string
-  /** Gewählte Materialart (falls aus der Liste); leer bei Freitext */
+  /** Gewählte Materialart (falls aus der Liste); leer bei Freitext/Angebot */
   materialTypeId: string
   /** Angezeigter/eingegebener Text (Listentreffer oder Freitext) */
   label: string
   quantity: string
+  /** Bei Angebots-/Freitext-Treffer übernommene Einheit (für Nachkalkulation) */
+  unit?: string
+  /** Bei Angebots-Treffer übernommener Stückpreis (nur Admin/Nachkalkulation) */
+  unitPriceEur?: number
 }
+
+/** Angebots-Materialposition (kurze, projektbezogene Auswahl beim Einstempeln) */
+export type OfferMaterialOption = { name: string; unit?: string; unitPriceEur?: number }
 
 function newRow(): MaterialUsageRow {
   return {
@@ -27,6 +34,8 @@ export interface MaterialUsageFieldsProps {
   onNoMaterialChange: (v: boolean) => void
   rows: MaterialUsageRow[]
   onRowsChange: (rows: MaterialUsageRow[]) => void
+  /** Wenn gesetzt (Projekt mit Angebot): Auswahl nur aus diesen Positionen + Freitext. */
+  offerMaterials?: OfferMaterialOption[]
 }
 
 export function buildMaterialUsagesFromRows(
@@ -52,11 +61,13 @@ export function buildMaterialUsagesFromRows(
         unitPriceEur: typeof t?.unitPriceEur === 'number' ? t.unitPriceEur : undefined
       })
     } else {
-      // Freitext-Position (kein Listentreffer): kein Preis hinterlegt
+      // Angebots- oder Freitext-Position: Einheit/Preis (falls aus Angebot) mitnehmen
       out.push({
         materialTypeId: '',
         materialName: label,
-        quantity: qty
+        unitLabel: r.unit,
+        quantity: qty,
+        unitPriceEur: typeof r.unitPriceEur === 'number' ? r.unitPriceEur : undefined
       })
     }
   }
@@ -67,12 +78,20 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   noMaterial,
   onNoMaterialChange,
   rows,
-  onRowsChange
+  onRowsChange,
+  offerMaterials
 }) => {
   const [types, setTypes] = useState<MaterialType[]>([])
   const [loading, setLoading] = useState(true)
 
+  const hasOffer = !!(offerMaterials && offerMaterials.length > 0)
+
   useEffect(() => {
+    // Bei Angebots-Liste den globalen Katalog nicht laden (nur Angebot + Freitext)
+    if (hasOffer) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
     ;(async () => {
       try {
@@ -85,7 +104,7 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [hasOffer])
 
   // Name → Materialart (für Treffer-Auflösung bei der Eingabe)
   const typeByName = useMemo(() => {
@@ -95,6 +114,14 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     }
     return map
   }, [types])
+
+  const offerByName = useMemo(() => {
+    const map = new Map<string, OfferMaterialOption>()
+    for (const o of offerMaterials || []) {
+      if (o.name) map.set(o.name.trim().toLowerCase(), o)
+    }
+    return map
+  }, [offerMaterials])
 
   const addRow = () => onRowsChange([...rows, newRow()])
   const removeRow = (key: string) => {
@@ -106,16 +133,28 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   }
 
   const onLabelChange = (key: string, value: string) => {
-    const match = typeByName.get(value.trim().toLowerCase())
-    patchRow(key, { label: value, materialTypeId: match?.id || '' })
+    const norm = value.trim().toLowerCase()
+    const offer = offerByName.get(norm)
+    if (offer) {
+      patchRow(key, { label: value, materialTypeId: '', unit: offer.unit, unitPriceEur: offer.unitPriceEur })
+      return
+    }
+    const match = typeByName.get(norm)
+    patchRow(key, {
+      label: value,
+      materialTypeId: match?.id || '',
+      unit: undefined,
+      unitPriceEur: undefined
+    })
   }
 
   return (
     <div className="material-usage-fields">
       <h4 className="material-usage-title">Verbrauchsmaterial</h4>
       <p className="material-usage-intro">
-        Bitte beim Ausstempeln angeben, welches Material verbaut wurde (z.&nbsp;B. Fliesen in m²). Tippen,
-        um aus der Liste zu wählen – oder eigenen Text eingeben.
+        {hasOffer
+          ? 'Material aus dem Angebot wählen (tippen zum Filtern) – oder eigenen Text eingeben.'
+          : 'Bitte angeben, welches Material verbaut wurde (z. B. Fliesen in m²). Tippen, um aus der Liste zu wählen – oder eigenen Text eingeben.'}
       </p>
 
       <label className="material-usage-no-material">
@@ -134,11 +173,17 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
           ) : (
             <>
               <datalist id="material-usage-options">
-                {types.map((t) => (
-                  <option key={t.id} value={t.name}>
-                    {t.unitLabel ? `Einheit: ${t.unitLabel}` : ''}
-                  </option>
-                ))}
+                {hasOffer
+                  ? (offerMaterials || []).map((o, i) => (
+                      <option key={`${o.name}-${i}`} value={o.name}>
+                        {o.unit ? `Einheit: ${o.unit}` : ''}
+                      </option>
+                    ))
+                  : types.map((t) => (
+                      <option key={t.id} value={t.name}>
+                        {t.unitLabel ? `Einheit: ${t.unitLabel}` : ''}
+                      </option>
+                    ))}
               </datalist>
               <div className="material-usage-rows">
                 {rows.map((row) => (

@@ -42,6 +42,12 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
   const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
 
+  // Projekt mit HERO-Angebot: Mitarbeiter wählt nur aus den Angebots-Materialien
+  const offerMaterials = (project?.offerPositions || [])
+    .filter((p) => p.kind === 'material')
+    .map((p) => ({ name: p.name, unit: p.unit, unitPriceEur: p.unitPriceEur }))
+  const hasOffer = offerMaterials.length > 0
+
   useEffect(() => {
     DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
   }, [])
@@ -72,7 +78,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
     const typesById = new Map(materialTypes.map((t) => [t.id, t]))
     let materialUsages: TimeEntryMaterialUsage[] | undefined
     if (!noMaterial) {
-      if (materialTypes.length === 0) {
+      if (materialTypes.length === 0 && !hasOffer) {
         toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator unter „Material“ informieren.')
         return
       }
@@ -117,6 +123,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         onNoMaterialChange={setNoMaterial}
         rows={materialRows}
         onRowsChange={setMaterialRows}
+        offerMaterials={offerMaterials}
       />
 
       <div className="pause-input-section">
@@ -176,6 +183,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         <ExtendedClockOutModal
           timeEntry={timeEntry}
           pauseTotalTimeMs={pauseMsForExtendedModal}
+          offerMaterials={offerMaterials}
           onClose={() => {
             setShowExtendedModal(false)
             setPauseMsForExtendedModal(null)

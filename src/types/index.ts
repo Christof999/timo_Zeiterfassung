@@ -62,6 +62,16 @@ export interface Project {
   customerId?: string
   /** Anzeigename des verknüpften Kunden (denormalisiert) */
   customerName?: string
+  /** Aus dem HERO-Angebot importierte Soll-Positionen (Material + Lohn) */
+  offerPositions?: OfferPosition[]
+  offerMeta?: {
+    nr?: string
+    date?: string
+    value?: number
+    positionCount?: number
+    materialCount?: number
+    importedAt?: Date | any
+  }
   /** HERO project_matches.id */
   heroProjectId?: string
   heroProjectNr?: string
@@ -69,6 +79,22 @@ export interface Project {
   heroSyncSource?: 'hero'
   heroStatusCode?: number
   heroStatusName?: string
+}
+
+/** Eine Position aus dem HERO-Angebot (Soll) – Material oder Lohn */
+export interface OfferPosition {
+  /** HERO-Artikelnummer */
+  nr?: string
+  name: string
+  /** Einheit, z. B. m², lfm, Std */
+  unit?: string
+  /** Soll-Menge aus dem Angebot */
+  quantity?: number
+  /** Netto-Stückpreis (nur für Admin/Nachkalkulation) */
+  unitPriceEur?: number
+  vatPercent?: number
+  /** 'material' = für Mitarbeiter sichtbar; 'labor' = nur Admin (Lohn) */
+  kind: 'material' | 'labor'
 }
 
 /** Kunde – manuell angelegt oder aus HERO synchronisiert */

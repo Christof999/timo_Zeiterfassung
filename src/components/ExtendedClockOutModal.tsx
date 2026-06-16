@@ -5,7 +5,8 @@ import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
 import MaterialUsageFields, {
   buildMaterialUsagesFromRows,
   createMaterialUsageRow,
-  type MaterialUsageRow
+  type MaterialUsageRow,
+  type OfferMaterialOption
 } from './MaterialUsageFields'
 import SaveProgressOverlay from './SaveProgressOverlay'
 import { uploadDocumentationWithOfflineFallback } from '../utils/saveDocumentationPhotos'
@@ -18,6 +19,8 @@ interface ExtendedClockOutModalProps {
   timeEntry: TimeEntry
   /** Gesamte Pausenzeit in Millisekunden (vom übergeordneten Formular, inkl. 0) */
   pauseTotalTimeMs: number
+  /** Projekt mit HERO-Angebot: nur diese Material-Positionen + Freitext */
+  offerMaterials?: OfferMaterialOption[]
   onClose: () => void
   onClockOutSuccess: () => void
 }
@@ -25,6 +28,7 @@ interface ExtendedClockOutModalProps {
 const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   timeEntry,
   pauseTotalTimeMs,
+  offerMaterials,
   onClose,
   onClockOutSuccess
 }) => {
@@ -55,8 +59,9 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
       const typesById = new Map(types.map((t) => [t.id, t]))
 
       let materialUsages: TimeEntryMaterialUsage[] | undefined
+      const hasOffer = !!(offerMaterials && offerMaterials.length > 0)
       if (!noMaterial) {
-        if (types.length === 0) {
+        if (types.length === 0 && !hasOffer) {
           toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator informieren.')
           setIsSubmitting(false)
           return
@@ -196,6 +201,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               onNoMaterialChange={setNoMaterial}
               rows={materialRows}
               onRowsChange={setMaterialRows}
+              offerMaterials={offerMaterials}
             />
 
             <div className="form-group">
