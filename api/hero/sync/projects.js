@@ -3,11 +3,12 @@ const { authorizeRequest } = require('../../../lib/hero/auth')
 const { assertHeroConfigured } = require('../../../lib/hero/heroConfig')
 const {
   syncHeroProjectsToFirestore,
-  syncHeroMaterialsToFirestore
+  syncHeroMaterialsToFirestore,
+  probeProjectOffers
 } = require('../../../lib/hero/syncProjects')
 const { writeHeroSyncLog, updateHeroIntegrationConfig } = require('../../../lib/hero/syncLog')
 
-function getRequestAction(req) {
+function getRequestBody(req) {
   let body = req.body
   if (typeof body === 'string') {
     try {
@@ -16,7 +17,7 @@ function getRequestAction(req) {
       body = null
     }
   }
-  return body && typeof body === 'object' ? body.action : undefined
+  return body && typeof body === 'object' ? body : {}
 }
 
 module.exports = async function handler(req, res) {
@@ -30,10 +31,19 @@ module.exports = async function handler(req, res) {
     assertHeroConfigured()
 
     // Gemeinsamer Sync-Endpunkt (spart Serverless-Function-Slots auf dem Hobby-Plan):
-    // action 'materials' importiert HERO-Artikel, sonst Projekte + Kunden.
-    if (getRequestAction(req) === 'materials') {
+    // action 'materials' importiert HERO-Artikel, 'offer-probe' liest ein echtes
+    // Angebot zur Strukturanalyse, sonst Projekte + Kunden.
+    const body = getRequestBody(req)
+    if (body.action === 'materials') {
       const materialStats = await syncHeroMaterialsToFirestore()
       return res.status(200).json({ success: true, materialStats })
+    }
+    if (body.action === 'offer-probe') {
+      if (body.projectMatchId == null || body.projectMatchId === '') {
+        return res.status(400).json({ success: false, error: 'projectMatchId fehlt' })
+      }
+      const probe = await probeProjectOffers(body.projectMatchId)
+      return res.status(200).json({ success: true, probe })
     }
 
     const { stats, customerStats } = await syncHeroProjectsToFirestore()
@@ -56,8 +66,15 @@ module.exports = async function handler(req, res) {
       return res.status(503).json({ success: false, error: error.message, code: error.code })
     }
 
-    const isMaterials = getRequestAction(req) === 'materials'
-    console.error(`HERO ${isMaterials ? 'Artikel' : 'Projekt'}-Sync Fehler:`, error)
+    const requestAction = getRequestBody(req).action
+    const isMaterials = requestAction === 'materials'
+    const isProbe = requestAction === 'offer-probe'
+    console.error(`HERO ${isProbe ? 'Angebots-Probe' : isMaterials ? 'Artikel' : 'Projekt'}-Fehler:`, error)
+
+    // Angebots-Probe schreibt keine Sync-Logs (reine Lese-Diagnose)
+    if (isProbe) {
+      return res.status(500).json({ success: false, error: error?.message || 'Interner Serverfehler' })
+    }
 
     try {
       initFirebaseAdmin()

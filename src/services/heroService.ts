@@ -76,6 +76,43 @@ export interface HeroMaterialSyncResponse {
   }
 }
 
+export interface HeroOfferProbeResponse {
+  success: boolean
+  probe?: {
+    projectMatchId: number
+    documentCount: number
+    documents: Array<{
+      id: number
+      nr?: string
+      date?: string
+      type?: string
+      documentType?: string | null
+      baseType?: string | null
+      statusName?: string | null
+      value?: number | null
+      positionsCount: number
+      hasDraftData: boolean
+    }>
+    sample: {
+      id: number
+      nr?: string
+      date?: string
+      documentType?: string | null
+      baseType?: string | null
+      positionTypes: string[]
+      positions: Array<{
+        type?: string
+        name?: string
+        net_value?: number
+        vat?: number
+        nr?: string
+        cost_center_number?: string
+      }>
+      draftData?: any
+    } | null
+  }
+}
+
 export interface HeroDiagnosticsResponse {
   success: boolean
   syncEnabled: boolean
@@ -154,6 +191,14 @@ export const heroService = {
     return heroApiFetch<HeroMaterialSyncResponse>('/api/hero/sync/projects', {
       method: 'POST',
       body: JSON.stringify({ action: 'materials' })
+    })
+  },
+
+  // Liest ein echtes Angebot eines Projekts zur Strukturanalyse (Lese-Diagnose).
+  async probeOffer(projectMatchId: string | number): Promise<HeroOfferProbeResponse> {
+    return heroApiFetch<HeroOfferProbeResponse>('/api/hero/sync/projects', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'offer-probe', projectMatchId })
     })
   },
 

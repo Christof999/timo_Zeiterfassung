@@ -1065,6 +1065,19 @@
   font-size: var(--font-size-sm);
 }
 
+.hero-integration-tab .hero-diagnostics-json {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--surface-muted, #f4f4f4);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: var(--radius-md, 8px);
+  max-height: 360px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
 .hero-integration-tab .hero-error {
   color: var(--danger-color, #c0392b);
   font-size: var(--font-size-sm);

@@ -5,7 +5,7 @@ import {
   type HeroHealthResponse,
   type HeroDiagnosticsResponse
 } from '../../../services/heroService'
-import type { Employee, HeroIntegrationConfig, HeroSyncLogEntry } from '../../../types'
+import type { Employee, HeroIntegrationConfig, HeroSyncLogEntry, Project } from '../../../types'
 import { toast } from '../../ToastContainer'
 import '../../../styles/AdminTabs.css'
 
@@ -21,18 +21,28 @@ const HeroIntegrationTab: React.FC = () => {
   const [isCheckingHealth, setIsCheckingHealth] = useState(false)
   const [isSyncingProjects, setIsSyncingProjects] = useState(false)
   const [savingEmployeeId, setSavingEmployeeId] = useState<string | null>(null)
+  const [heroProjects, setHeroProjects] = useState<Project[]>([])
+  const [probeProjectId, setProbeProjectId] = useState('')
+  const [isProbing, setIsProbing] = useState(false)
+  const [probeResult, setProbeResult] = useState<any>(null)
 
   const loadAll = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [integrationConfig, syncLogs, allEmployees] = await Promise.all([
+      const [integrationConfig, syncLogs, allEmployees, allProjects] = await Promise.all([
         heroService.getIntegrationConfig(),
         heroService.getRecentSyncLogs(8),
-        DataService.getAllEmployees()
+        DataService.getAllEmployees(),
+        DataService.getAllProjects().catch(() => [] as Project[])
       ])
       setConfig(integrationConfig)
       setLogs(syncLogs)
       setEmployees(allEmployees.filter((e) => !e.isAdmin))
+      setHeroProjects(
+        allProjects
+          .filter((p) => p.heroProjectId)
+          .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+      )
       const drafts: Record<string, string> = {}
       allEmployees.forEach((e) => {
         if (e.id) drafts[e.id] = e.heroEmployeeId || ''
@@ -48,6 +58,27 @@ const HeroIntegrationTab: React.FC = () => {
   useEffect(() => {
     loadAll()
   }, [loadAll])
+
+  const handleProbeOffer = async () => {
+    const project = heroProjects.find((p) => p.heroProjectId === probeProjectId)
+    if (!project?.heroProjectId) {
+      toast.error('Bitte ein HERO-Projekt auswählen')
+      return
+    }
+    setIsProbing(true)
+    setProbeResult(null)
+    try {
+      const result = await heroService.probeOffer(project.heroProjectId)
+      setProbeResult(result.probe ?? { info: 'Keine Daten' })
+      toast.success(
+        `Angebots-Probe: ${result.probe?.documentCount ?? 0} Dokument(e) gefunden.`
+      )
+    } catch (error: any) {
+      toast.error('Angebots-Probe fehlgeschlagen: ' + (error?.message || 'Unbekannter Fehler'))
+    } finally {
+      setIsProbing(false)
+    }
+  }
 
   const handleHealthCheck = async () => {
     setIsCheckingHealth(true)
@@ -202,6 +233,42 @@ const HeroIntegrationTab: React.FC = () => {
 
         {!health && (
           <p className="tab-hint">Tipp: „Verbindung testen“ prüft Key und HERO GraphQL auf dem Server.</p>
+        )}
+      </section>
+
+      <section className="hero-card">
+        <h4>Angebots-Probe (Struktur-Analyse)</h4>
+        <p className="tab-hint">
+          Liest EIN echtes Angebot/Dokument eines Projekts aus HERO, um den Aufbau der Positionen
+          (Typen, Mengen im JSON-Entwurf) zu prüfen. Grundlage für den geplanten Angebots-Import.
+        </p>
+        <div className="hero-actions">
+          <select
+            value={probeProjectId}
+            onChange={(e) => setProbeProjectId(e.target.value)}
+            disabled={isProbing}
+          >
+            <option value="">— HERO-Projekt wählen —</option>
+            {heroProjects.map((p) => (
+              <option key={p.id} value={p.heroProjectId}>
+                {p.name || p.heroProjectId}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn secondary-btn"
+            disabled={isProbing || !probeProjectId}
+            onClick={handleProbeOffer}
+          >
+            {isProbing ? 'Lese Angebot…' : 'Angebot auslesen'}
+          </button>
+        </div>
+        {heroProjects.length === 0 && (
+          <p className="tab-hint">Noch keine HERO-Projekte vorhanden – bitte zuerst Projekte synchronisieren.</p>
+        )}
+        {probeResult && (
+          <pre className="hero-diagnostics-json">{JSON.stringify(probeResult, null, 2)}</pre>
         )}
       </section>
 
