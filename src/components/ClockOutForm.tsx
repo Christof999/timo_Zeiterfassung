@@ -55,7 +55,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       const remaining = Math.max(0, (p.quantity || 0) - consumed)
       return { name: p.name, unit: p.unit, unitPriceEur: p.unitPriceEur, defaultQuantity: remaining }
     })
-  const hasOffer = offerMaterials.length > 0
 
   useEffect(() => {
     DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
@@ -113,10 +112,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
     const typesById = new Map(materialTypes.map((t) => [t.id, t]))
     let materialUsages: TimeEntryMaterialUsage[] | undefined
     if (!noMaterial) {
-      if (materialTypes.length === 0 && !hasOffer) {
-        toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator unter „Material“ informieren.')
-        return
-      }
       const built = buildMaterialUsagesFromRows(materialRows, typesById)
       if (built === null) {
         toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')

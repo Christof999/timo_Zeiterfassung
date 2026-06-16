@@ -59,13 +59,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
       const typesById = new Map(types.map((t) => [t.id, t]))
 
       let materialUsages: TimeEntryMaterialUsage[] | undefined
-      const hasOffer = !!(offerMaterials && offerMaterials.length > 0)
       if (!noMaterial) {
-        if (types.length === 0 && !hasOffer) {
-          toast.error('Es sind keine Materialarten hinterlegt. Bitte den Administrator informieren.')
-          setIsSubmitting(false)
-          return
-        }
         const built = buildMaterialUsagesFromRows(materialRows, typesById)
         if (built === null) {
           toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
