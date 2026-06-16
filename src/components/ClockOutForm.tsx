@@ -41,16 +41,51 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const [noMaterial, setNoMaterial] = useState(false)
   const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
   const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
+  /** Bereits auf diesem Projekt verbrauchtes Material (Name → Menge) */
+  const [consumedByName, setConsumedByName] = useState<Map<string, number>>(new Map())
 
-  // Projekt mit HERO-Angebot: Mitarbeiter wählt nur aus den Angebots-Materialien
+  const projectHasOffer = (project?.offerPositions || []).some((p) => p.kind === 'material')
+
+  // Projekt mit HERO-Angebot: Mitarbeiter wählt nur aus den Angebots-Materialien.
+  // Vorbelegte Menge = Angebots-Soll minus bereits Verbrauchtes (Restmenge).
   const offerMaterials = (project?.offerPositions || [])
     .filter((p) => p.kind === 'material')
-    .map((p) => ({ name: p.name, unit: p.unit, unitPriceEur: p.unitPriceEur }))
+    .map((p) => {
+      const consumed = consumedByName.get((p.name || '').trim().toLowerCase()) || 0
+      const remaining = Math.max(0, (p.quantity || 0) - consumed)
+      return { name: p.name, unit: p.unit, unitPriceEur: p.unitPriceEur, defaultQuantity: remaining }
+    })
   const hasOffer = offerMaterials.length > 0
 
   useEffect(() => {
     DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
   }, [])
+
+  // Bisherigen Materialverbrauch des Projekts laden (für die Restmengen-Anzeige)
+  useEffect(() => {
+    if (!project?.id || !projectHasOffer) {
+      setConsumedByName(new Map())
+      return
+    }
+    let cancelled = false
+    DataService.getTimeEntriesByProject(project.id)
+      .then((entries) => {
+        if (cancelled) return
+        const map = new Map<string, number>()
+        for (const entry of entries) {
+          for (const usage of entry.materialUsages || []) {
+            const name = (usage.materialName || '').trim().toLowerCase()
+            if (!name) continue
+            map.set(name, (map.get(name) || 0) + (Number(usage.quantity) || 0))
+          }
+        }
+        setConsumedByName(map)
+      })
+      .catch(() => setConsumedByName(new Map()))
+    return () => {
+      cancelled = true
+    }
+  }, [project?.id, projectHasOffer])
 
   const formatTime = (date: Date | null) => {
     if (!date) return '-'

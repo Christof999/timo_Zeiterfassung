@@ -17,10 +17,16 @@ export type MaterialUsageRow = {
 }
 
 /** Angebots-Materialposition (kurze, projektbezogene Auswahl beim Einstempeln) */
-export type OfferMaterialOption = { name: string; unit?: string; unitPriceEur?: number }
+export type OfferMaterialOption = {
+  name: string
+  unit?: string
+  unitPriceEur?: number
+  /** Vorzubelegende (Rest-)Menge aus dem Angebot */
+  defaultQuantity?: number
+}
 
 /** Vereinheitlichte Auswahl-Option (Angebot oder globaler Katalog) */
-type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string }
+type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string; defaultQuantity?: number }
 
 function newRow(): MaterialUsageRow {
   return {
@@ -181,7 +187,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
       return (offerMaterials || []).map((o) => ({
         name: o.name,
         unit: o.unit,
-        unitPriceEur: o.unitPriceEur
+        unitPriceEur: o.unitPriceEur,
+        defaultQuantity: o.defaultQuantity
       }))
     }
     return types.map((t) => ({
@@ -207,13 +214,20 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     onRowsChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
 
+  const formatQty = (n: number): string => String(Math.round(n * 1000) / 1000)
+
   const applyOption = (key: string, o: PickOption) => {
-    patchRow(key, {
+    const patch: Partial<MaterialUsageRow> = {
       label: o.name,
       materialTypeId: o.id || '',
       unit: o.id ? undefined : o.unit,
       unitPriceEur: o.id ? undefined : o.unitPriceEur
-    })
+    }
+    // Angebots-(Rest-)Menge vorbelegen; Mitarbeiter kann sie überschreiben
+    if (typeof o.defaultQuantity === 'number') {
+      patch.quantity = formatQty(o.defaultQuantity)
+    }
+    patchRow(key, patch)
   }
 
   const onText = (key: string, value: string) => {
