@@ -133,7 +133,7 @@ module.exports = async function handler(req, res) {
     error: null,
     keyInfo: rawKey ? analyzeKey(rawKey) : null,
     authProbe: null,
-    availableQueries: { relevant: [], total: 0 },
+    availableQueries: { relevant: [], all: [], total: 0 },
     typeShapes: null,
     nestedTypeShapes: null,
     projects: null
@@ -185,8 +185,9 @@ module.exports = async function handler(req, res) {
     const data = await heroGraphqlRequest('query { __schema { queryType { fields { name } } } }')
     const names = (data.__schema?.queryType?.fields || []).map((f) => f.name)
     result.availableQueries.total = names.length
+    result.availableQueries.all = [...names].sort((a, b) => a.localeCompare(b))
     result.availableQueries.relevant = names.filter((n) =>
-      /time|zeit|hour|stunde|work|arbeit|employee|mitarbeit|staff|person|contact|kontakt|cost|kalkul|project|projekt|customer|kunde|client|article|artikel|material|product|produkt|item|position/i.test(
+      /time|zeit|hour|stunde|work|arbeit|employee|mitarbeit|staff|person|contact|kontakt|cost|kalkul|project|projekt|customer|kunde|client|article|artikel|material|product|produkt|item|position|document|dokument|offer|angebot|order|auftrag|quote|invoice|rechnung|measure|gewerk/i.test(
         n
       )
     )
@@ -213,7 +214,7 @@ module.exports = async function handler(req, res) {
       return t.kind === 'OBJECT' ? t.name : null
     }
 
-    const CANDIDATE_QUERIES = [
+    const BASE_CANDIDATES = [
       'supply_product_versions',
       'new_supply_product_version',
       'contacts',
@@ -221,8 +222,18 @@ module.exports = async function handler(req, res) {
       'tracking_times',
       'tracking_times_categories'
     ]
-    // Verschachtelte Objekt-Typen nur für diese Queries auflösen (begrenzt Payload)
-    const DEEP_QUERIES = new Set(['supply_product_versions', 'new_supply_product_version'])
+    // Angebots-/Dokument-/Positions-Queries dynamisch aus dem Schema ergänzen,
+    // damit wir Angebotszeilen (Material + Menge je Projekt) finden.
+    const allNames = (result.availableQueries.all || [])
+    const docOfferRe = /document|dokument|offer|angebot|order|auftrag|position|quote|invoice|rechnung/i
+    const dynamicCandidates = allNames.filter((n) => docOfferRe.test(n)).slice(0, 8)
+    const CANDIDATE_QUERIES = [...new Set([...BASE_CANDIDATES, ...dynamicCandidates])]
+    // Verschachtelte Objekt-Typen für Artikel + Angebots-/Dokument-Queries auflösen
+    const DEEP_QUERIES = new Set([
+      'supply_product_versions',
+      'new_supply_product_version',
+      ...dynamicCandidates
+    ])
 
     const introspectType = async (typeName) => {
       const typeData = await heroGraphqlRequest(
@@ -287,8 +298,9 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Eine Ebene verschachtelter Objekt-Typen auflösen (Name/Einheit/Preis-Details)
-    let budget = 12
+    // Eine Ebene verschachtelter Objekt-Typen auflösen (Name/Einheit/Preis-Details,
+    // Angebots-Positionen mit Produkt-/Mengen-Bezug)
+    let budget = 24
     for (const typeName of nestedToFetch) {
       if (budget-- <= 0) break
       if (seenTypes.has(typeName)) continue
