@@ -85,6 +85,16 @@ const VacationRequests: React.FC = () => {
       return
     }
 
+    if (formData.type === 'overtime') {
+      const neededMinutes = workingDays * 8 * 60
+      if (overtimeMinutes < neededMinutes) {
+        toast.error(
+          `Nicht genügend Überstunden: ${overtimeHoursLabel} h vorhanden, ${workingDays} Tag(e) benötigen ${Math.floor(neededMinutes / 60)}:00 h.`
+        )
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
       await DataService.createLeaveRequest({
@@ -126,6 +136,7 @@ const VacationRequests: React.FC = () => {
       case 'sick': return 'Krankheit'
       case 'special': return 'Sonderurlaub'
       case 'unpaid': return 'Unbezahlt'
+      case 'overtime': return 'Urlaub auf Überstunden'
       default: return type
     }
   }
@@ -193,6 +204,12 @@ const VacationRequests: React.FC = () => {
   const usedForAccount = takenVacationDays + approvedPlannedVacationDays
   const remaining = Math.max(0, totalVacationDays - usedForAccount)
 
+  // Überstundenkonto
+  const overtimeMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
+  const overtimeHoursLabel = `${Math.floor(overtimeMinutes / 60)}:${String(overtimeMinutes % 60).padStart(2, '0')}`
+  const overtimeDaysAvailable = Math.floor(overtimeMinutes / (8 * 60))
+  const canUseOvertime = overtimeMinutes >= 8 * 60
+
   // Min-Datum für Datumseingaben (heute)
   const today = getTodayLocalDateString()
 
@@ -232,11 +249,15 @@ const VacationRequests: React.FC = () => {
           </div>
         </div>
         <div className="vacation-progress">
-          <div 
-            className="vacation-progress-bar" 
+          <div
+            className="vacation-progress-bar"
             style={{ width: `${totalVacationDays > 0 ? Math.min(100, (usedForAccount / totalVacationDays) * 100) : 0}%` }}
           />
         </div>
+        <p className="vacation-overtime-line">
+          Überstundenkonto: <strong>{overtimeHoursLabel} h</strong>
+          {canUseOvertime ? ` · bis zu ${overtimeDaysAvailable} Tag(e) als „Urlaub auf Überstunden“ möglich` : ''}
+        </p>
       </div>
 
       {/* Neuen Antrag Button */}
@@ -279,13 +300,23 @@ const VacationRequests: React.FC = () => {
             </div>
 
             {workingDays > 0 && (
-              <div className={`working-days-info ${workingDays > remaining ? 'warning' : 'info'}`}>
-                {workingDays > remaining ? (
-                  <>{workingDays} Arbeitstage beantragt, aber nur {remaining} verfügbar</>
-                ) : (
-                  <>{workingDays} Arbeitstage</>
-                )}
-              </div>
+              formData.type === 'overtime' ? (
+                <div className={`working-days-info ${workingDays > overtimeDaysAvailable ? 'warning' : 'info'}`}>
+                  {workingDays > overtimeDaysAvailable ? (
+                    <>{workingDays} Tage beantragt, aber nur {overtimeDaysAvailable} über Überstunden möglich</>
+                  ) : (
+                    <>{workingDays} Arbeitstage (vom Überstundenkonto)</>
+                  )}
+                </div>
+              ) : (
+                <div className={`working-days-info ${workingDays > remaining ? 'warning' : 'info'}`}>
+                  {workingDays > remaining ? (
+                    <>{workingDays} Arbeitstage beantragt, aber nur {remaining} verfügbar</>
+                  ) : (
+                    <>{workingDays} Arbeitstage</>
+                  )}
+                </div>
+              )
             )}
 
             <div className="form-group">
@@ -297,6 +328,9 @@ const VacationRequests: React.FC = () => {
                 <option value="vacation">Urlaub</option>
                 <option value="special">Sonderurlaub</option>
                 <option value="unpaid">Unbezahlter Urlaub</option>
+                {canUseOvertime && (
+                  <option value="overtime">Urlaub auf Überstunden ({overtimeHoursLabel} h)</option>
+                )}
               </select>
             </div>
 

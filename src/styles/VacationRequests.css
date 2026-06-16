@@ -544,3 +544,9 @@
     background: var(--light-color);
   }
 }
+
+.vacation-overtime-line {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #555);
+}

@@ -274,7 +274,8 @@ export interface LeaveRequest {
   employeeName?: string
   startDate: Date | any
   endDate: Date | any
-  type: 'vacation' | 'sick' | 'special' | 'unpaid'
+  /** 'overtime' = Urlaub auf Überstunden (wird vom Überstundenkonto abgezogen) */
+  type: 'vacation' | 'sick' | 'special' | 'unpaid' | 'overtime'
   reason?: string
   workingDays: number
   status: 'pending' | 'approved' | 'rejected'

@@ -86,6 +86,7 @@ const VacationTab: React.FC = () => {
       case 'sick': return 'Krankheit'
       case 'special': return 'Sonderurlaub'
       case 'unpaid': return 'Unbezahlt'
+      case 'overtime': return 'Urlaub auf Überstunden'
       default: return type
     }
   }

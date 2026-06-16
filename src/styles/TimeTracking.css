@@ -329,3 +329,10 @@
   background: var(--border-light);
   transform: translateY(0);
 }
+
+.user-info-overtime {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #555);
+  text-align: center;
+}

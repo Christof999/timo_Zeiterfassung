@@ -48,7 +48,17 @@ const TimeTracking: React.FC = () => {
       }
 
       setCurrentUser(user)
-      
+
+      // Frischen Überstunden-/Urlaubsstand nachladen (localStorage kann veraltet sein)
+      DataService.getEmployeeById(user.id)
+        .then((fresh) => {
+          if (fresh) {
+            setCurrentUser(fresh)
+            DataService.setCurrentUser(fresh)
+          }
+        })
+        .catch(() => {})
+
       // Prüfe auf aktiven Zeiteintrag
       const timeEntry = await DataService.getCurrentTimeEntry(user.id)
       if (timeEntry) {
@@ -182,6 +192,22 @@ const TimeTracking: React.FC = () => {
     setCurrentProject(null)
     setClockInTime(null)
     setElapsedTime('00:00:00')
+    refreshEmployeeBalances()
+  }
+
+  // Aktuellen Überstunden-/Urlaubsstand frisch laden (z. B. nach dem Ausstempeln)
+  const refreshEmployeeBalances = async () => {
+    const id = currentUser?.id
+    if (!id) return
+    try {
+      const fresh = await DataService.getEmployeeById(id)
+      if (fresh) {
+        setCurrentUser(fresh)
+        DataService.setCurrentUser(fresh)
+      }
+    } catch {
+      /* Saldo-Refresh ist optional */
+    }
   }
 
   const handleLogout = () => {
@@ -248,6 +274,16 @@ const TimeTracking: React.FC = () => {
             </p>
             <ThemeToggle variant="icon" className="user-info-theme-toggle" />
           </div>
+          {typeof currentUser?.overtimeBalanceMinutes === 'number' && (
+            <p className="user-info-overtime">
+              Überstundenkonto:{' '}
+              <strong>
+                {`${Math.floor(Math.max(0, currentUser.overtimeBalanceMinutes) / 60)}:${String(
+                  Math.max(0, currentUser.overtimeBalanceMinutes) % 60
+                ).padStart(2, '0')} h`}
+              </strong>
+            </p>
+          )}
         </div>
 
         {(canManualTimeEntry || canRetroactiveDocumentation) && (

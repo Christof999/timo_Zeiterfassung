@@ -732,12 +732,13 @@ class DataServiceClass {
         }
 
         let employeeRef: any = null
+        let employeeData: any = null
         let shouldClearActiveEntry = false
         if (timeEntry.employeeId) {
           employeeRef = doc(db, 'employees', timeEntry.employeeId)
           const employeeDoc = await transaction.get(employeeRef)
           if (employeeDoc.exists()) {
-            const employeeData = employeeDoc.data() as any
+            employeeData = employeeDoc.data() as any
             shouldClearActiveEntry = employeeData.activeTimeEntryId === timeEntryId
           }
         }
@@ -772,12 +773,33 @@ class DataServiceClass {
 
         transaction.update(timeEntryRef, updateData)
 
-        if (employeeRef && shouldClearActiveEntry) {
-          transaction.update(employeeRef, {
-            activeTimeEntryId: null,
-            activeClockInAt: null,
-            updatedAt: new Date()
-          })
+        // Überstunden gutschreiben: gebuchte Arbeitszeit über 8 Std (Pause raus,
+        // inkl. Rückfahrt-Gutschrift) geht aufs Überstundenkonto des Mitarbeiters.
+        const REGULAR_DAY_MS = 8 * 60 * 60 * 1000
+        const cin: any = timeEntry.clockInTime
+        const clockInMs = cin?.toMillis
+          ? cin.toMillis()
+          : cin?.seconds != null
+            ? cin.seconds * 1000
+            : new Date(cin).getTime()
+        const travelCreditMs = updateData.returnTravelCreditMs || 0
+        const workedMs = clockOutTime.toMillis() - clockInMs - Math.round(pauseTotalTimeMs) + travelCreditMs
+        let overtimeIncrementMin = 0
+        if (Number.isFinite(workedMs) && workedMs > REGULAR_DAY_MS) {
+          overtimeIncrementMin = Math.round((workedMs - REGULAR_DAY_MS) / 60000)
+        }
+
+        if (employeeRef && employeeData && (shouldClearActiveEntry || overtimeIncrementMin > 0)) {
+          const employeeUpdate: Record<string, unknown> = { updatedAt: new Date() }
+          if (shouldClearActiveEntry) {
+            employeeUpdate.activeTimeEntryId = null
+            employeeUpdate.activeClockInAt = null
+          }
+          if (overtimeIncrementMin > 0) {
+            const current = Number(employeeData.overtimeBalanceMinutes) || 0
+            employeeUpdate.overtimeBalanceMinutes = current + overtimeIncrementMin
+          }
+          transaction.update(employeeRef, employeeUpdate as any)
         }
       })
     } catch (error) {
@@ -2073,6 +2095,18 @@ class DataServiceClass {
     }
   }
 
+  async getEmployeeById(id: string): Promise<Employee | null> {
+    await this.authReadyPromise
+    if (!id) return null
+    try {
+      const snap = await getDoc(doc(db, 'employees', id))
+      return snap.exists() ? ({ id: snap.id, ...snap.data() } as Employee) : null
+    } catch (error) {
+      console.error(`Fehler beim Laden des Mitarbeiters ${id}:`, error)
+      return null
+    }
+  }
+
   async deleteEmployee(id: string): Promise<void> {
     await this.authReadyPromise
     try {
@@ -2286,6 +2320,24 @@ class DataServiceClass {
         const leaveRequest = leaveRequestDoc.data() as LeaveRequest
         if (leaveRequest.status === 'approved') {
           return
+        }
+
+        // „Urlaub auf Überstunden": benötigte Stunden vom Überstundenkonto abziehen
+        if (leaveRequest.type === 'overtime') {
+          const neededMinutes = (Number(leaveRequest.workingDays) || 0) * 8 * 60
+          const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
+          const employeeDoc = await transaction.get(employeeRef)
+          if (!employeeDoc.exists()) {
+            throw new Error('Mitarbeiter nicht gefunden')
+          }
+          const current = Number((employeeDoc.data() as any).overtimeBalanceMinutes) || 0
+          if (current < neededMinutes) {
+            throw new Error('Nicht genügend Überstunden für diesen Antrag vorhanden.')
+          }
+          transaction.update(employeeRef, {
+            overtimeBalanceMinutes: current - neededMinutes,
+            updatedAt: new Date()
+          })
         }
 
         transaction.update(leaveRequestRef, {
