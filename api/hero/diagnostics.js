@@ -350,6 +350,27 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    // Gezielt tiefer liegende Positions-/Detail-Typen auflösen (Angebotszeilen):
+    // customer_documents.metadata.positions → CustomerDocumentPosition.
+    const EXTRA_TYPES = [
+      'CustomerDocumentPosition',
+      'CustomerDocumentMetadata',
+      'Documents_SupplyServicePosition',
+      'Documents_DocumentType'
+    ]
+    for (const typeName of EXTRA_TYPES) {
+      if (typeBudget-- <= 0) break
+      if (seenTypes.has(typeName)) continue
+      seenTypes.add(typeName)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const fields = await introspectType(typeName)
+        nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
+      } catch (extraErr) {
+        nestedTypeShapes[typeName] = { error: extraErr?.message || 'Introspection fehlgeschlagen' }
+      }
+    }
+
     result.typeShapes = typeShapes
     result.nestedTypeShapes = nestedTypeShapes
   } catch (error) {
