@@ -1,11 +1,11 @@
-const { initFirebaseAdmin } = require('../lib/firebaseAdmin')
-const { authorizeRequest } = require('../lib/auth')
-const { assertHeroConfigured } = require('../lib/heroConfig')
+const { initFirebaseAdmin } = require('../../../lib/hero/firebaseAdmin')
+const { authorizeRequest } = require('../../../lib/hero/auth')
+const { assertHeroConfigured } = require('../../../lib/hero/heroConfig')
 const {
   syncHeroProjectsToFirestore,
   syncHeroMaterialsToFirestore
-} = require('../lib/syncProjects')
-const { writeHeroSyncLog, updateHeroIntegrationConfig } = require('../lib/syncLog')
+} = require('../../../lib/hero/syncProjects')
+const { writeHeroSyncLog, updateHeroIntegrationConfig } = require('../../../lib/hero/syncLog')
 
 function getRequestAction(req) {
   let body = req.body

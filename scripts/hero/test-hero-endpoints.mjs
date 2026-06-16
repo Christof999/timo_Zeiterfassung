@@ -5,7 +5,7 @@
  *   POST /api/hero/sync/projects   – Projekt-Sync nach Firestore (nur mit --sync)
  *
  * Die Endpunkte verlangen einen Bearer-Token. Für den CLI-Test wird der
- * Service-Token verwendet (siehe api/hero/lib/auth.js): HERO_API_TOKEN
+ * Service-Token verwendet (siehe lib/hero/auth.js): HERO_API_TOKEN
  * (oder ersatzweise PUSH_API_TOKEN). Beide müssen in Vercel hinterlegt sein.
  *
  * Nutzung:
@@ -87,7 +87,7 @@ async function main() {
   if (!TOKEN) {
     fail('Kein Service-Token: HERO_API_TOKEN oder PUSH_API_TOKEN setzen.')
     console.log(
-      `${c.dim}  -> Dieser Token muss identisch in Vercel hinterlegt sein (api/hero/lib/auth.js).${c.reset}`
+      `${c.dim}  -> Dieser Token muss identisch in Vercel hinterlegt sein (lib/hero/auth.js).${c.reset}`
     )
     process.exit(1)
   }

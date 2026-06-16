@@ -11,8 +11,8 @@ const {
   isHeroSyncEnabled,
   getHeroApiKey,
   getHeroGraphqlUrl
-} = require('./lib/heroConfig')
-const { heroGraphqlRequest, fetchHeroProjectMatches } = require('./lib/heroGraphql')
+} = require('../../lib/hero/heroConfig')
+const { heroGraphqlRequest, fetchHeroProjectMatches } = require('../../lib/hero/heroGraphql')
 
 // Beschreibt die Struktur eines Objekts mit Typen statt Werten (PII-sicher).
 function describeShape(value, depth = 0) {

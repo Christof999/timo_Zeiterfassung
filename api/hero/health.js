@@ -1,12 +1,12 @@
-const { initFirebaseAdmin } = require('./lib/firebaseAdmin')
-const { authorizeRequest } = require('./lib/auth')
+const { initFirebaseAdmin } = require('../../lib/hero/firebaseAdmin')
+const { authorizeRequest } = require('../../lib/hero/auth')
 const {
   isHeroSyncEnabled,
   getHeroApiKey,
   getHeroGraphqlUrl,
   DEFAULT_GRAPHQL_URL
-} = require('./lib/heroConfig')
-const { heroGraphqlRequest } = require('./lib/heroGraphql')
+} = require('../../lib/hero/heroConfig')
+const { heroGraphqlRequest } = require('../../lib/hero/heroGraphql')
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {

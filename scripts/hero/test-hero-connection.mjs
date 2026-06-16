@@ -4,7 +4,7 @@
  *
  * Prüft, ob der HERO_API_KEY gültig ist, die GraphQL-API erreichbar ist und ob
  * `project_matches` alle Felder liefert, die der Projekt-Sync
- * (api/hero/lib/syncProjects.js) braucht. Läuft komplett ohne Firebase.
+ * (lib/hero/syncProjects.js) braucht. Läuft komplett ohne Firebase.
  *
  * Nutzung:
  *   HERO_API_KEY=xxxx node scripts/hero/test-hero-connection.mjs
@@ -102,7 +102,7 @@ async function heroGraphql(query, variables = {}) {
   return payload?.data || {}
 }
 
-// Gleiche Abfrage wie api/hero/lib/heroGraphql.js
+// Gleiche Abfrage wie lib/hero/heroGraphql.js
 const PROJECT_MATCHES_QUERY = `
   query HeroProjectMatches {
     project_matches {
