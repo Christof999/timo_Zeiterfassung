@@ -934,7 +934,44 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const getEmployeeTotalCost = () => employeeSummaries.reduce((sum, e) => sum + e.totalCost, 0)
-  const getProjectTotalCost = () => getEmployeeTotalCost()
+
+  // Gebuchtes Material (beim Ausstempeln erfasst) für die Nachkalkulation aggregieren
+  const getProjectMaterialSummaries = () => {
+    const map = new Map<
+      string,
+      { key: string; name: string; unitLabel: string; quantity: number; unitPriceEur?: number; cost: number }
+    >()
+    for (const entry of projectRawEntries) {
+      for (const usage of entry.materialUsages || []) {
+        const key = usage.materialTypeId || usage.materialName || 'unbekannt'
+        const qty = Number(usage.quantity) || 0
+        const price = typeof usage.unitPriceEur === 'number' ? usage.unitPriceEur : undefined
+        const cost = price != null ? qty * price : 0
+        const existing = map.get(key)
+        if (existing) {
+          existing.quantity += qty
+          existing.cost += cost
+          if (existing.unitPriceEur == null && price != null) existing.unitPriceEur = price
+        } else {
+          map.set(key, {
+            key,
+            name: usage.materialName || 'Material',
+            unitLabel: usage.unitLabel || '',
+            quantity: qty,
+            unitPriceEur: price,
+            cost
+          })
+        }
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.cost - a.cost || a.name.localeCompare(b.name, 'de')
+    )
+  }
+
+  const getMaterialTotalCost = () => getProjectMaterialSummaries().reduce((sum, m) => sum + m.cost, 0)
+
+  const getProjectTotalCost = () => getEmployeeTotalCost() + getMaterialTotalCost()
 
   const getImageSrc = (file: FileUpload): string => getFileImageSrc(file)
 
@@ -1752,6 +1789,48 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr className="subtotal-row">
                         <td colSpan={3}><strong>Summe Personalkosten:</strong></td>
                         <td className="number-cell"><strong>{formatCurrency(getEmployeeTotalCost())}</strong></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+
+              {/* Materialkosten (gebuchtes Verbrauchsmaterial) */}
+              <div className="cost-section">
+                <h4>Materialkosten</h4>
+                {getProjectMaterialSummaries().length === 0 ? (
+                  <p className="no-data">Kein gebuchtes Material vorhanden</p>
+                ) : (
+                  <table className="cost-table">
+                    <thead>
+                      <tr>
+                        <th>Material</th>
+                        <th className="number-cell">Menge</th>
+                        <th className="number-cell">Preis / Einheit</th>
+                        <th className="number-cell">Kosten</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getProjectMaterialSummaries().map(mat => (
+                        <tr key={mat.key}>
+                          <td>{mat.name}</td>
+                          <td className="number-cell">
+                            {mat.quantity.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                            {mat.unitLabel ? ` ${mat.unitLabel}` : ''}
+                          </td>
+                          <td className="number-cell">
+                            {mat.unitPriceEur != null ? formatCurrency(mat.unitPriceEur) : '—'}
+                          </td>
+                          <td className="number-cell">
+                            {mat.unitPriceEur != null ? formatCurrency(mat.cost) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="subtotal-row">
+                        <td colSpan={3}><strong>Summe Materialkosten:</strong></td>
+                        <td className="number-cell"><strong>{formatCurrency(getMaterialTotalCost())}</strong></td>
                       </tr>
                     </tfoot>
                   </table>
