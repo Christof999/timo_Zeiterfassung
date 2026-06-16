@@ -222,16 +222,28 @@ module.exports = async function handler(req, res) {
       'tracking_times',
       'tracking_times_categories'
     ]
-    // Angebots-/Dokument-/Positions-Queries dynamisch aus dem Schema ergänzen,
-    // damit wir Angebotszeilen (Material + Menge je Projekt) finden.
-    const allNames = (result.availableQueries.all || [])
+    // Angebots-/Dokument-/Leistungs-Queries: bei HERO ist ein Angebot ein Dokument,
+    // die Positionen referenzieren Produkte/Leistungen + Mengen.
+    const OFFER_CANDIDATES = [
+      'customer_documents',
+      'document_types',
+      'supply_services',
+      'new_supply_service',
+      'supply_texts',
+      'receipts',
+      'Receipt_Receipts'
+    ]
+    const allNames = result.availableQueries.all || []
     const docOfferRe = /document|dokument|offer|angebot|order|auftrag|position|quote|invoice|rechnung/i
-    const dynamicCandidates = allNames.filter((n) => docOfferRe.test(n)).slice(0, 8)
-    const CANDIDATE_QUERIES = [...new Set([...BASE_CANDIDATES, ...dynamicCandidates])]
-    // Verschachtelte Objekt-Typen für Artikel + Angebots-/Dokument-Queries auflösen
+    const dynamicCandidates = allNames.filter((n) => docOfferRe.test(n))
+    const CANDIDATE_QUERIES = [
+      ...new Set([...BASE_CANDIDATES, ...OFFER_CANDIDATES, ...dynamicCandidates])
+    ].filter((n) => allNames.includes(n))
+    // Verschachtelte Objekt-Typen für Artikel + Angebots-/Dokument-/Leistungs-Queries auflösen
     const DEEP_QUERIES = new Set([
       'supply_product_versions',
       'new_supply_product_version',
+      ...OFFER_CANDIDATES,
       ...dynamicCandidates
     ])
 
@@ -252,25 +264,43 @@ module.exports = async function handler(req, res) {
       }))
     }
 
-    const schemaData = await heroGraphqlRequest(
-      `query {
-        __schema {
-          queryType {
-            fields {
-              name
-              args { name type { kind name ofType { kind name ofType { kind name } } } }
-              type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+    // Schema-Felder laden – mit Fallback ohne args, falls HERO bei der größeren
+    // Abfrage einen Fehler liefert.
+    let queryFields = []
+    try {
+      const schemaData = await heroGraphqlRequest(
+        `query {
+          __schema {
+            queryType {
+              fields {
+                name
+                args { name type { kind name ofType { kind name ofType { kind name } } } }
+                type { kind name ofType { kind name ofType { kind name ofType { kind name } } } }
+              }
             }
           }
-        }
-      }`
-    )
-    const queryFields = schemaData.__schema?.queryType?.fields || []
+        }`
+      )
+      queryFields = schemaData.__schema?.queryType?.fields || []
+    } catch (schemaErr) {
+      const schemaData = await heroGraphqlRequest(
+        `query {
+          __schema {
+            queryType {
+              fields { name type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } }
+            }
+          }
+        }`
+      )
+      queryFields = schemaData.__schema?.queryType?.fields || []
+      result.introspectionNote = `args-Introspection fehlgeschlagen: ${schemaErr?.message || 'Fehler'}`
+    }
 
     const typeShapes = {}
     const nestedTypeShapes = {}
     const seenTypes = new Set()
     const nestedToFetch = new Set()
+    let typeBudget = 30
 
     for (const queryName of CANDIDATE_QUERIES) {
       const field = queryFields.find((f) => f.name === queryName)
@@ -278,36 +308,46 @@ module.exports = async function handler(req, res) {
       const typeName = unwrap(field.type).name
       const args = (field.args || []).map((a) => ({ name: a.name, type: fmtFieldType(a.type) }))
 
-      if (!typeName || seenTypes.has(typeName)) {
-        typeShapes[queryName] = { typeName, args, fields: typeName ? 'siehe oben' : null }
+      if (!typeName) {
+        typeShapes[queryName] = { typeName: null, args, fields: null }
+        continue
+      }
+      if (seenTypes.has(typeName)) {
+        typeShapes[queryName] = { typeName, args, fields: 'siehe oben' }
         continue
       }
       seenTypes.add(typeName)
-      // eslint-disable-next-line no-await-in-loop
-      const fields = await introspectType(typeName)
-      typeShapes[queryName] = {
-        typeName,
-        args,
-        fields: fields.map(({ name, type }) => ({ name, type }))
+      if (typeBudget-- <= 0) {
+        typeShapes[queryName] = { typeName, args, fields: 'übersprungen (Budget)' }
+        continue
       }
-
-      if (DEEP_QUERIES.has(queryName)) {
-        for (const f of fields) {
-          if (f._objType) nestedToFetch.add(f._objType)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const fields = await introspectType(typeName)
+        typeShapes[queryName] = { typeName, args, fields: fields.map(({ name, type }) => ({ name, type })) }
+        if (DEEP_QUERIES.has(queryName)) {
+          for (const f of fields) {
+            if (f._objType) nestedToFetch.add(f._objType)
+          }
         }
+      } catch (typeErr) {
+        typeShapes[queryName] = { typeName, args, error: typeErr?.message || 'Introspection fehlgeschlagen' }
       }
     }
 
     // Eine Ebene verschachtelter Objekt-Typen auflösen (Name/Einheit/Preis-Details,
     // Angebots-Positionen mit Produkt-/Mengen-Bezug)
-    let budget = 24
     for (const typeName of nestedToFetch) {
-      if (budget-- <= 0) break
+      if (typeBudget-- <= 0) break
       if (seenTypes.has(typeName)) continue
       seenTypes.add(typeName)
-      // eslint-disable-next-line no-await-in-loop
-      const fields = await introspectType(typeName)
-      nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const fields = await introspectType(typeName)
+        nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
+      } catch (nestedErr) {
+        nestedTypeShapes[typeName] = { error: nestedErr?.message || 'Introspection fehlgeschlagen' }
+      }
     }
 
     result.typeShapes = typeShapes
