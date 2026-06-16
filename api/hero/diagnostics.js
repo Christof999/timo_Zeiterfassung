@@ -335,8 +335,29 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Eine Ebene verschachtelter Objekt-Typen auflösen (Name/Einheit/Preis-Details,
-    // Angebots-Positionen mit Produkt-/Mengen-Bezug)
+    // Zuerst gezielt die kritischen Positions-/Detailtypen auflösen (Angebotszeilen):
+    // customer_documents.metadata.positions → CustomerDocumentPosition. Diese haben
+    // Priorität (kein Budget-Limit), damit sie nicht von der generischen Schleife
+    // verdrängt werden.
+    const EXTRA_TYPES = [
+      'CustomerDocumentPosition',
+      'CustomerDocumentMetadata',
+      'Documents_SupplyServicePosition',
+      'Documents_DocumentType'
+    ]
+    for (const typeName of EXTRA_TYPES) {
+      if (seenTypes.has(typeName)) continue
+      seenTypes.add(typeName)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const fields = await introspectType(typeName)
+        nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
+      } catch (extraErr) {
+        nestedTypeShapes[typeName] = { error: extraErr?.message || 'Introspection fehlgeschlagen' }
+      }
+    }
+
+    // Danach restliche verschachtelte Objekt-Typen (Budget-begrenzt)
     for (const typeName of nestedToFetch) {
       if (typeBudget-- <= 0) break
       if (seenTypes.has(typeName)) continue
@@ -347,27 +368,6 @@ module.exports = async function handler(req, res) {
         nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
       } catch (nestedErr) {
         nestedTypeShapes[typeName] = { error: nestedErr?.message || 'Introspection fehlgeschlagen' }
-      }
-    }
-
-    // Gezielt tiefer liegende Positions-/Detail-Typen auflösen (Angebotszeilen):
-    // customer_documents.metadata.positions → CustomerDocumentPosition.
-    const EXTRA_TYPES = [
-      'CustomerDocumentPosition',
-      'CustomerDocumentMetadata',
-      'Documents_SupplyServicePosition',
-      'Documents_DocumentType'
-    ]
-    for (const typeName of EXTRA_TYPES) {
-      if (typeBudget-- <= 0) break
-      if (seenTypes.has(typeName)) continue
-      seenTypes.add(typeName)
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const fields = await introspectType(typeName)
-        nestedTypeShapes[typeName] = fields.map(({ name, type }) => ({ name, type }))
-      } catch (extraErr) {
-        nestedTypeShapes[typeName] = { error: extraErr?.message || 'Introspection fehlgeschlagen' }
       }
     }
 
