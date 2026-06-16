@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { DataService } from '../services/dataService'
 import type { MaterialType, TimeEntryMaterialUsage } from '../types'
 import '../styles/MaterialUsageFields.css'
 
-export type MaterialUsageRow = { key: string; materialTypeId: string; quantity: string }
+export type MaterialUsageRow = {
+  key: string
+  /** Gewählte Materialart (falls aus der Liste); leer bei Freitext */
+  materialTypeId: string
+  /** Angezeigter/eingegebener Text (Listentreffer oder Freitext) */
+  label: string
+  quantity: string
+}
 
 function newRow(): MaterialUsageRow {
   return {
     key: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
     materialTypeId: '',
+    label: '',
     quantity: ''
   }
 }
@@ -28,19 +36,29 @@ export function buildMaterialUsagesFromRows(
   const out: TimeEntryMaterialUsage[] = []
   for (const r of rows) {
     const id = r.materialTypeId.trim()
+    const label = (r.label || '').trim()
     const qty = Number.parseFloat(String(r.quantity).replace(',', '.'))
-    if (!id) continue
+    if (!id && !label) continue
     if (!Number.isFinite(qty) || qty <= 0) {
       return null
     }
-    const t = typesById.get(id)
-    out.push({
-      materialTypeId: id,
-      materialName: t?.name,
-      unitLabel: t?.unitLabel,
-      quantity: qty,
-      unitPriceEur: typeof t?.unitPriceEur === 'number' ? t.unitPriceEur : undefined
-    })
+    if (id) {
+      const t = typesById.get(id)
+      out.push({
+        materialTypeId: id,
+        materialName: t?.name || label,
+        unitLabel: t?.unitLabel,
+        quantity: qty,
+        unitPriceEur: typeof t?.unitPriceEur === 'number' ? t.unitPriceEur : undefined
+      })
+    } else {
+      // Freitext-Position (kein Listentreffer): kein Preis hinterlegt
+      out.push({
+        materialTypeId: '',
+        materialName: label,
+        quantity: qty
+      })
+    }
   }
   return out
 }
@@ -69,6 +87,15 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     }
   }, [])
 
+  // Name → Materialart (für Treffer-Auflösung bei der Eingabe)
+  const typeByName = useMemo(() => {
+    const map = new Map<string, MaterialType>()
+    for (const t of types) {
+      if (t.name) map.set(t.name.trim().toLowerCase(), t)
+    }
+    return map
+  }, [types])
+
   const addRow = () => onRowsChange([...rows, newRow()])
   const removeRow = (key: string) => {
     const next = rows.filter((r) => r.key !== key)
@@ -78,11 +105,17 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     onRowsChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   }
 
+  const onLabelChange = (key: string, value: string) => {
+    const match = typeByName.get(value.trim().toLowerCase())
+    patchRow(key, { label: value, materialTypeId: match?.id || '' })
+  }
+
   return (
     <div className="material-usage-fields">
       <h4 className="material-usage-title">Verbrauchsmaterial</h4>
       <p className="material-usage-intro">
-        Bitte beim Ausstempeln angeben, welches Material verbaut wurde (z.&nbsp;B. Fliesen in m²). Die Auswahl kommt aus dem Admin-Bereich „Material“.
+        Bitte beim Ausstempeln angeben, welches Material verbaut wurde (z.&nbsp;B. Fliesen in m²). Tippen,
+        um aus der Liste zu wählen – oder eigenen Text eingeben.
       </p>
 
       <label className="material-usage-no-material">
@@ -98,30 +131,27 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
         <>
           {loading ? (
             <p className="material-usage-loading">Materialarten werden geladen…</p>
-          ) : types.length === 0 ? (
-            <p className="material-usage-empty">
-              Es sind noch keine Materialarten angelegt. Bitte den Administrator unter <strong>Material</strong> informieren.
-            </p>
           ) : (
             <>
+              <datalist id="material-usage-options">
+                {types.map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.unitLabel ? `Einheit: ${t.unitLabel}` : ''}
+                  </option>
+                ))}
+              </datalist>
               <div className="material-usage-rows">
                 {rows.map((row) => (
                   <div key={row.key} className="material-usage-row">
-                    <select
+                    <input
+                      type="text"
+                      list="material-usage-options"
                       className="material-usage-select"
-                      value={row.materialTypeId}
-                      onChange={(e) => patchRow(row.key, { materialTypeId: e.target.value })}
-                      aria-label="Materialart"
-                    >
-                      <option value="">— Material wählen —</option>
-                      {types.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                          {t.unitLabel ? ` (${t.unitLabel})` : ''}
-                          {typeof t.unitPriceEur === 'number' ? ` · ${t.unitPriceEur.toFixed(2)} €/${t.unitLabel || 'Einheit'}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Material wählen oder eingeben"
+                      value={row.label}
+                      onChange={(e) => onLabelChange(row.key, e.target.value)}
+                      aria-label="Material"
+                    />
                     <input
                       type="text"
                       inputMode="decimal"
