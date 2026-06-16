@@ -54,12 +54,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, offerResult })
     }
 
-    const { stats, customerStats } = await syncHeroProjectsToFirestore()
+    const { stats, customerStats, offerStats } = await syncHeroProjectsToFirestore()
 
     return res.status(200).json({
       success: true,
       stats,
-      customerStats
+      customerStats,
+      offerStats
     })
   } catch (error) {
     if (error?.message === 'Unauthorized') {

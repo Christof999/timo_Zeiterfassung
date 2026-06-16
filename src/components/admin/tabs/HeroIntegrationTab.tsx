@@ -129,9 +129,11 @@ const HeroIntegrationTab: React.FC = () => {
     try {
       const result = await heroService.syncProjects()
       const stats = result.stats
+      const offers = result.offerStats
       toast.success(
         stats
-          ? `Sync: ${stats.created} neu, ${stats.updated} aktualisiert (${stats.total} aus HERO)`
+          ? `Sync: ${stats.created} neu, ${stats.updated} aktualisiert (${stats.total} aus HERO)` +
+            (offers ? ` · Angebote: ${offers.withOffer}/${offers.processed}` : '')
           : 'Projekt-Sync abgeschlossen'
       )
       await loadAll()

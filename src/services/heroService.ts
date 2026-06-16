@@ -55,6 +55,12 @@ export interface HeroProjectSyncResponse {
     updated: number
     total: number
   }
+  offerStats?: {
+    processed: number
+    withOffer: number
+    errors: number
+    skipped: number
+  }
 }
 
 export interface HeroCustomerSyncResponse {
