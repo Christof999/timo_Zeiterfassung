@@ -24,6 +24,22 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     heroEmployeeId: ''
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isRecomputingOvertime, setIsRecomputingOvertime] = useState(false)
+
+  const handleRecomputeOvertime = async () => {
+    if (!employee?.id) return
+    setIsRecomputingOvertime(true)
+    try {
+      const minutes = await DataService.recomputeOvertimeBalance(employee.id)
+      const hours = Math.round((minutes / 60) * 100) / 100
+      setFormData((prev) => ({ ...prev, overtimeBalanceHours: String(hours).replace('.', ',') }))
+      toast.success(`Überstunden neu berechnet: ${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} h`)
+    } catch (error: any) {
+      toast.error('Neuberechnung fehlgeschlagen: ' + (error?.message || 'Unbekannter Fehler'))
+    } finally {
+      setIsRecomputingOvertime(false)
+    }
+  }
 
   useEffect(() => {
     if (employee) {
@@ -196,10 +212,21 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             <input
               type="text"
               inputMode="decimal"
-              placeholder="z.B. 12,5 — wird bei Zeiterfassungs-Abrechnung reduziert"
+              placeholder="z.B. 12,5 — aus Zeiten (Tages-Summe über 8 Std) berechnet"
               value={formData.overtimeBalanceHours}
               onChange={e => setFormData({ ...formData, overtimeBalanceHours: e.target.value })}
             />
+            {employee?.id && (
+              <button
+                type="button"
+                className="btn secondary-btn btn-sm"
+                style={{ marginTop: 6 }}
+                onClick={handleRecomputeOvertime}
+                disabled={isRecomputingOvertime}
+              >
+                {isRecomputingOvertime ? 'Berechne…' : 'Aus Zeiten neu berechnen'}
+              </button>
+            )}
           </div>
           <div className="form-group">
             <label>HERO-Kontakt-ID (optional):</label>

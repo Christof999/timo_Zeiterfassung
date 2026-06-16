@@ -691,6 +691,8 @@ class DataServiceClass {
         }
       })
       const snap = await getDoc(timeEntryRef)
+      // Nachgetragener (abgeschlossener) Eintrag → Überstunden des Tags neu berechnen
+      await this.recomputeOvertimeForDay(params.targetEmployeeId, workedDateKey)
       return { id: timeEntryRef.id, ...snap.data() } as TimeEntry
     } catch (error) {
       console.error('Fehler beim Nachtragen des Zeiteintrags:', error)
@@ -720,7 +722,10 @@ class DataServiceClass {
       }
 
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
-      await runTransaction(db, async (transaction) => {
+      const overtimeRecompute = await runTransaction<{ employeeId: string; dateKey: string } | null>(
+        db,
+        async (transaction) => {
+        let recompute: { employeeId: string; dateKey: string } | null = null
         const timeEntryDoc = await transaction.get(timeEntryRef)
         if (!timeEntryDoc.exists()) {
           throw new Error('Zeiteintrag nicht gefunden')
@@ -773,39 +778,147 @@ class DataServiceClass {
 
         transaction.update(timeEntryRef, updateData)
 
-        // Überstunden gutschreiben: gebuchte Arbeitszeit über 8 Std (Pause raus,
-        // inkl. Rückfahrt-Gutschrift) geht aufs Überstundenkonto des Mitarbeiters.
-        const REGULAR_DAY_MS = 8 * 60 * 60 * 1000
-        const cin: any = timeEntry.clockInTime
-        const clockInMs = cin?.toMillis
-          ? cin.toMillis()
-          : cin?.seconds != null
-            ? cin.seconds * 1000
-            : new Date(cin).getTime()
-        const travelCreditMs = updateData.returnTravelCreditMs || 0
-        const workedMs = clockOutTime.toMillis() - clockInMs - Math.round(pauseTotalTimeMs) + travelCreditMs
-        let overtimeIncrementMin = 0
-        if (Number.isFinite(workedMs) && workedMs > REGULAR_DAY_MS) {
-          overtimeIncrementMin = Math.round((workedMs - REGULAR_DAY_MS) / 60000)
+        // Für die Überstunden-Tagesberechnung nach der Transaktion merken
+        if (timeEntry.employeeId) {
+          recompute = {
+            employeeId: timeEntry.employeeId,
+            dateKey: this.getDateKeyFromValue(timeEntry.clockInTime)
+          }
         }
 
-        if (employeeRef && employeeData && (shouldClearActiveEntry || overtimeIncrementMin > 0)) {
-          const employeeUpdate: Record<string, unknown> = { updatedAt: new Date() }
-          if (shouldClearActiveEntry) {
-            employeeUpdate.activeTimeEntryId = null
-            employeeUpdate.activeClockInAt = null
-          }
-          if (overtimeIncrementMin > 0) {
-            const current = Number(employeeData.overtimeBalanceMinutes) || 0
-            employeeUpdate.overtimeBalanceMinutes = current + overtimeIncrementMin
-          }
-          transaction.update(employeeRef, employeeUpdate as any)
+        if (employeeRef && employeeData && shouldClearActiveEntry) {
+          transaction.update(employeeRef, {
+            activeTimeEntryId: null,
+            activeClockInAt: null,
+            updatedAt: new Date()
+          })
         }
+
+        return recompute
       })
+
+      // Überstunden auf Basis der Tages-Summe neu berechnen (außerhalb der Transaktion)
+      if (overtimeRecompute) {
+        await this.recomputeOvertimeForDay(overtimeRecompute.employeeId, overtimeRecompute.dateKey)
+      }
     } catch (error) {
       console.error('Fehler beim Ausstempeln:', error)
       throw error
     }
+  }
+
+  /** Reguläre Tagesarbeitszeit (ohne Pause) in Minuten. */
+  private static readonly REGULAR_DAY_MINUTES = 8 * 60
+
+  /** Gebuchte Arbeitsminuten eines Eintrags (Kommen − Gehen − Pause + Rückfahrt-Gutschrift). */
+  private overtimeWorkedMinutesForEntry(entry: TimeEntry): number {
+    if (entry.isVacationDay) return 0
+    if (!entry.clockInTime || !entry.clockOutTime) return 0
+    const inMs = this.convertToDate(entry.clockInTime).getTime()
+    const outMs = this.convertToDate(entry.clockOutTime).getTime()
+    const pauseMs = Number(entry.pauseTotalTime) || 0
+    const creditMs = getReturnTravelCreditMs(entry)
+    const ms = outMs - inMs - pauseMs + creditMs
+    return ms > 0 ? ms / 60000 : 0
+  }
+
+  /** Überstunden eines Kalendertags = max(0, Tages-Summe − 8 Std). */
+  private async overtimeMinutesForDay(employeeId: string, dateKey: string): Promise<number> {
+    const entries = await this.getTimeEntriesByEmployeeId(employeeId)
+    let dayMinutes = 0
+    for (const entry of entries) {
+      if (!entry.clockOutTime) continue
+      if (this.getDateKeyFromValue(entry.clockInTime) !== dateKey) continue
+      dayMinutes += this.overtimeWorkedMinutesForEntry(entry)
+    }
+    return Math.max(0, Math.round(dayMinutes - DataServiceClass.REGULAR_DAY_MINUTES))
+  }
+
+  /**
+   * Berechnet die Überstunden eines Kalendertags neu und passt den Saldo des
+   * Mitarbeiters um die Differenz zum bisher gespeicherten Tageswert an.
+   * Deckt Ausstempeln, Korrekturen und Nachträge ab (Tages-Summe).
+   */
+  async recomputeOvertimeForDay(employeeId: string, dateKey: string): Promise<void> {
+    if (!employeeId || !dateKey) return
+    try {
+      const dayOvertime = await this.overtimeMinutesForDay(employeeId, dateKey)
+      const employeeRef = doc(db, 'employees', employeeId)
+      const dayRef = doc(db, 'employees', employeeId, 'overtimeDays', dateKey)
+      await runTransaction(db, async (transaction) => {
+        const employeeDoc = await transaction.get(employeeRef)
+        if (!employeeDoc.exists()) return
+        const dayDoc = await transaction.get(dayRef)
+        const prev = dayDoc.exists() ? Number((dayDoc.data() as any).minutes) || 0 : 0
+        const delta = dayOvertime - prev
+        if (delta !== 0) {
+          const current = Number((employeeDoc.data() as any).overtimeBalanceMinutes) || 0
+          transaction.update(employeeRef, {
+            overtimeBalanceMinutes: Math.max(0, current + delta),
+            updatedAt: new Date()
+          })
+        }
+        transaction.set(dayRef, { minutes: dayOvertime, updatedAt: new Date() })
+      })
+    } catch (error) {
+      console.warn('Überstunden-Tagesberechnung fehlgeschlagen:', error)
+    }
+  }
+
+  /**
+   * Vollständige Neuberechnung des Überstundenkontos eines Mitarbeiters:
+   * verdiente Überstunden (Tages-Summen über 8 Std) minus genehmigte
+   * „Urlaub auf Überstunden"-Tage. Setzt den Saldo neu und schreibt die
+   * Tageswerte. Dient als Korrektur-/Migrations-Button.
+   */
+  async recomputeOvertimeBalance(employeeId: string): Promise<number> {
+    await this.authReadyPromise
+    if (!employeeId) return 0
+    const entries = await this.getTimeEntriesByEmployeeId(employeeId)
+    const minutesByDay = new Map<string, number>()
+    for (const entry of entries) {
+      if (!entry.clockOutTime) continue
+      const dateKey = this.getDateKeyFromValue(entry.clockInTime)
+      minutesByDay.set(dateKey, (minutesByDay.get(dateKey) || 0) + this.overtimeWorkedMinutesForEntry(entry))
+    }
+
+    let earned = 0
+    const dayOvertimes: Array<{ dateKey: string; minutes: number }> = []
+    for (const [dateKey, mins] of minutesByDay) {
+      const ot = Math.max(0, Math.round(mins - DataServiceClass.REGULAR_DAY_MINUTES))
+      dayOvertimes.push({ dateKey, minutes: ot })
+      earned += ot
+    }
+
+    // Bereits als „Urlaub auf Überstunden" genehmigte Stunden abziehen
+    const leaveRequests = await this.getLeaveRequestsByEmployee(employeeId)
+    let spent = 0
+    for (const req of leaveRequests) {
+      if (req.type === 'overtime' && req.status === 'approved') {
+        spent += (Number(req.workingDays) || 0) * DataServiceClass.REGULAR_DAY_MINUTES
+      }
+    }
+
+    const balance = Math.max(0, earned - spent)
+
+    // Tageswerte schreiben (für spätere delta-basierte Aktualisierung)
+    for (const day of dayOvertimes) {
+      try {
+        await setDoc(
+          doc(db, 'employees', employeeId, 'overtimeDays', day.dateKey),
+          { minutes: day.minutes, updatedAt: new Date() },
+          { merge: true }
+        )
+      } catch (e) {
+        console.warn('Überstunden-Tageswert konnte nicht gespeichert werden:', day.dateKey, e)
+      }
+    }
+
+    await updateDoc(doc(db, 'employees', employeeId), {
+      overtimeBalanceMinutes: balance,
+      updatedAt: new Date()
+    })
+    return balance
   }
 
   async updateTimeEntry(timeEntryId: string, updateData: Partial<TimeEntry>): Promise<void> {
@@ -813,6 +926,29 @@ class DataServiceClass {
     try {
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
       await updateDoc(timeEntryRef, updateData)
+
+      // Bei Zeit-/Pausen-Änderungen (z. B. Admin-Korrektur, vergessenes
+      // Ausstempeln) die Überstunden des betroffenen Tags neu berechnen.
+      const touchesWorkTime =
+        'clockInTime' in updateData ||
+        'clockOutTime' in updateData ||
+        'pauseTotalTime' in updateData
+      if (touchesWorkTime) {
+        try {
+          const snap = await getDoc(timeEntryRef)
+          if (snap.exists()) {
+            const entry = snap.data() as TimeEntry
+            if (entry.employeeId && entry.clockInTime) {
+              await this.recomputeOvertimeForDay(
+                entry.employeeId,
+                this.getDateKeyFromValue(entry.clockInTime)
+              )
+            }
+          }
+        } catch (recomputeError) {
+          console.warn('Überstunden nach Korrektur nicht neu berechnet:', recomputeError)
+        }
+      }
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Zeiteintrags:', error)
       throw error
@@ -1149,7 +1285,28 @@ class DataServiceClass {
     await this.authReadyPromise
     try {
       const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
+      // Mitarbeiter/Tag vor dem Löschen merken, um die Überstunden neu zu berechnen
+      let recompute: { employeeId: string; dateKey: string } | null = null
+      try {
+        const snap = await getDoc(timeEntryRef)
+        if (snap.exists()) {
+          const entry = snap.data() as TimeEntry
+          if (entry.employeeId && entry.clockInTime) {
+            recompute = {
+              employeeId: entry.employeeId,
+              dateKey: this.getDateKeyFromValue(entry.clockInTime)
+            }
+          }
+        }
+      } catch {
+        /* Recompute ist optional */
+      }
+
       await deleteDoc(timeEntryRef)
+
+      if (recompute) {
+        await this.recomputeOvertimeForDay(recompute.employeeId, recompute.dateKey)
+      }
     } catch (error) {
       console.error('Fehler beim Löschen des Zeiteintrags:', error)
       throw error
