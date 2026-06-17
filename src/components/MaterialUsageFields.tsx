@@ -28,6 +28,10 @@ export type OfferMaterialOption = {
 /** Vereinheitlichte Auswahl-Option (Angebot oder globaler Katalog) */
 type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string; defaultQuantity?: number }
 
+/** Standard-Einheiten zur Auswahl (frei ergänzbar). */
+const STANDARD_UNITS = ['Stück', 'Sack', 'kg', 'qm', 'm²', 'lfm', 'l', 'Eimer', 'Rolle']
+const UNIT_OPTIONS: PickOption[] = STANDARD_UNITS.map((u) => ({ name: u }))
+
 function newRow(): MaterialUsageRow {
   return {
     key: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
@@ -89,7 +93,9 @@ const MaterialCombobox: React.FC<{
   options: PickOption[]
   onText: (v: string) => void
   onPick: (o: PickOption) => void
-}> = ({ value, options, onText, onPick }) => {
+  placeholder?: string
+  className?: string
+}> = ({ value, options, onText, onPick, placeholder, className }) => {
   const [open, setOpen] = useState(false)
 
   const filtered = useMemo(() => {
@@ -99,11 +105,11 @@ const MaterialCombobox: React.FC<{
   }, [options, value])
 
   return (
-    <div className="material-combobox">
+    <div className={`material-combobox ${className || ''}`}>
       <input
         type="text"
         className="material-usage-select"
-        placeholder="Material wählen oder eingeben"
+        placeholder={placeholder || 'Material wählen oder eingeben'}
         value={value}
         onChange={(e) => {
           onText(e.target.value)
@@ -237,9 +243,12 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
       patchRow(key, { label: value })
       return
     }
-    // Freitext (kein Treffer)
-    patchRow(key, { label: value, materialTypeId: '', unit: undefined, unitPriceEur: undefined })
+    // Freitext (kein Treffer): gewählte Einheit beibehalten, nur Angebotspreis lösen
+    patchRow(key, { label: value, materialTypeId: '', unitPriceEur: undefined })
   }
+
+  const onUnitText = (key: string, value: string) => patchRow(key, { unit: value })
+  const onUnitPick = (key: string, o: PickOption) => patchRow(key, { unit: o.name })
 
   return (
     <div className="material-usage-fields">
@@ -282,6 +291,14 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
                       value={row.quantity}
                       onChange={(e) => patchRow(row.key, { quantity: e.target.value })}
                       aria-label="Menge"
+                    />
+                    <MaterialCombobox
+                      value={row.unit || ''}
+                      options={UNIT_OPTIONS}
+                      onText={(v) => onUnitText(row.key, v)}
+                      onPick={(o) => onUnitPick(row.key, o)}
+                      placeholder="Einheit"
+                      className="material-combobox-unit"
                     />
                     <button
                       type="button"

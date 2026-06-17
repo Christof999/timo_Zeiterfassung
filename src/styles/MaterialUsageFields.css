@@ -46,7 +46,7 @@
 
 .material-usage-row {
   display: grid;
-  grid-template-columns: 1fr minmax(88px, 100px) 40px;
+  grid-template-columns: 1fr minmax(72px, 92px) minmax(92px, 124px) 40px;
   gap: var(--spacing-sm);
   align-items: center;
 }
