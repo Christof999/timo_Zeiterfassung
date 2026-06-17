@@ -284,8 +284,10 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
                       onPick={(o) => applyOption(row.key, o)}
                     />
                     <input
-                      type="text"
+                      type="number"
                       inputMode="decimal"
+                      min={0}
+                      step="any"
                       className="material-usage-qty"
                       placeholder="Menge"
                       value={row.quantity}

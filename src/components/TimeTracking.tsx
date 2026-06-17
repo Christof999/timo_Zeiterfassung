@@ -16,6 +16,9 @@ import { formatReturnTravelCreditNote } from '../utils/returnTravel'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
+/** Frühestmöglicher Einstempel-Zeitpunkt (06:30 Uhr) in Minuten ab Mitternacht. */
+const EARLIEST_CLOCK_IN_MINUTES = 6 * 60 + 30
+
 /** Synthetisches Projekt-Objekt für Direkt-Buchungen auf einen Kunden (Kleinauftrag). */
 const buildCustomerProject = (customerName?: string): Project => ({
   id: '',
@@ -101,6 +104,13 @@ const TimeTracking: React.FC = () => {
 
   const handleClockIn = async (target: ClockInTarget) => {
     try {
+      // Einstempeln erst ab 06:30 Uhr erlauben
+      const nowCheck = new Date()
+      if (nowCheck.getHours() * 60 + nowCheck.getMinutes() < EARLIEST_CLOCK_IN_MINUTES) {
+        toast.error('Einstempeln ist erst ab 06:30 Uhr möglich.')
+        return
+      }
+
       const location = await getCurrentLocation()
       const now = new Date()
 
