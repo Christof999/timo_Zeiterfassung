@@ -191,6 +191,17 @@
   appearance: none;
 }
 
+/* Checkboxen/Radios dürfen nicht die Volle-Breite-Eingabe-Optik bekommen */
+.modal-body input[type="checkbox"],
+.modal-body input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+
 .modal-body input:hover,
 .modal-body select:hover,
 .modal-body textarea:hover {
