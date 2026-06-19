@@ -49,6 +49,12 @@ export interface MaterialUsageFieldsProps {
   onRowsChange: (rows: MaterialUsageRow[]) => void
   /** Wenn gesetzt (Projekt mit Angebot): Auswahl nur aus diesen Positionen + Freitext. */
   offerMaterials?: OfferMaterialOption[]
+  /** Überschrift (Standard: „Verbrauchsmaterial“). */
+  title?: string
+  /** Einleitungstext über der Eingabe. */
+  intro?: string
+  /** „kein Material“-Checkbox ausblenden (z. B. für optionale Gutschrift-Erfassung). */
+  hideNoMaterialToggle?: boolean
 }
 
 export function buildMaterialUsagesFromRows(
@@ -160,7 +166,10 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   onNoMaterialChange,
   rows,
   onRowsChange,
-  offerMaterials
+  offerMaterials,
+  title,
+  intro,
+  hideNoMaterialToggle
 }) => {
   const [types, setTypes] = useState<MaterialType[]>([])
   const [loading, setLoading] = useState(true)
@@ -250,25 +259,30 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   const onUnitText = (key: string, value: string) => patchRow(key, { unit: value })
   const onUnitPick = (key: string, o: PickOption) => patchRow(key, { unit: o.name })
 
+  const showRows = hideNoMaterialToggle ? true : !noMaterial
+
   return (
     <div className="material-usage-fields">
-      <h4 className="material-usage-title">Verbrauchsmaterial</h4>
+      <h4 className="material-usage-title">{title || 'Verbrauchsmaterial'}</h4>
       <p className="material-usage-intro">
-        {hasOffer
-          ? 'Material aus dem Angebot wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'
-          : 'Material wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'}
+        {intro ||
+          (hasOffer
+            ? 'Material aus dem Angebot wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'
+            : 'Material wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.')}
       </p>
 
-      <label className="material-usage-no-material">
-        <input
-          type="checkbox"
-          checked={noMaterial}
-          onChange={(e) => onNoMaterialChange(e.target.checked)}
-        />
-        <span>Heute wurde kein Verbrauchsmaterial verbucht</span>
-      </label>
+      {!hideNoMaterialToggle && (
+        <label className="material-usage-no-material">
+          <input
+            type="checkbox"
+            checked={noMaterial}
+            onChange={(e) => onNoMaterialChange(e.target.checked)}
+          />
+          <span>Heute wurde kein Verbrauchsmaterial verbucht</span>
+        </label>
+      )}
 
-      {!noMaterial && (
+      {showRows && (
         <>
           {loading ? (
             <p className="material-usage-loading">Materialarten werden geladen…</p>

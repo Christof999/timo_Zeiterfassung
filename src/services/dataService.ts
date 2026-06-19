@@ -706,7 +706,8 @@ class DataServiceClass {
     notes: string,
     location: { lat: number | null; lng: number | null } | null,
     pauseTotalTimeMs: number,
-    materialUsages?: TimeEntryMaterialUsage[]
+    materialUsages?: TimeEntryMaterialUsage[],
+    materialCreditUsages?: TimeEntryMaterialUsage[]
   ): Promise<void> {
     await this.authReadyPromise
     try {
@@ -773,6 +774,10 @@ class DataServiceClass {
 
         if (materialUsages !== undefined) {
           updateData.materialUsages = materialUsages
+        }
+
+        if (materialCreditUsages !== undefined) {
+          updateData.materialCreditUsages = materialCreditUsages
         }
 
         updateData.heroSyncStatus = 'pending'

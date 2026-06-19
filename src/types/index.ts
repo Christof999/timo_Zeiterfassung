@@ -182,6 +182,8 @@ export interface TimeEntry {
   notes?: string
   /** Beim Ausstempeln erfasstes Material (qm, Stück, …) */
   materialUsages?: TimeEntryMaterialUsage[]
+  /** Beim Ausstempeln gutgeschriebenes (zu viel geliefertes) Material */
+  materialCreditUsages?: TimeEntryMaterialUsage[]
   pauseTotalTime?: number
   /** Geschätzte Straßenentfernung Baustelle → Firmenstandort beim Ausstempeln (km) */
   returnTravelDistanceKm?: number

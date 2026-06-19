@@ -38,6 +38,9 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [noMaterial, setNoMaterial] = useState(false)
   const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
+  // Optionale Gutschrift (zu viel geliefertes Material), eingeklappt bis bei Bedarf geöffnet
+  const [showCredit, setShowCredit] = useState(false)
+  const [creditRows, setCreditRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
   const [progressMessage, setProgressMessage] = useState('')
   const [progressStep, setProgressStep] = useState(0)
   const [progressTotal, setProgressTotal] = useState(0)
@@ -76,6 +79,20 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
         materialUsages = []
       }
 
+      // Optionale Material-Gutschrift (nur wenn aufgeklappt und befüllt)
+      let materialCreditUsages: TimeEntryMaterialUsage[] | undefined
+      if (showCredit) {
+        const builtCredits = buildMaterialUsagesFromRows(creditRows, typesById)
+        if (builtCredits === null) {
+          toast.error('Bitte bei jeder Gutschrift-Position eine gültige Menge größer 0 eintragen.')
+          setIsSubmitting(false)
+          return
+        }
+        if (builtCredits.length > 0) {
+          materialCreditUsages = builtCredits
+        }
+      }
+
       const fileCount = sitePhotoItems.length + documentPhotoItems.length
       const totalSteps = fileCount + 1
       setProgressTotal(totalSteps)
@@ -86,7 +103,14 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 
       // Zuerst ausstempeln (inkl. Material/Pause) — Fotos dürfen das Arbeitsende bei schlechtem
       // Netz nicht mehr blockieren.
-      await DataService.clockOutEmployee(timeEntry.id, notes, location, pauseTotalTimeMs, materialUsages)
+      await DataService.clockOutEmployee(
+        timeEntry.id,
+        notes,
+        location,
+        pauseTotalTimeMs,
+        materialUsages,
+        materialCreditUsages
+      )
 
       // Fotos hochladen — bei Netzproblemen wandern sie in die Offline-Queue (Upload später).
       const { siteUploads, documentUploads, deferredPhotos } =
@@ -197,6 +221,29 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
               onRowsChange={setMaterialRows}
               offerMaterials={offerMaterials}
             />
+
+            <div className="material-credit-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showCredit}
+                  onChange={(e) => setShowCredit(e.target.checked)}
+                />
+                <span>Material gutschreiben (zu viel geliefert / Rückgabe)</span>
+              </label>
+            </div>
+
+            {showCredit && (
+              <MaterialUsageFields
+                noMaterial={false}
+                onNoMaterialChange={() => {}}
+                rows={creditRows}
+                onRowsChange={setCreditRows}
+                hideNoMaterialToggle
+                title="Material-Gutschrift"
+                intro="Zu viel geliefertes Material, das zurückgeht – Material wählen oder eingeben, Menge erfassen."
+              />
+            )}
 
             <div className="form-group">
               <label htmlFor="clock-out-notes">Notizen zur durchgeführten Arbeit:</label>

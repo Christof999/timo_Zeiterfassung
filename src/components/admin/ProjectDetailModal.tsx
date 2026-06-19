@@ -294,18 +294,33 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     name: string
     quantity: number
     unit: string
+    /** Nur Gutschriften aus der materialCredits-Collection lassen sich hier löschen */
+    deletable?: boolean
   }
 
   const materialMovements: MaterialMovement[] = (() => {
     const rows: MaterialMovement[] = []
     for (const entry of timeEntries) {
       const when = convertToDate(entry.clockOutTime) || convertToDate(entry.clockInTime)
+      const who = entry.employeeName || entry.employeeId || '—'
       for (const [i, usage] of (entry.materialUsages || []).entries()) {
         rows.push({
           id: `${entry.id}-mu-${i}`,
           kind: 'consumption',
           date: when,
-          who: entry.employeeName || entry.employeeId || '—',
+          who,
+          name: usage.materialName || '—',
+          quantity: usage.quantity || 0,
+          unit: usage.unitLabel || ''
+        })
+      }
+      // Vom Mitarbeiter beim Ausstempeln gutgeschriebenes Material
+      for (const [i, usage] of (entry.materialCreditUsages || []).entries()) {
+        rows.push({
+          id: `${entry.id}-mc-${i}`,
+          kind: 'credit',
+          date: when,
+          who,
           name: usage.materialName || '—',
           quantity: usage.quantity || 0,
           unit: usage.unitLabel || ''
@@ -320,7 +335,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         who: credit.employeeName || '—',
         name: credit.materialName || '—',
         quantity: credit.quantity || 0,
-        unit: credit.unitLabel || ''
+        unit: credit.unitLabel || '',
+        deletable: true
       })
     }
     return rows.sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
@@ -1064,7 +1080,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                         </td>
                         <td>{m.who}</td>
                         <td>
-                          {m.kind === 'credit' && (
+                          {m.kind === 'credit' && m.deletable && (
                             <button
                               type="button"
                               className="action-btn delete-btn"
