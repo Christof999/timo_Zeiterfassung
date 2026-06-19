@@ -803,6 +803,18 @@ class DataServiceClass {
         return recompute
       })
 
+      // Rückfahrt-Gutschrift nur EINMAL pro Tag (letztes Ausstempeln). Da dieses
+      // Ausstempeln das aktuell jüngste des Tages ist, die Gutschrift von früheren
+      // Einträgen desselben Tages entfernen, sobald hier eine neue angerechnet wurde.
+      const creditApplied = (estimateReturnTravel(location)?.creditMs ?? 0) > 0
+      if (overtimeRecompute && creditApplied) {
+        await this.clearOtherReturnTravelCredits(
+          overtimeRecompute.employeeId,
+          overtimeRecompute.dateKey,
+          timeEntryId
+        )
+      }
+
       // Überstunden auf Basis der Tages-Summe neu berechnen (außerhalb der Transaktion)
       if (overtimeRecompute) {
         await this.recomputeOvertimeForDay(overtimeRecompute.employeeId, overtimeRecompute.dateKey)
@@ -838,6 +850,71 @@ class DataServiceClass {
       dayMinutes += this.overtimeWorkedMinutesForEntry(entry)
     }
     return Math.max(0, Math.round(dayMinutes - DataServiceClass.REGULAR_DAY_MINUTES))
+  }
+
+  /**
+   * Entfernt die Rückfahrt-Gutschrift von allen Einträgen eines Mitarbeiters am
+   * selben Tag außer dem angegebenen. So trägt nur das letzte Ausstempeln des
+   * Tages die Heimfahrt-Gutschrift (statt jeder Projektwechsel/jedes Ausstempeln).
+   */
+  private async clearOtherReturnTravelCredits(
+    employeeId: string,
+    dateKey: string,
+    keepEntryId: string
+  ): Promise<void> {
+    try {
+      const entries = await this.getTimeEntriesByEmployeeId(employeeId)
+      const stale = entries.filter(
+        (e) =>
+          e.id !== keepEntryId &&
+          this.getDateKeyFromValue(e.clockInTime) === dateKey &&
+          getReturnTravelCreditMs(e) > 0
+      )
+      for (const e of stale) {
+        await updateDoc(doc(db, 'timeEntries', e.id), { returnTravelCreditMs: 0 })
+      }
+    } catch (error) {
+      console.warn('Konnte frühere Rückfahrt-Gutschriften nicht bereinigen:', error)
+    }
+  }
+
+  /**
+   * Bereinigt Bestandsdaten: pro Tag (Einstempel-Datum) behält nur das letzte
+   * Ausstempeln die Rückfahrt-Gutschrift, alle früheren werden auf 0 gesetzt.
+   * Mutiert die übergebenen Einträge zugleich, damit Folgeberechnungen stimmen.
+   */
+  private async normalizeReturnTravelCreditsForEntries(entries: TimeEntry[]): Promise<void> {
+    const byDay = new Map<string, TimeEntry[]>()
+    for (const e of entries) {
+      if (!e.clockOutTime) continue
+      const key = this.getDateKeyFromValue(e.clockInTime)
+      const list = byDay.get(key) || []
+      list.push(e)
+      byDay.set(key, list)
+    }
+
+    for (const list of byDay.values()) {
+      const credited = list.filter((e) => getReturnTravelCreditMs(e) > 0)
+      if (credited.length <= 1) continue
+
+      // Jüngstes Ausstempeln des Tages behalten
+      let keep = credited[0]
+      for (const e of credited) {
+        if (this.convertToDate(e.clockOutTime).getTime() > this.convertToDate(keep.clockOutTime).getTime()) {
+          keep = e
+        }
+      }
+
+      for (const e of credited) {
+        if (e.id === keep.id) continue
+        e.returnTravelCreditMs = 0
+        try {
+          await updateDoc(doc(db, 'timeEntries', e.id), { returnTravelCreditMs: 0 })
+        } catch (error) {
+          console.warn('Konnte Rückfahrt-Gutschrift nicht bereinigen:', e.id, error)
+        }
+      }
+    }
   }
 
   /**
@@ -881,6 +958,8 @@ class DataServiceClass {
     await this.authReadyPromise
     if (!employeeId) return 0
     const entries = await this.getTimeEntriesByEmployeeId(employeeId)
+    // Bestandsdaten korrigieren: Rückfahrt-Gutschrift nur beim letzten Ausstempeln/Tag
+    await this.normalizeReturnTravelCreditsForEntries(entries)
     const minutesByDay = new Map<string, number>()
     for (const entry of entries) {
       if (!entry.clockOutTime) continue
