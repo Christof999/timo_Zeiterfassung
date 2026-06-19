@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
 import { heroService } from '../../services/heroService'
-import type { Project, FileUpload, TimeEntry, OfferPosition } from '../../types'
+import type {
+  Project,
+  FileUpload,
+  TimeEntry,
+  OfferPosition,
+  MaterialCredit,
+  MaterialType
+} from '../../types'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from '../ToastContainer'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
@@ -19,11 +26,20 @@ interface TimeEntryWithEmployee extends TimeEntry {
 
 const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClose }) => {
   const [activeTab, setActiveTab] = useState<
-    'construction-site' | 'documents' | 'timeentries'
+    'construction-site' | 'documents' | 'timeentries' | 'material'
   >('construction-site')
   const [photos, setPhotos] = useState<FileUpload[]>([])
   const [documents, setDocuments] = useState<FileUpload[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
+  const [materialCredits, setMaterialCredits] = useState<MaterialCredit[]>([])
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
+  // Formular zum Erfassen einer Gutschrift
+  const [creditTypeId, setCreditTypeId] = useState('')
+  const [creditName, setCreditName] = useState('')
+  const [creditQty, setCreditQty] = useState('')
+  const [creditUnit, setCreditUnit] = useState('')
+  const [creditNote, setCreditNote] = useState('')
+  const [isSavingCredit, setIsSavingCredit] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [lightboxImage, setLightboxImage] = useState<{
     src: string
@@ -116,7 +132,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       console.log('Lade Projektdaten für:', project.id, project.name)
       
       // Verwende getProjectFiles wie in der alten App (lädt aus Zeiteinträgen)
-      const [allPhotos, allDocs, timeEntries, employees, projectsList] = await Promise.all([
+      const [allPhotos, allDocs, timeEntries, employees, projectsList, credits, matTypes] = await Promise.all([
         DataService.getProjectFiles(project.id!, 'construction_site').catch(err => {
           console.error('Fehler beim Laden der Fotos:', err)
           return []
@@ -136,10 +152,20 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         DataService.getAllProjects().catch((err) => {
           console.error('Fehler beim Laden der Projekte:', err)
           return [] as Project[]
+        }),
+        DataService.getMaterialCreditsByProject(project.id!).catch((err) => {
+          console.error('Fehler beim Laden der Material-Gutschriften:', err)
+          return [] as MaterialCredit[]
+        }),
+        DataService.getActiveMaterialTypes().catch((err) => {
+          console.error('Fehler beim Laden der Materialarten:', err)
+          return [] as MaterialType[]
         })
       ])
 
       setAllProjects(projectsList)
+      setMaterialCredits(credits)
+      setMaterialTypes(matTypes)
       
       console.log('Geladene Fotos:', allPhotos.length, allPhotos)
       console.log('Geladene Dokumente:', allDocs.length, allDocs)
@@ -257,6 +283,113 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
 
     return hours.toFixed(2) + 'h'
+  }
+
+  // Verbrauch (aus Zeiteinträgen) + Gutschriften zu einer einheitlichen Liste zusammenführen
+  type MaterialMovement = {
+    id: string
+    kind: 'consumption' | 'credit'
+    date: Date | null
+    who: string
+    name: string
+    quantity: number
+    unit: string
+  }
+
+  const materialMovements: MaterialMovement[] = (() => {
+    const rows: MaterialMovement[] = []
+    for (const entry of timeEntries) {
+      const when = convertToDate(entry.clockOutTime) || convertToDate(entry.clockInTime)
+      for (const [i, usage] of (entry.materialUsages || []).entries()) {
+        rows.push({
+          id: `${entry.id}-mu-${i}`,
+          kind: 'consumption',
+          date: when,
+          who: entry.employeeName || entry.employeeId || '—',
+          name: usage.materialName || '—',
+          quantity: usage.quantity || 0,
+          unit: usage.unitLabel || ''
+        })
+      }
+    }
+    for (const credit of materialCredits) {
+      rows.push({
+        id: credit.id,
+        kind: 'credit',
+        date: convertToDate(credit.createdAt),
+        who: credit.employeeName || '—',
+        name: credit.materialName || '—',
+        quantity: credit.quantity || 0,
+        unit: credit.unitLabel || ''
+      })
+    }
+    return rows.sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
+  })()
+
+  const handleCreditTypeChange = (id: string) => {
+    setCreditTypeId(id)
+    const type = materialTypes.find((t) => t.id === id)
+    if (type) {
+      setCreditName(type.name || '')
+      setCreditUnit(type.unitLabel || '')
+    } else if (id === '') {
+      setCreditName('')
+      setCreditUnit('')
+    }
+  }
+
+  const handleAddCredit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = creditName.trim()
+    const qty = Number.parseFloat(creditQty.replace(',', '.'))
+    if (!name) {
+      toast.error('Bitte ein Material auswählen oder eingeben.')
+      return
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('Bitte eine gültige Menge größer 0 eingeben.')
+      return
+    }
+    setIsSavingCredit(true)
+    try {
+      const admin = await DataService.getCurrentAdmin().catch(() => null)
+      const selectedType = materialTypes.find((t) => t.id === creditTypeId)
+      await DataService.addMaterialCredit({
+        projectId: project.id!,
+        employeeId: admin?.id,
+        employeeName: admin?.name || 'Admin',
+        materialTypeId: selectedType?.id,
+        materialName: name,
+        unitLabel: creditUnit.trim() || selectedType?.unitLabel,
+        unitPriceEur: typeof selectedType?.unitPriceEur === 'number' ? selectedType.unitPriceEur : undefined,
+        quantity: qty,
+        note: creditNote.trim() || undefined
+      })
+      toast.success('Gutschrift erfasst.')
+      setCreditTypeId('')
+      setCreditName('')
+      setCreditQty('')
+      setCreditUnit('')
+      setCreditNote('')
+      await loadProjectData()
+      setActiveTab('material')
+    } catch (err: any) {
+      toast.error('Fehler beim Speichern der Gutschrift: ' + (err?.message || err))
+    } finally {
+      setIsSavingCredit(false)
+    }
+  }
+
+  const handleDeleteCredit = async (id: string) => {
+    if (!window.confirm('Diese Gutschrift wirklich löschen?')) return
+    try {
+      await DataService.deleteMaterialCredit(id)
+      toast.success('Gutschrift gelöscht.')
+      await loadProjectData()
+      setActiveTab('material')
+    } catch (err: any) {
+      toast.error('Fehler beim Löschen: ' + (err?.message || err))
+    }
   }
 
   const getClockOutLocation = (entry: TimeEntry) =>
@@ -646,6 +779,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           >
             Zeiteinträge
           </button>
+          <button
+            className={`project-tab-btn ${activeTab === 'material' ? 'active' : ''}`}
+            onClick={() => setActiveTab('material')}
+          >
+            Material
+          </button>
         </div>
 
         <div className="project-tab-content">
@@ -825,6 +964,121 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                     </div>
                   )
                 })
+              )}
+            </div>
+          ) : activeTab === 'material' ? (
+            <div className="material-overview">
+              <form className="material-credit-form" onSubmit={handleAddCredit}>
+                <h4>Gutschrift erfassen</h4>
+                <p className="material-credit-hint">
+                  Am Projektende zu viel geliefertes Material wieder gutschreiben.
+                </p>
+                <div className="material-credit-grid">
+                  <select
+                    value={creditTypeId}
+                    onChange={(e) => handleCreditTypeChange(e.target.value)}
+                    aria-label="Material"
+                  >
+                    <option value="">– Material wählen / Freitext –</option>
+                    {materialTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.unitLabel ? ` (${t.unitLabel})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={creditName}
+                    onChange={(e) => setCreditName(e.target.value)}
+                    placeholder="Materialname"
+                    aria-label="Materialname"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={creditQty}
+                    onChange={(e) => setCreditQty(e.target.value)}
+                    placeholder="Menge"
+                    aria-label="Menge"
+                  />
+                  <input
+                    type="text"
+                    value={creditUnit}
+                    onChange={(e) => setCreditUnit(e.target.value)}
+                    placeholder="Einheit"
+                    aria-label="Einheit"
+                  />
+                </div>
+                <input
+                  type="text"
+                  className="material-credit-note"
+                  value={creditNote}
+                  onChange={(e) => setCreditNote(e.target.value)}
+                  placeholder="Notiz (optional)"
+                  aria-label="Notiz"
+                />
+                <button type="submit" className="btn primary-btn" disabled={isSavingCredit}>
+                  {isSavingCredit ? 'Speichere…' : 'Gutschrift hinzufügen'}
+                </button>
+              </form>
+
+              {materialMovements.length === 0 ? (
+                <p className="no-data">Noch kein Material erfasst</p>
+              ) : (
+                <table className="material-movements-table">
+                  <thead>
+                    <tr>
+                      <th>Datum</th>
+                      <th>Art</th>
+                      <th>Material</th>
+                      <th>Menge</th>
+                      <th>Von</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materialMovements.map((m) => (
+                      <tr key={m.id} className={m.kind === 'credit' ? 'movement-credit' : 'movement-consumption'}>
+                        <td>
+                          {m.date
+                            ? m.date.toLocaleDateString('de-DE', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: '2-digit'
+                              })
+                            : '–'}
+                        </td>
+                        <td>
+                          <span className={`status-badge ${m.kind === 'credit' ? 'inactive' : 'active'}`}>
+                            {m.kind === 'credit' ? 'Gutschrift' : 'Verbrauch'}
+                          </span>
+                        </td>
+                        <td>{m.name}</td>
+                        <td>
+                          {m.kind === 'credit' ? '−' : ''}
+                          {m.quantity}
+                          {m.unit ? ` ${m.unit}` : ''}
+                        </td>
+                        <td>{m.who}</td>
+                        <td>
+                          {m.kind === 'credit' && (
+                            <button
+                              type="button"
+                              className="action-btn delete-btn"
+                              onClick={() => handleDeleteCredit(m.id)}
+                              aria-label="Gutschrift löschen"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           ) : null}

@@ -128,6 +128,27 @@ export interface TimeEntryMaterialUsage {
   unitPriceEur?: number
 }
 
+/**
+ * Material-Gutschrift: am Projektende zu viel geliefertes Material, das wieder
+ * gutgeschrieben wird. Gegenstück zum Verbrauch (TimeEntryMaterialUsage).
+ */
+export interface MaterialCredit {
+  id: string
+  projectId: string
+  /** Wer die Gutschrift erfasst hat (Mitarbeiter oder Admin) */
+  employeeId?: string
+  employeeName?: string
+  /** Optionaler Bezug zum Material-Katalog */
+  materialTypeId?: string
+  materialName: string
+  /** z. B. m², Stück, Sack */
+  unitLabel?: string
+  quantity: number
+  unitPriceEur?: number
+  note?: string
+  createdAt: Date | any
+}
+
 export interface MaterialType {
   id: string
   name: string

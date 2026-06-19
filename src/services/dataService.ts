@@ -31,6 +31,7 @@ import type {
   FileUpload,
   LeaveRequest,
   MaterialType,
+  MaterialCredit,
   TimeReportSettlement,
   HeroIntegrationConfig,
   HeroSyncLogEntry
@@ -1824,6 +1825,57 @@ class DataServiceClass {
       await batch.commit()
     }
     return deleted
+  }
+
+  // ==================== MATERIAL-GUTSCHRIFTEN ====================
+
+  /** Alle Gutschriften einer Baustelle (neueste zuerst). */
+  async getMaterialCreditsByProject(projectId: string): Promise<MaterialCredit[]> {
+    await this.authReadyPromise
+    try {
+      const ref = collection(db, 'materialCredits')
+      const q = query(ref, where('projectId', '==', projectId))
+      const snapshot = await getDocs(q)
+      const list = snapshot.docs.map((d) => {
+        const data = d.data()
+        const createdAt =
+          data.createdAt instanceof Timestamp
+            ? data.createdAt.toDate()
+            : data.createdAt?.toDate?.() || data.createdAt || new Date()
+        return { id: d.id, ...data, createdAt } as MaterialCredit
+      })
+      return list.sort((a, b) => this.convertToDate(b.createdAt).getTime() - this.convertToDate(a.createdAt).getTime())
+    } catch (error) {
+      console.error('Fehler beim Abrufen der Material-Gutschriften:', error)
+      return []
+    }
+  }
+
+  /** Eine Material-Gutschrift erfassen. */
+  async addMaterialCredit(data: Partial<MaterialCredit>): Promise<MaterialCredit> {
+    await this.authReadyPromise
+    const ref = collection(db, 'materialCredits')
+    const payload: Record<string, unknown> = {
+      projectId: data.projectId || '',
+      employeeId: data.employeeId,
+      employeeName: data.employeeName,
+      materialTypeId: data.materialTypeId,
+      materialName: data.materialName || '',
+      unitLabel: data.unitLabel,
+      quantity: typeof data.quantity === 'number' ? data.quantity : 0,
+      unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
+      note: data.note,
+      createdAt: serverTimestamp()
+    }
+    const clean = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined))
+    const docRef = await addDoc(ref, clean)
+    return { id: docRef.id, ...data, createdAt: new Date() } as MaterialCredit
+  }
+
+  /** Eine Material-Gutschrift löschen. */
+  async deleteMaterialCredit(id: string): Promise<void> {
+    await this.authReadyPromise
+    await deleteDoc(doc(db, 'materialCredits', id))
   }
 
   // ==================== KUNDEN ====================

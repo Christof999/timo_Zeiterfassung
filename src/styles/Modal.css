@@ -844,3 +844,57 @@
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* Material-Übersicht (Projektdetails) */
+.material-credit-form {
+  background: var(--surface-2, #f7f7f9);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.material-credit-form h4 {
+  margin: 0 0 0.25rem;
+}
+
+.material-credit-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.material-credit-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 0.8fr 0.8fr;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.material-credit-note {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.material-movements-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.material-movements-table th,
+.material-movements-table td {
+  text-align: left;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 0.9rem;
+}
+
+.material-movements-table tr.movement-credit td {
+  background: rgba(220, 38, 38, 0.05);
+}
+
+@media (max-width: 640px) {
+  .material-credit-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
