@@ -27,6 +27,10 @@ function App() {
   })
 
   useEffect(() => {
+    // Build-Marker: in der Browser-Konsole sichtbar, um zu prüfen, ob die neueste
+    // App-Version geladen ist (nicht eine alte vom Service-Worker zwischengespeichert).
+    console.log('🟢 ZEITERFASSUNG BUILD: AUTH-HARDENING-V3')
+
     // Geister-Sitzung verhindern: Ist lokal eine Sitzung gespeichert, aber es gibt
     // keine echte Firebase-Auth-Session (z. B. nach Wegfall der anonymen Anmeldung),
     // die lokale Sitzung verwerfen -> Nutzer landet sauber im Login statt mit

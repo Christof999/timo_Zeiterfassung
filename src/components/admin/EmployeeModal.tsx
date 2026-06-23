@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
+import { auth } from '../../services/firebaseConfig'
 import type { Employee } from '../../types'
 import { toast } from '../ToastContainer'
 import '../../styles/Modal.css'
@@ -140,6 +141,13 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
           setIsLoading(false)
           return
         }
+        // Klarer Hinweis statt kryptischem Function-Fehler, falls keine echte
+        // Firebase-Sitzung aktiv ist (dann fehlt das Token).
+        if (!auth.currentUser) {
+          toast.error('Keine aktive Anmeldung erkannt. Bitte abmelden und neu anmelden, dann erneut versuchen.')
+          setIsLoading(false)
+          return
+        }
         await DataService.adminCreateEmployee({
           username: formData.username,
           password: formData.password,
@@ -151,7 +159,9 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
 
       onSave()
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message)
+      console.error('Mitarbeiter speichern – Fehler:', error)
+      const code = error?.code ? `[${error.code}] ` : ''
+      toast.error('Fehler beim Anlegen: ' + code + (error?.message || 'Unbekannt'))
     } finally {
       setIsLoading(false)
     }
