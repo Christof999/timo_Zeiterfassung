@@ -134,10 +134,17 @@ exports.migrateExistingEmployees = onCall({ secrets: [SETUP_SECRET] }, async (re
     throw new HttpsError('permission-denied', 'Falsches oder fehlendes Setup-Secret.')
   }
 
+  // Optionales temporäres Passwort für Mitarbeiter, deren bisheriges Passwort
+  // kürzer als 6 Zeichen ist (Firebase-Mindestlänge). Diese müssen anschließend
+  // ein richtiges Passwort gesetzt bekommen.
+  const defaultPassword = request.data && request.data.defaultPassword
+  const hasValidDefault = typeof defaultPassword === 'string' && defaultPassword.length >= 6
+
   const snapshot = await db.collection('employees').get()
   let created = 0
   let skipped = 0
   let failed = 0
+  const tempUsers = []
 
   for (const docSnap of snapshot.docs) {
     const data = docSnap.data() || {}
@@ -155,14 +162,31 @@ exports.migrateExistingEmployees = onCall({ secrets: [SETUP_SECRET] }, async (re
       } catch (_) {
         // nicht vorhanden -> anlegen
       }
+
+      // Passwort bestimmen: altes übernehmen, falls lang genug; sonst Temp-Passwort.
+      let password = String(data.password)
+      let usedTemp = false
+      if (password.length < 6) {
+        if (!hasValidDefault) {
+          console.error('Migration: Passwort zu kurz und kein gültiges defaultPassword für', uid)
+          failed += 1
+          continue
+        }
+        password = String(defaultPassword)
+        usedTemp = true
+      }
+
       await auth.createUser({
         uid,
         email: usernameToEmail(data.username),
-        password: String(data.password),
+        password,
         displayName: data.name
       })
       if (data.isAdmin === true) {
         await auth.setCustomUserClaims(uid, { admin: true })
+      }
+      if (usedTemp) {
+        tempUsers.push(data.username)
       }
       created += 1
     } catch (err) {
@@ -171,5 +195,5 @@ exports.migrateExistingEmployees = onCall({ secrets: [SETUP_SECRET] }, async (re
     }
   }
 
-  return { created, skipped, failed }
+  return { created, skipped, failed, tempUsers }
 })
