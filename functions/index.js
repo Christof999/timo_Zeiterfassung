@@ -247,3 +247,52 @@ exports.bootstrapAdmin = onCall({ secrets: [SETUP_SECRET] }, async (request) => 
 
   return { uid, username, isAdmin: true }
 })
+
+/**
+ * Setup-/Notfall-Weg zum Anlegen eines Mitarbeiters per Secret (ohne Admin-Login
+ * im Frontend). Nützlich, solange der Browser-Login klemmt. Nach Bedarf wieder
+ * entfernen oder Secret rotieren.
+ */
+exports.setupCreateEmployee = onCall({ secrets: [SETUP_SECRET] }, async (request) => {
+  const d = request.data || {}
+  if (!SETUP_SECRET.value() || d.secret !== SETUP_SECRET.value()) {
+    throw new HttpsError('permission-denied', 'Falsches oder fehlendes Setup-Secret.')
+  }
+  if (!d.username || !String(d.username).trim()) {
+    throw new HttpsError('invalid-argument', 'username fehlt.')
+  }
+  if (!d.password || String(d.password).length < 6) {
+    throw new HttpsError('invalid-argument', 'password (mind. 6 Zeichen) fehlt.')
+  }
+  const fullName = d.name || `${d.firstName || ''} ${d.lastName || ''}`.trim() || undefined
+  try {
+    const user = await auth.createUser({
+      email: usernameToEmail(d.username),
+      password: String(d.password),
+      displayName: fullName
+    })
+    if (d.isAdmin === true) {
+      await auth.setCustomUserClaims(user.uid, { admin: true })
+    }
+    await db.collection('employees').doc(user.uid).set(
+      {
+        firstName: d.firstName,
+        lastName: d.lastName,
+        name: fullName,
+        username: d.username,
+        position: d.position,
+        hourlyRate: typeof d.hourlyRate === 'number' ? d.hourlyRate : undefined,
+        isAdmin: d.isAdmin === true,
+        status: 'active',
+        createdAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    )
+    return { uid: user.uid }
+  } catch (err) {
+    if (err && err.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'Dieser Benutzername ist bereits vergeben.')
+    }
+    throw new HttpsError('internal', 'Anlegen fehlgeschlagen: ' + (err && err.message))
+  }
+})
