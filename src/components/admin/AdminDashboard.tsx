@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
+import { auth } from '../../services/firebaseConfig'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
@@ -53,8 +54,13 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const checkAdmin = async () => {
+      // Auf den Firebase-Auth-Status warten und eine ECHTE Sitzung verlangen.
+      // Ohne aktive Firebase-Sitzung gibt es kein Token -> Admin-Aktionen (z. B.
+      // Mitarbeiter anlegen) würden scheitern. Dann zurück zum Login-Formular.
+      await DataService.authReady
       const admin = await DataService.getCurrentAdmin()
-      if (!admin || !admin.isAdmin) {
+      if (!auth.currentUser || !admin || !admin.isAdmin) {
+        DataService.clearLocalSessions()
         navigate('/admin/login')
         return
       }

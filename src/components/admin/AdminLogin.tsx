@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
+import { auth } from '../../services/firebaseConfig'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
@@ -14,11 +15,18 @@ const AdminLogin: React.FC = () => {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Prüfe, ob bereits ein Admin angemeldet ist
+    // Nur ins Dashboard springen, wenn eine ECHTE Firebase-Sitzung existiert.
+    // Ein bloßer lokaler Eintrag ohne Sitzung würde sonst zu „tokenlosen"
+    // Aufrufen führen (Mitarbeiter anlegen schlägt fehl).
     const checkLoggedIn = async () => {
-      const currentAdmin = await DataService.getCurrentAdmin()
-      if (currentAdmin && currentAdmin.isAdmin) {
-        navigate('/admin/dashboard')
+      await DataService.authReady
+      if (auth.currentUser) {
+        const currentAdmin = await DataService.getCurrentAdmin()
+        if (currentAdmin && currentAdmin.isAdmin) {
+          navigate('/admin/dashboard')
+        }
+      } else {
+        DataService.clearLocalSessions()
       }
     }
     checkLoggedIn()
