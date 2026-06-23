@@ -943,17 +943,21 @@ async function executeTool(
       }
       const status = args.status === 'inactive' ? 'inactive' : 'active'
       try {
-        const id = await DataService.createEmployee({
-          firstName: args.vorname.trim(),
-          lastName: args.nachname.trim(),
-          name: `${args.vorname.trim()} ${args.nachname.trim()}`,
+        // Über die Cloud Function anlegen, damit auch ein Firebase-Auth-Nutzer
+        // entsteht (sonst könnte sich der Mitarbeiter nicht einloggen).
+        const result = await DataService.adminCreateEmployee({
           username: args.benutzername.trim(),
           password: args.passwort,
-          position: args.position,
-          hourlyRate: args.stundenlohn != null ? Number(args.stundenlohn) : undefined,
-          status
+          profile: {
+            firstName: args.vorname.trim(),
+            lastName: args.nachname.trim(),
+            name: `${args.vorname.trim()} ${args.nachname.trim()}`,
+            position: args.position,
+            hourlyRate: args.stundenlohn != null ? Number(args.stundenlohn) : undefined,
+            status
+          }
         })
-        return { status: 'erledigt', message: 'Mitarbeiter angelegt.', id }
+        return { status: 'erledigt', message: 'Mitarbeiter angelegt.', id: result.uid }
       } catch (error: any) {
         return { status: 'fehler', message: error?.message || 'Anlegen fehlgeschlagen.' }
       }
