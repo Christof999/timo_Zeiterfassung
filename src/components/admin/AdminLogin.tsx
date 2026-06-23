@@ -4,7 +4,7 @@ import { DataService } from '../../services/dataService'
 import { auth } from '../../services/firebaseConfig'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
-import { APP_DISPLAY_NAME } from '../../constants/appBranding'
+import { APP_DISPLAY_NAME, APP_BUILD_TAG } from '../../constants/appBranding'
 import '../../styles/AdminLogin.css'
 
 const AdminLogin: React.FC = () => {
@@ -69,7 +69,7 @@ const AdminLogin: React.FC = () => {
             className="admin-login-logo-image"
           />
           <h1>{APP_DISPLAY_NAME}</h1>
-          <p>Admin Panel</p>
+          <p>Admin Panel · Version {APP_BUILD_TAG}</p>
         </div>
       </header>
 
