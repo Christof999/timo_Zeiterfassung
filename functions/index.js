@@ -54,47 +54,65 @@ function assertAdmin(request) {
 
 /** Mitarbeiter anlegen: Auth-Nutzer + Firestore-Dokument (Doc-ID = uid). */
 exports.adminCreateEmployee = onCall(async (request) => {
-  assertAdmin(request)
-  const { username, password, profile = {}, isAdmin = false } = request.data || {}
-  if (!username || !password) {
-    throw new HttpsError('invalid-argument', 'username und password sind erforderlich.')
-  }
-  if (String(password).length < 6) {
-    throw new HttpsError('invalid-argument', 'Passwort muss mindestens 6 Zeichen haben.')
-  }
-
-  const email = usernameToEmail(username)
-  let user
   try {
-    user = await auth.createUser({ email, password: String(password), displayName: profile.name })
-  } catch (err) {
-    if (err && err.code === 'auth/email-already-exists') {
-      throw new HttpsError('already-exists', 'Dieser Username ist bereits vergeben.')
+    assertAdmin(request)
+    const { username, password, profile = {}, isAdmin = false } = request.data || {}
+    if (!username || !String(username).trim()) {
+      throw new HttpsError('invalid-argument', 'Benutzername fehlt.')
     }
-    throw new HttpsError('internal', 'Konnte Auth-Nutzer nicht anlegen: ' + (err && err.message))
+    if (!password) {
+      throw new HttpsError('invalid-argument', 'Passwort fehlt.')
+    }
+    if (String(password).length < 6) {
+      throw new HttpsError('invalid-argument', 'Passwort muss mindestens 6 Zeichen haben.')
+    }
+
+    const email = usernameToEmail(username)
+    let user
+    try {
+      user = await auth.createUser({ email, password: String(password), displayName: profile.name })
+    } catch (err) {
+      const code = err && err.code
+      if (code === 'auth/email-already-exists') {
+        throw new HttpsError('already-exists', 'Dieser Benutzername ist bereits vergeben.')
+      }
+      if (code === 'auth/invalid-password') {
+        throw new HttpsError('invalid-argument', 'Passwort ungültig (mind. 6 Zeichen).')
+      }
+      if (code === 'auth/invalid-email') {
+        throw new HttpsError('invalid-argument', 'Benutzername enthält ungültige Zeichen.')
+      }
+      throw new HttpsError('internal', 'Auth-Nutzer anlegen fehlgeschlagen: ' + (err && err.message))
+    }
+
+    if (isAdmin === true) {
+      await auth.setCustomUserClaims(user.uid, { admin: true })
+    }
+
+    // Passwort wird NICHT in Firestore gespeichert – es liegt sicher bei Firebase Auth.
+    const { password: _ignore, ...safeProfile } = profile
+    await db
+      .collection('employees')
+      .doc(user.uid)
+      .set(
+        {
+          ...safeProfile,
+          username,
+          isAdmin: isAdmin === true,
+          status: safeProfile.status || 'active',
+          createdAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      )
+
+    return { uid: user.uid }
+  } catch (err) {
+    // Bekannte (saubere) Fehler unverändert weiterreichen …
+    if (err instanceof HttpsError) throw err
+    // … alles andere mit der ECHTEN Ursache zurückgeben statt nur "internal".
+    console.error('adminCreateEmployee unerwarteter Fehler:', err)
+    throw new HttpsError('internal', 'Unerwarteter Fehler: ' + (err && err.message ? err.message : String(err)))
   }
-
-  if (isAdmin === true) {
-    await auth.setCustomUserClaims(user.uid, { admin: true })
-  }
-
-  // Passwort wird NICHT in Firestore gespeichert – es liegt sicher bei Firebase Auth.
-  const { password: _ignore, ...safeProfile } = profile
-  await db
-    .collection('employees')
-    .doc(user.uid)
-    .set(
-      {
-        ...safeProfile,
-        username,
-        isAdmin: isAdmin === true,
-        status: safeProfile.status || 'active',
-        createdAt: FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    )
-
-  return { uid: user.uid }
 })
 
 /** Passwort eines Mitarbeiters setzen/zurücksetzen. */
