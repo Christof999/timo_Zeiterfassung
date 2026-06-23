@@ -21,6 +21,9 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 initializeApp()
 const auth = getAuth()
 const db = getFirestore()
+// undefined-Felder beim Schreiben ignorieren (z. B. leeres heroEmployeeId aus dem
+// Anlege-Dialog), statt einen Fehler auszulösen. Muss vor dem ersten Zugriff stehen.
+db.settings({ ignoreUndefinedProperties: true })
 
 // Einmal-Secret, um die Migration ohne bereits existierenden Admin auszulösen.
 // Setzen via:  firebase functions:secrets:set SETUP_SECRET
