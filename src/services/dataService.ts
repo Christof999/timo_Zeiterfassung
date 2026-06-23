@@ -241,6 +241,16 @@ class DataServiceClass {
     void signOut(auth).catch(() => {})
   }
 
+  /**
+   * Entfernt NUR die lokal gespeicherten Sitzungen (ohne signOut). Für den
+   * Startup-Abgleich: lokal „eingeloggt", aber keine echte Firebase-Session.
+   */
+  clearLocalSessions() {
+    localStorage.removeItem('lauffer_current_user')
+    localStorage.removeItem('lauffer_admin_user')
+    localStorage.removeItem('lauffer_current_admin')
+  }
+
   async authenticateEmployee(username: string, password: string): Promise<Employee | null> {
     try {
       // Echte Anmeldung über Firebase Auth (Username -> synthetische E-Mail).
