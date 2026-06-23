@@ -46,16 +46,35 @@ function usernameToEmail(username) {
   return `${normalized}@${AUTH_EMAIL_DOMAIN}`
 }
 
-function assertAdmin(request) {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Nur Administratoren dürfen das.')
+async function assertAdmin(request) {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Nicht angemeldet – bitte ab- und neu anmelden.')
   }
+  // 1) Schnellweg: Admin-Claim im Token.
+  if (request.auth.token && request.auth.token.admin === true) return
+  // 2) Robust-Fallback: Admin-Status direkt aus dem Mitarbeiter-Dokument (uid),
+  //    falls der Custom-Claim (noch) nicht im Token steckt.
+  try {
+    const snap = await db.collection('employees').doc(request.auth.uid).get()
+    if (snap.exists && snap.data() && snap.data().isAdmin === true) {
+      // Claim für künftige Aufrufe gleich nachziehen (best effort).
+      try {
+        await auth.setCustomUserClaims(request.auth.uid, { admin: true })
+      } catch (_) {
+        /* egal – Dokument-Check hat bereits bestätigt */
+      }
+      return
+    }
+  } catch (_) {
+    // ignorieren -> unten permission-denied
+  }
+  throw new HttpsError('permission-denied', 'Nur Administratoren dürfen das.')
 }
 
 /** Mitarbeiter anlegen: Auth-Nutzer + Firestore-Dokument (Doc-ID = uid). */
 exports.adminCreateEmployee = onCall(async (request) => {
   try {
-    assertAdmin(request)
+    await assertAdmin(request)
     const { username, password, profile = {}, isAdmin = false } = request.data || {}
     if (!username || !String(username).trim()) {
       throw new HttpsError('invalid-argument', 'Benutzername fehlt.')
@@ -117,7 +136,7 @@ exports.adminCreateEmployee = onCall(async (request) => {
 
 /** Passwort eines Mitarbeiters setzen/zurücksetzen. */
 exports.adminSetPassword = onCall(async (request) => {
-  assertAdmin(request)
+  await assertAdmin(request)
   const { uid, newPassword } = request.data || {}
   if (!uid || !newPassword) {
     throw new HttpsError('invalid-argument', 'uid und newPassword sind erforderlich.')
@@ -131,7 +150,7 @@ exports.adminSetPassword = onCall(async (request) => {
 
 /** Admin-Rolle eines Mitarbeiters setzen/entfernen (Custom Claim + Firestore). */
 exports.adminSetRole = onCall(async (request) => {
-  assertAdmin(request)
+  await assertAdmin(request)
   const { uid, isAdmin } = request.data || {}
   if (!uid) throw new HttpsError('invalid-argument', 'uid ist erforderlich.')
   await auth.setCustomUserClaims(uid, { admin: isAdmin === true })
