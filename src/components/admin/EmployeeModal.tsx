@@ -121,20 +121,31 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         }
       }
 
-      if (formData.password) {
-        employeeData.password = formData.password
-      }
-
+      // Passwort wird NICHT mehr in Firestore gespeichert, sondern über die
+      // Cloud Function in Firebase Auth gesetzt.
       if (employee?.id) {
         await DataService.updateEmployee(employee.id, employeeData)
+        if (formData.password) {
+          if (formData.password.length < 6) {
+            toast.error('Passwort muss mindestens 6 Zeichen haben')
+            setIsLoading(false)
+            return
+          }
+          await DataService.adminSetPassword(employee.id, formData.password)
+        }
         toast.success('Mitarbeiter erfolgreich aktualisiert')
       } else {
-        if (!formData.password) {
-          toast.error('Bitte geben Sie ein Passwort ein')
+        if (!formData.password || formData.password.length < 6) {
+          toast.error('Bitte ein Passwort mit mindestens 6 Zeichen vergeben')
           setIsLoading(false)
           return
         }
-        await DataService.createEmployee(employeeData)
+        await DataService.adminCreateEmployee({
+          username: formData.username,
+          password: formData.password,
+          isAdmin: (employee as any)?.isAdmin === true,
+          profile: employeeData
+        })
         toast.success('Mitarbeiter erfolgreich erstellt')
       }
 
