@@ -197,3 +197,32 @@ exports.migrateExistingEmployees = onCall({ secrets: [SETUP_SECRET] }, async (re
 
   return { created, skipped, failed, tempUsers }
 })
+
+/**
+ * EINMALIGER Bootstrap: macht einen bestehenden Mitarbeiter (per Username) zum
+ * Admin – setzt den admin-Claim und isAdmin im Firestore-Dokument. Per
+ * Setup-Secret geschützt, weil es ohne bereits existierenden Admin laufen muss.
+ * Nach dem Bootstrap können weitere Admins normal über adminSetRole vergeben
+ * werden; diese Function danach entfernen oder das Secret rotieren.
+ */
+exports.bootstrapAdmin = onCall({ secrets: [SETUP_SECRET] }, async (request) => {
+  const provided = request.data && request.data.secret
+  if (!SETUP_SECRET.value() || provided !== SETUP_SECRET.value()) {
+    throw new HttpsError('permission-denied', 'Falsches oder fehlendes Setup-Secret.')
+  }
+  const username = request.data && request.data.username
+  if (!username) {
+    throw new HttpsError('invalid-argument', 'username ist erforderlich.')
+  }
+
+  const snap = await db.collection('employees').where('username', '==', username).limit(1).get()
+  if (snap.empty) {
+    throw new HttpsError('not-found', 'Kein Mitarbeiter mit diesem Username gefunden.')
+  }
+  const uid = snap.docs[0].id
+
+  await auth.setCustomUserClaims(uid, { admin: true })
+  await db.collection('employees').doc(uid).set({ isAdmin: true }, { merge: true })
+
+  return { uid, username, isAdmin: true }
+})
