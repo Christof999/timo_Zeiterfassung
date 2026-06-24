@@ -2365,12 +2365,15 @@ class DataServiceClass {
   async createEmployee(employeeData: Partial<Employee>): Promise<string> {
     await this.authReadyPromise
     try {
-      // Prüfe auf doppelten Benutzernamen
+      // Prüfe auf doppelten Benutzernamen – nur gegen AKTIVE Mitarbeiter.
+      // (Gelöschte/inaktive blockieren den Benutzernamen nicht mehr.)
       const employeesRef = collection(db, 'employees')
-      const q = query(employeesRef, where('username', '==', employeeData.username), limit(1))
+      const q = query(employeesRef, where('username', '==', employeeData.username))
       const existingSnapshot = await getDocs(q)
-      
-      if (!existingSnapshot.empty) {
+      const hasActiveDuplicate = existingSnapshot.docs.some(
+        (d) => (d.data() as any).status !== 'inactive'
+      )
+      if (hasActiveDuplicate) {
         throw new Error('Dieser Benutzername ist bereits vergeben.')
       }
 
@@ -2398,13 +2401,15 @@ class DataServiceClass {
         throw new Error('Keine gültige Mitarbeiter-ID angegeben')
       }
 
-      // Prüfe auf doppelten Benutzernamen (außer dem aktuellen)
+      // Prüfe auf doppelten Benutzernamen (außer dem aktuellen, nur AKTIVE)
       if (employeeData.username) {
         const employeesRef = collection(db, 'employees')
-        const q = query(employeesRef, where('username', '==', employeeData.username), limit(1))
+        const q = query(employeesRef, where('username', '==', employeeData.username))
         const existingSnapshot = await getDocs(q)
-        
-        if (!existingSnapshot.empty && existingSnapshot.docs[0].id !== id) {
+        const hasOtherActiveDuplicate = existingSnapshot.docs.some(
+          (d) => d.id !== id && (d.data() as any).status !== 'inactive'
+        )
+        if (hasOtherActiveDuplicate) {
           throw new Error('Dieser Benutzername ist bereits vergeben.')
         }
       }

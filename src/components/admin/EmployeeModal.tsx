@@ -106,7 +106,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
       const employeeData: Partial<Employee> = {
         firstName: formData.firstName,
         lastName: formData.lastName,
-        name: formData.name || `${formData.firstName} ${formData.lastName}`,
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
         username: formData.username,
         position: formData.position,
         status: formData.status,
