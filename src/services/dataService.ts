@@ -2446,8 +2446,9 @@ class DataServiceClass {
         throw new Error('Dieser Mitarbeiter hat noch aktive Zeiteinträge und kann nicht gelöscht werden.')
       }
 
+      // Mitarbeiter wirklich entfernen.
       const employeeRef = doc(db, 'employees', id)
-      await updateDoc(employeeRef, { status: 'inactive' })
+      await deleteDoc(employeeRef)
     } catch (error) {
       console.error(`Fehler beim Löschen des Mitarbeiters ${id}:`, error)
       throw error

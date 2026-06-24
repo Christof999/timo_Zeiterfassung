@@ -21,7 +21,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     status: 'active' as 'active' | 'inactive',
     hourlyRate: 0,
     overtimeBalanceHours: '' as string,
-    heroEmployeeId: ''
+    heroEmployeeId: '',
+    isAdmin: false
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isRecomputingOvertime, setIsRecomputingOvertime] = useState(false)
@@ -76,7 +77,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         status: (employee.status as 'active' | 'inactive') || 'active',
         hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
         overtimeBalanceHours,
-        heroEmployeeId: employee.heroEmployeeId || ''
+        heroEmployeeId: employee.heroEmployeeId || '',
+        isAdmin: (employee as any).isAdmin === true
       })
     } else {
       // Reset form when no employee (new employee)
@@ -90,7 +92,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         status: 'active',
         hourlyRate: 0,
         overtimeBalanceHours: '',
-        heroEmployeeId: ''
+        heroEmployeeId: '',
+        isAdmin: false
       })
     }
   }, [employee])
@@ -108,7 +111,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: formData.position,
         status: formData.status,
         hourlyRate: formData.hourlyRate,
-        heroEmployeeId: formData.heroEmployeeId.trim() || undefined
+        heroEmployeeId: formData.heroEmployeeId.trim() || undefined,
+        isAdmin: formData.isAdmin
       }
 
       const trimmedOt = formData.overtimeBalanceHours.trim()
@@ -206,6 +210,17 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               value={formData.hourlyRate}
               onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) || 0 })}
             />
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={formData.isAdmin}
+                onChange={(e) => setFormData({ ...formData, isAdmin: e.target.checked })}
+                style={{ width: 'auto', minHeight: 0 }}
+              />
+              Administrator (darf sich im Admin-Bereich anmelden)
+            </label>
           </div>
           <div className="form-group">
             <label>Überstunden-Saldo (Stunden, optional):</label>
