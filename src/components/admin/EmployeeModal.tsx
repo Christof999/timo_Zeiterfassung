@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
-import { auth } from '../../services/firebaseConfig'
 import type { Employee } from '../../types'
 import { toast } from '../ToastContainer'
 import '../../styles/Modal.css'
@@ -122,46 +121,26 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         }
       }
 
-      // Passwort wird NICHT mehr in Firestore gespeichert, sondern über die
-      // Cloud Function in Firebase Auth gesetzt.
+      if (formData.password) {
+        employeeData.password = formData.password
+      }
+
       if (employee?.id) {
         await DataService.updateEmployee(employee.id, employeeData)
-        if (formData.password) {
-          if (formData.password.length < 6) {
-            toast.error('Passwort muss mindestens 6 Zeichen haben')
-            setIsLoading(false)
-            return
-          }
-          await DataService.adminSetPassword(employee.id, formData.password)
-        }
         toast.success('Mitarbeiter erfolgreich aktualisiert')
       } else {
-        if (!formData.password || formData.password.length < 6) {
-          toast.error('Bitte ein Passwort mit mindestens 6 Zeichen vergeben')
+        if (!formData.password) {
+          toast.error('Bitte geben Sie ein Passwort ein')
           setIsLoading(false)
           return
         }
-        // Klarer Hinweis statt kryptischem Function-Fehler, falls keine echte
-        // Firebase-Sitzung aktiv ist (dann fehlt das Token).
-        if (!auth.currentUser) {
-          toast.error('Keine aktive Anmeldung erkannt. Bitte abmelden und neu anmelden, dann erneut versuchen.')
-          setIsLoading(false)
-          return
-        }
-        await DataService.adminCreateEmployee({
-          username: formData.username,
-          password: formData.password,
-          isAdmin: (employee as any)?.isAdmin === true,
-          profile: employeeData
-        })
+        await DataService.createEmployee(employeeData)
         toast.success('Mitarbeiter erfolgreich erstellt')
       }
 
       onSave()
     } catch (error: any) {
-      console.error('Mitarbeiter speichern – Fehler:', error)
-      const code = error?.code ? `[${error.code}] ` : ''
-      toast.error('Fehler beim Anlegen: ' + code + (error?.message || 'Unbekannt'))
+      toast.error('Fehler: ' + error.message)
     } finally {
       setIsLoading(false)
     }

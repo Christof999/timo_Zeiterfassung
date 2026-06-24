@@ -17,15 +17,9 @@ import {
   serverTimestamp,
   arrayUnion
 } from 'firebase/firestore'
-import {
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from 'firebase/auth'
-import { httpsCallable } from 'firebase/functions'
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, auth, storage, functions } from './firebaseConfig'
-import { usernameToEmail } from '../utils/authIdentity'
+import { db, auth, storage } from './firebaseConfig'
 import type {
   Employee,
   Project,
@@ -199,13 +193,24 @@ class DataServiceClass {
   }
 
   private initAuth(): Promise<void> {
-    // Keine anonyme Anmeldung mehr: Zugriff erst nach echtem Login (Username/Passwort
-    // -> Firebase Auth). Wir warten lediglich, bis der Auth-Status einmal bekannt ist,
-    // damit eine bestehende Sitzung (Reload) wiederhergestellt wird.
     return new Promise((resolve) => {
-      const unsubscribe = onAuthStateChanged(auth, () => {
-        resolve()
-        unsubscribe()
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          console.log('✅ Firebase Auth bereit:', user.uid)
+          resolve()
+          unsubscribe()
+        } else {
+          console.log('Kein Benutzer, starte anonyme Anmeldung...')
+          signInAnonymously(auth).catch((error) => {
+            console.error('❌ Fehler bei der anonymen Anmeldung:', error)
+            if (error?.code === 'auth/configuration-not-found') {
+              console.error(
+                'Firebase Auth: Im Projekt Authentication aktivieren, Provider „Anonym“ einschalten und die Vercel-Domain unter Authentication → Settings → Authorized domains eintragen. Ohne gültige Anmeldung sind Firestore-Schreibzugriffe (Admin) gesperrt.'
+              )
+            }
+            resolve() // Trotzdem auflösen, damit die App weiterläuft
+          })
+        }
       })
     })
   }
@@ -238,43 +243,26 @@ class DataServiceClass {
 
   clearCurrentUser() {
     localStorage.removeItem('lauffer_current_user')
-    void signOut(auth).catch(() => {})
-  }
-
-  /**
-   * Entfernt NUR die lokal gespeicherten Sitzungen (ohne signOut). Für den
-   * Startup-Abgleich: lokal „eingeloggt", aber keine echte Firebase-Session.
-   */
-  clearLocalSessions() {
-    localStorage.removeItem('lauffer_current_user')
-    localStorage.removeItem('lauffer_admin_user')
-    localStorage.removeItem('lauffer_current_admin')
   }
 
   async authenticateEmployee(username: string, password: string): Promise<Employee | null> {
+    await this.authReadyPromise
     try {
-      // Echte Anmeldung über Firebase Auth (Username -> synthetische E-Mail).
-      const cred = await signInWithEmailAndPassword(auth, usernameToEmail(username), password)
-      const uid = cred.user.uid
-
-      // Profil aus Firestore laden (Doc-ID = uid).
-      const employeeDoc = await getDoc(doc(db, 'employees', uid))
-      if (!employeeDoc.exists()) {
-        await signOut(auth)
-        return null
+      const employeesRef = collection(db, 'employees')
+      const q = query(employeesRef, where('username', '==', username), limit(1))
+      const snapshot = await getDocs(q)
+      
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0]
+        const employee = { id: doc.id, ...doc.data() } as Employee
+        
+        if (employee.password === password && employee.status === 'active') {
+          const { password, ...employeeData } = employee
+          return employeeData as Employee
+        }
       }
-      const employee = { id: employeeDoc.id, ...employeeDoc.data() } as Employee
-      if (employee.status && employee.status !== 'active') {
-        await signOut(auth)
-        return null
-      }
-      const { password: _pw, ...employeeData } = employee as any
-      return employeeData as Employee
-    } catch (error: any) {
-      // Falsche Zugangsdaten o. Ä. -> als „nicht authentifiziert" behandeln
-      if (error?.code && String(error.code).startsWith('auth/')) {
-        return null
-      }
+      return null
+    } catch (error) {
       console.error('Fehler bei der Authentifizierung:', error)
       return null
     }
@@ -2234,7 +2222,6 @@ class DataServiceClass {
   clearCurrentAdmin() {
     localStorage.removeItem('lauffer_admin_user')
     localStorage.removeItem('lauffer_current_admin')
-    void signOut(auth).catch(() => {})
   }
 
   async saveAdminPushSubscription(
@@ -2308,69 +2295,41 @@ class DataServiceClass {
   }
 
   async authenticateAdmin(username: string, password: string): Promise<any | null> {
+    await this.authReadyPromise
     try {
-      const cred = await signInWithEmailAndPassword(auth, usernameToEmail(username), password)
-      const uid = cred.user.uid
-
-      // Admin-Rolle aus dem Custom Claim (maßgeblich für die Security-Rules).
-      const tokenResult = await cred.user.getIdTokenResult(true)
-      const isAdminClaim = tokenResult.claims.admin === true
-
-      const employeeDoc = await getDoc(doc(db, 'employees', uid))
-      const employee = employeeDoc.exists() ? ({ id: employeeDoc.id, ...employeeDoc.data() } as Employee) : null
-
-      // Claim ist maßgeblich; Doc-Flag dient nur als Anzeige-Fallback.
-      if (!isAdminClaim && !(employee && (employee as any).isAdmin === true)) {
-        await signOut(auth)
-        return null
+      // Einfache Admin-Authentifizierung (wie in der alten Version)
+      if (username === 'admin' && password === 'admin123') {
+        const admin = { username: 'admin', name: 'Administrator', isAdmin: true }
+        this.setCurrentAdmin(admin)
+        return admin
       }
-
-      const admin = {
-        id: uid,
-        username: employee?.username || username,
-        name: employee?.name || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Administrator',
-        isAdmin: true
+      
+      // Prüfe auch ob es ein Admin-Mitarbeiter ist
+      const employeesRef = collection(db, 'employees')
+      const q = query(employeesRef, where('username', '==', username), limit(1))
+      const snapshot = await getDocs(q)
+      
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0]
+        const employee = { id: doc.id, ...doc.data() } as Employee
+        
+        if (employee.password === password && employee.isAdmin === true) {
+          const admin = { 
+            id: employee.id,
+            username: employee.username, 
+            name: employee.name || `${employee.firstName} ${employee.lastName}`,
+            isAdmin: true 
+          }
+          this.setCurrentAdmin(admin)
+          return admin
+        }
       }
-      this.setCurrentAdmin(admin)
-      return admin
-    } catch (error: any) {
-      if (error?.code && String(error.code).startsWith('auth/')) {
-        return null
-      }
+      
+      return null
+    } catch (error) {
       console.error('Fehler bei der Admin-Authentifizierung:', error)
       return null
     }
-  }
-
-  // ==================== ADMIN: BENUTZERVERWALTUNG (Cloud Functions) ====================
-
-  /** Legt einen Mitarbeiter inkl. Firebase-Auth-Nutzer an (serverseitig). */
-  async adminCreateEmployee(params: {
-    username: string
-    password: string
-    isAdmin?: boolean
-    profile?: Partial<Employee>
-  }): Promise<{ uid: string }> {
-    const callable = httpsCallable(functions, 'adminCreateEmployee')
-    const res = await callable({
-      username: params.username,
-      password: params.password,
-      isAdmin: params.isAdmin === true,
-      profile: params.profile || {}
-    })
-    return res.data as { uid: string }
-  }
-
-  /** Setzt/setzt das Passwort eines Mitarbeiters zurück (serverseitig). */
-  async adminSetPassword(uid: string, newPassword: string): Promise<void> {
-    const callable = httpsCallable(functions, 'adminSetPassword')
-    await callable({ uid, newPassword })
-  }
-
-  /** Vergibt/entzieht die Admin-Rolle (Custom Claim + Firestore). */
-  async adminSetRole(uid: string, isAdmin: boolean): Promise<void> {
-    const callable = httpsCallable(functions, 'adminSetRole')
-    await callable({ uid, isAdmin })
   }
 
   // Admin: Alle Mitarbeiter abrufen

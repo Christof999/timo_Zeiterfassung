@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
-import { APP_DISPLAY_NAME, APP_BUILD_TAG } from '../constants/appBranding'
+import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/Login.css'
 
 const Login: React.FC = () => {
@@ -60,7 +60,7 @@ const Login: React.FC = () => {
             className="login-logo-image"
           />
           <h1>{APP_DISPLAY_NAME}</h1>
-          <p>Mitarbeiter-Zeiterfassung · Version {APP_BUILD_TAG}</p>
+          <p>Mitarbeiter-Zeiterfassung</p>
         </div>
       </header>
 

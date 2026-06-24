@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
-import { auth } from '../../services/firebaseConfig'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
-import { APP_DISPLAY_NAME, APP_BUILD_TAG } from '../../constants/appBranding'
+import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import '../../styles/AdminLogin.css'
 
 const AdminLogin: React.FC = () => {
@@ -15,18 +14,11 @@ const AdminLogin: React.FC = () => {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Nur ins Dashboard springen, wenn eine ECHTE Firebase-Sitzung existiert.
-    // Ein bloßer lokaler Eintrag ohne Sitzung würde sonst zu „tokenlosen"
-    // Aufrufen führen (Mitarbeiter anlegen schlägt fehl).
+    // Prüfe, ob bereits ein Admin angemeldet ist
     const checkLoggedIn = async () => {
-      await DataService.authReady
-      if (auth.currentUser) {
-        const currentAdmin = await DataService.getCurrentAdmin()
-        if (currentAdmin && currentAdmin.isAdmin) {
-          navigate('/admin/dashboard')
-        }
-      } else {
-        DataService.clearLocalSessions()
+      const currentAdmin = await DataService.getCurrentAdmin()
+      if (currentAdmin && currentAdmin.isAdmin) {
+        navigate('/admin/dashboard')
       }
     }
     checkLoggedIn()
@@ -69,7 +61,7 @@ const AdminLogin: React.FC = () => {
             className="admin-login-logo-image"
           />
           <h1>{APP_DISPLAY_NAME}</h1>
-          <p>Admin Panel · Version {APP_BUILD_TAG}</p>
+          <p>Admin Panel</p>
         </div>
       </header>
 

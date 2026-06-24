@@ -1,65 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
-    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
-    // Prüft, dass ein Feld beim Update unverändert bleibt (Default für fehlende Felder).
-    function keeps(field, def) {
-      return request.resource.data.get(field, def) == resource.data.get(field, def);
-    }
-
-    // Mitarbeiter inkl. Löhne: nur Admin oder die Person selbst dürfen lesen.
-    match /employees/{uid} {
-      allow read: if isAdmin() || isSelf(uid);
-      allow create, delete: if isAdmin();
-      // Eigenes Profil darf selbst aktualisiert werden (z. B. activeTimeEntryId beim
-      // Ein-/Ausstempeln), aber NICHT Rolle/Lohn/Status/Username.
-      allow update: if isAdmin() || (isSelf(uid)
-        && keeps('isAdmin', false)
-        && keeps('hourlyRate', 0)
-        && keeps('hourlyWage', 0)
-        && keeps('username', '')
-        && keeps('status', 'active'));
-
-      // Überstunden-Tage u. a. Unterdokumente
-      match /{sub=**} {
-        allow read, write: if isAdmin() || isSelf(uid);
-      }
-    }
-
-    // Zeiteinträge: für Angemeldete lesbar (operative Daten); schreiben nur
-    // eigene Einträge oder Admin.
-    match /timeEntries/{id} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin() || (isSignedIn() && request.resource.data.employeeId == request.auth.uid);
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.employeeId == request.auth.uid);
-    }
-
-    // Stammdaten: lesen für Angemeldete, schreiben nur Admin.
-    match /projects/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /customers/{id}     { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /materialTypes/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /vehicles/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
-
-    // Material-Gutschriften (Admin-Übersicht): nur Admin.
-    match /materialCredits/{id} { allow read, write: if isAdmin(); }
-
-    // Datei-Uploads & Fahrzeugnutzung: Angemeldete dürfen anlegen/lesen.
-    match /fileUploads/{id}   { allow read, create: if isSignedIn(); allow update, delete: if isAdmin(); }
-    match /vehicleUsages/{id} { allow read, create: if isSignedIn(); allow update, delete: if isAdmin(); }
-
-    // Urlaubsanträge: eigene anlegen/sehen; Bearbeiten/Genehmigen nur Admin.
-    match /leaveRequests/{id} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.employeeId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.employeeId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    // Alles Übrige (Abrechnungen, HERO-Config, Logs …): nur Admin.
+    // Die App nutzt Firebase Auth (u. a. anonym). Nur angemeldete Clients dürfen zugreifen.
+    // Für Produktion: feinere Regeln (z. B. Admin-Claims, getrennte Leserechte).
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if request.auth != null;
     }
   }
 }

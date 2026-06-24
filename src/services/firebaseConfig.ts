@@ -2,7 +2,6 @@ import { initializeApp } from 'firebase/app'
 import { initializeFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getAuth } from 'firebase/auth'
-import { getFunctions } from 'firebase/functions'
 
 // Firebase-Konfiguration aus Umgebungsvariablen (lokal: .env, Vercel: Environment Variables mit Prefix VITE_)
 const firebaseConfig = {
@@ -35,6 +34,4 @@ export const db = initializeFirestore(app, {
 })
 export const storage = getStorage(app)
 export const auth = getAuth(app)
-// Region muss zur Function-Deployment-Region passen (Standard: us-central1).
-export const functions = getFunctions(app)
 

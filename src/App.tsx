@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DataService } from './services/dataService'
-import { auth } from './services/firebaseConfig'
 import Login from './components/Login'
 import TimeTracking from './components/TimeTracking'
 import VacationRequests from './components/VacationRequests'
@@ -27,20 +26,9 @@ function App() {
   })
 
   useEffect(() => {
-    // Build-Marker: in der Browser-Konsole sichtbar, um zu prüfen, ob die neueste
-    // App-Version geladen ist (nicht eine alte vom Service-Worker zwischengespeichert).
-    console.log('🟢 ZEITERFASSUNG BUILD: AUTH-HARDENING-V3')
-
-    // Geister-Sitzung verhindern: Ist lokal eine Sitzung gespeichert, aber es gibt
-    // keine echte Firebase-Auth-Session (z. B. nach Wegfall der anonymen Anmeldung),
-    // die lokale Sitzung verwerfen -> Nutzer landet sauber im Login statt mit
-    // „Missing or insufficient permissions" hängen zu bleiben.
-    ;(async () => {
-      await DataService.authReady
-      if (!auth.currentUser) {
-        DataService.clearLocalSessions()
-      }
-    })()
+    // Initialize Firebase - DataService initializes itself
+    // Just ensure auth is ready
+    DataService.authReady
 
     // Offline-Upload-Queue starten: reicht zwischengespeicherte Baustellenfotos nach,
     // sobald wieder Netz da ist (auch nach App-Neustart).
