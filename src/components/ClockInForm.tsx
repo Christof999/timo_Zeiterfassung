@@ -21,6 +21,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -60,6 +61,19 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
     return <div className="loading">Projekte werden geladen...</div>
   }
 
+  const term = search.trim().toLowerCase()
+  const filteredProjects = term
+    ? projects.filter((p) => (p.name || '').toLowerCase().includes(term))
+    : projects
+  const filteredCustomers = term
+    ? customers.filter((c) => (c.name || '').toLowerCase().includes(term))
+    : customers
+
+  const switchMode = (next: ClockInMode) => {
+    setMode(next)
+    setSearch('')
+  }
+
   return (
     <div className="clock-in-form">
       <div className="clock-in-mode-toggle" role="tablist">
@@ -68,7 +82,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
           role="tab"
           aria-selected={mode === 'project'}
           className={`btn ${mode === 'project' ? 'primary-btn' : 'secondary-btn'}`}
-          onClick={() => setMode('project')}
+          onClick={() => switchMode('project')}
         >
           Projekt
         </button>
@@ -77,7 +91,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
           role="tab"
           aria-selected={mode === 'customer'}
           className={`btn ${mode === 'customer' ? 'primary-btn' : 'secondary-btn'}`}
-          onClick={() => setMode('customer')}
+          onClick={() => switchMode('customer')}
         >
           Kunde (Kleinauftrag)
         </button>
@@ -87,6 +101,14 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
         {mode === 'project' ? (
           <div className="form-group">
             <label htmlFor="project-select">Projekt auswählen:</label>
+            <input
+              type="text"
+              className="clock-in-search"
+              placeholder="🔍 Suchen (optional)…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
+            />
             <select
               id="project-select"
               value={selectedProjectId}
@@ -94,12 +116,15 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
               required
             >
               <option value="" disabled>Bitte wählen</option>
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name || `Projekt ${project.id}`}
                 </option>
               ))}
             </select>
+            {filteredProjects.length === 0 && (
+              <p className="no-data">Kein Projekt gefunden für „{search.trim()}".</p>
+            )}
           </div>
         ) : (
           <div className="form-group">
@@ -107,19 +132,32 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
             {customers.length === 0 ? (
               <p className="no-data">Keine Kunden vorhanden. Bitte im Admin-Bereich anlegen.</p>
             ) : (
-              <select
-                id="customer-select"
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                required
-              >
-                <option value="" disabled>Bitte wählen</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
-              </select>
+              <>
+                <input
+                  type="text"
+                  className="clock-in-search"
+                  placeholder="🔍 Suchen (optional)…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoComplete="off"
+                />
+                <select
+                  id="customer-select"
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>Bitte wählen</option>
+                  {filteredCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+                {filteredCustomers.length === 0 && (
+                  <p className="no-data">Kein Kunde gefunden für „{search.trim()}".</p>
+                )}
+              </>
             )}
           </div>
         )}

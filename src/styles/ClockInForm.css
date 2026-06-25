@@ -123,3 +123,8 @@
 .clock-in-mode-toggle .btn {
   flex: 1;
 }
+
+/* Suchfeld über der Projekt-/Kundenauswahl */
+.clock-in-search {
+  margin-bottom: 8px;
+}
