@@ -1,0 +1,94 @@
+.searchable-select {
+  position: relative;
+  width: 100%;
+}
+
+.searchable-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  min-height: 48px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: var(--radius-lg, 10px);
+  background: var(--background-color, #fff);
+  color: var(--text-color, #111);
+  font-size: var(--font-size-base, 1rem);
+  text-align: left;
+  cursor: pointer;
+}
+
+.searchable-select.open .searchable-select-trigger {
+  border-color: var(--primary-color, #b91c1c);
+}
+
+.searchable-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchable-select-placeholder {
+  color: var(--text-secondary, #6b7280);
+}
+
+.searchable-select-arrow {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.searchable-select-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--background-color, #fff);
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.searchable-select-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  min-height: 46px;
+  border: none;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  font-size: var(--font-size-base, 1rem);
+  background: var(--surface-2, #f7f7f9);
+  color: var(--text-color, #111);
+  outline: none;
+}
+
+.searchable-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.searchable-select-item {
+  padding: 12px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: var(--font-size-base, 1rem);
+}
+
+.searchable-select-item:hover,
+.searchable-select-item.selected {
+  background: var(--primary-light, rgba(185, 28, 28, 0.1));
+}
+
+.searchable-select-empty {
+  padding: 14px 12px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.9rem;
+  text-align: center;
+}

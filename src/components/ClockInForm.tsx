@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../services/dataService'
 import type { Project, Customer } from '../types'
+import SearchableSelect, { type SearchableOption } from './SearchableSelect'
 import '../styles/ClockInForm.css'
 
 export interface ClockInTarget {
@@ -21,7 +22,6 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -43,6 +43,15 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
     loadData()
   }, [])
 
+  const projectOptions: SearchableOption[] = useMemo(
+    () => projects.map((p) => ({ value: p.id, label: p.name || `Projekt ${p.id}` })),
+    [projects]
+  )
+  const customerOptions: SearchableOption[] = useMemo(
+    () => customers.map((c) => ({ value: c.id!, label: c.name || 'Unbenannter Kunde' })),
+    [customers]
+  )
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (mode === 'project') {
@@ -61,18 +70,8 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
     return <div className="loading">Projekte werden geladen...</div>
   }
 
-  const term = search.trim().toLowerCase()
-  const filteredProjects = term
-    ? projects.filter((p) => (p.name || '').toLowerCase().includes(term))
-    : projects
-  const filteredCustomers = term
-    ? customers.filter((c) => (c.name || '').toLowerCase().includes(term))
-    : customers
-
-  const switchMode = (next: ClockInMode) => {
-    setMode(next)
-    setSearch('')
-  }
+  const canSubmit =
+    mode === 'project' ? !!selectedProjectId : !!selectedCustomerId && customers.length > 0
 
   return (
     <div className="clock-in-form">
@@ -82,7 +81,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
           role="tab"
           aria-selected={mode === 'project'}
           className={`btn ${mode === 'project' ? 'primary-btn' : 'secondary-btn'}`}
-          onClick={() => switchMode('project')}
+          onClick={() => setMode('project')}
         >
           Projekt
         </button>
@@ -91,7 +90,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
           role="tab"
           aria-selected={mode === 'customer'}
           className={`btn ${mode === 'customer' ? 'primary-btn' : 'secondary-btn'}`}
-          onClick={() => switchMode('customer')}
+          onClick={() => setMode('customer')}
         >
           Kunde (Kleinauftrag)
         </button>
@@ -101,30 +100,15 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
         {mode === 'project' ? (
           <div className="form-group">
             <label htmlFor="project-select">Projekt auswählen:</label>
-            <input
-              type="text"
-              className="clock-in-search"
-              placeholder="🔍 Suchen (optional)…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoComplete="off"
-            />
-            <select
+            <SearchableSelect
               id="project-select"
+              options={projectOptions}
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              required
-            >
-              <option value="" disabled>Bitte wählen</option>
-              {filteredProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name || `Projekt ${project.id}`}
-                </option>
-              ))}
-            </select>
-            {filteredProjects.length === 0 && (
-              <p className="no-data">Kein Projekt gefunden für „{search.trim()}".</p>
-            )}
+              onChange={setSelectedProjectId}
+              placeholder="Bitte wählen"
+              searchPlaceholder="🔍 Projekt suchen…"
+              emptyText="Kein Projekt gefunden"
+            />
           </div>
         ) : (
           <div className="form-group">
@@ -132,40 +116,19 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
             {customers.length === 0 ? (
               <p className="no-data">Keine Kunden vorhanden. Bitte im Admin-Bereich anlegen.</p>
             ) : (
-              <>
-                <input
-                  type="text"
-                  className="clock-in-search"
-                  placeholder="🔍 Suchen (optional)…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  autoComplete="off"
-                />
-                <select
-                  id="customer-select"
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Bitte wählen</option>
-                  {filteredCustomers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-                {filteredCustomers.length === 0 && (
-                  <p className="no-data">Kein Kunde gefunden für „{search.trim()}".</p>
-                )}
-              </>
+              <SearchableSelect
+                id="customer-select"
+                options={customerOptions}
+                value={selectedCustomerId}
+                onChange={setSelectedCustomerId}
+                placeholder="Bitte wählen"
+                searchPlaceholder="🔍 Kunde suchen…"
+                emptyText="Kein Kunde gefunden"
+              />
             )}
           </div>
         )}
-        <button
-          type="submit"
-          className="btn primary-btn"
-          disabled={mode === 'customer' && customers.length === 0}
-        >
+        <button type="submit" className="btn primary-btn" disabled={!canSubmit}>
           Einstempeln
         </button>
       </form>
