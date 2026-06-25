@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
 import type { Customer } from '../../types'
 import { toast } from '../ToastContainer'
@@ -33,13 +33,27 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ customer, onClose, onSave
     isActive: true
   })
   const [isLoading, setIsLoading] = useState(false)
+  // Merkt sich den geladenen Anzeigenamen und ob er automatisch war (= aus
+  // Firma/Vor-/Nachname abgeleitet). Dadurch zieht der Name automatisch mit,
+  // solange er nicht bewusst abweichend eingegeben wurde.
+  const nameOriginRef = useRef<{ loadedName: string; wasAuto: boolean }>({ loadedName: '', wasAuto: true })
 
   const isHeroCustomer = customer?.source === 'hero'
 
   useEffect(() => {
     if (customer) {
+      const loadedName = customer.name || ''
+      const derived = buildDisplayName({
+        companyName: customer.companyName || '',
+        firstName: customer.firstName || '',
+        lastName: customer.lastName || ''
+      })
+      nameOriginRef.current = {
+        loadedName,
+        wasAuto: !loadedName.trim() || loadedName.trim() === derived
+      }
       setFormData({
-        name: customer.name || '',
+        name: loadedName,
         companyName: customer.companyName || '',
         firstName: customer.firstName || '',
         lastName: customer.lastName || '',
@@ -49,6 +63,8 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ customer, onClose, onSave
         notes: customer.notes || '',
         isActive: customer.isActive !== false
       })
+    } else {
+      nameOriginRef.current = { loadedName: '', wasAuto: true }
     }
   }, [customer])
 
@@ -57,7 +73,19 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ customer, onClose, onSave
     setIsLoading(true)
 
     try {
-      const name = formData.name.trim() || buildDisplayName(formData)
+      // Anzeigename: bewusst eingegebene Namen bleiben erhalten; ansonsten
+      // automatisch aus Firma/Vor-/Nachname mitziehen.
+      const typed = formData.name.trim()
+      const { loadedName, wasAuto } = nameOriginRef.current
+      const userEditedName = typed !== loadedName.trim()
+      let name: string
+      if (typed && userEditedName) {
+        name = typed
+      } else if (wasAuto) {
+        name = buildDisplayName(formData)
+      } else {
+        name = typed || buildDisplayName(formData)
+      }
       if (!name) {
         toast.error('Bitte einen Namen oder eine Firma angeben.')
         setIsLoading(false)
@@ -111,7 +139,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ customer, onClose, onSave
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Firma oder Name (leer = aus Feldern unten)"
+              placeholder="Automatisch aus Firma/Name – oder eigenen Namen eintippen"
             />
           </div>
           <div className="form-group">
