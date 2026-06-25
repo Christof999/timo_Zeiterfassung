@@ -29,7 +29,7 @@ export type OfferMaterialOption = {
 type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string; defaultQuantity?: number }
 
 /** Standard-Einheiten zur Auswahl (frei ergänzbar). */
-const STANDARD_UNITS = ['Stück', 'Sack', 'kg', 'qm', 'm²', 'lfm', 'l', 'Eimer', 'Rolle']
+const STANDARD_UNITS = ['Stück', 'Sack', 'kg', 'g', 'qm', 'm²', 'lfm', 'l', 'Eimer', 'Rolle', 'Kartusche']
 const UNIT_OPTIONS: PickOption[] = STANDARD_UNITS.map((u) => ({ name: u }))
 
 function newRow(): MaterialUsageRow {
