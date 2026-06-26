@@ -1,9 +1,17 @@
 .onboarding-screen {
+  /* Exakte Viewport-Hoehe + eigener Scroll-Container: die Onboarding-Karte ist
+     auf Handys haeufig hoeher als der Bildschirm (Logo + Vorschau + Text +
+     Buttons). Frueher wurde sie mit align-items/justify-content zentriert und
+     ohne eigenen Scroll abgeschnitten -> per Touch (v.a. Android) kam man nicht
+     an "Weiter"/"Ueberspringen" und konnte nicht scrollen. Jetzt scrollt der
+     Screen selbst zuverlaessig. */
   min-height: 100vh;
   min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: var(--spacing-lg);
   background: linear-gradient(165deg, var(--primary-light) 0%, var(--light-color) 45%, var(--accent-light) 100%);
 }
@@ -11,6 +19,9 @@
 .onboarding-card {
   width: 100%;
   max-width: 560px;
+  /* margin:auto zentriert die Karte, wenn sie passt, und kollabiert sauber,
+     wenn sie hoeher als der Screen ist (Oberkante bleibt erreichbar). */
+  margin: auto;
   background: var(--card-background);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);

@@ -128,7 +128,13 @@ body {
 
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
+  /* Horizontales Scrollen verhindern, ABER vertikales Scrollen nicht brechen.
+     "overflow-x: hidden" auf html UND body erzeugt auf Android Chrome zwei
+     verschachtelte Scroll-Container; per Touch bleibt der Scroll darin haengen
+     und die Seite laesst sich nicht mehr hoch-/runterwischen (auf iOS unkritisch).
+     "overflow-x: clip" beschneidet horizontal, ohne einen Scroll-Container und
+     damit die Falle zu erzeugen. */
+  overflow-x: clip;
   /* Prevent horizontal scroll */
   position: relative;
 }
