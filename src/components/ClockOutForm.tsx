@@ -102,6 +102,17 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       toast.error('Pausenzeit: bitte eine ganze Zahl zwischen 0 und 1440 Minuten.')
       return null
     }
+    // Pause darf nicht länger sein als die bisher gestempelte Anwesenheit –
+    // sonst ergäbe sich eine negative Arbeitszeit (würde als "-" angezeigt).
+    if (clockInTime) {
+      const elapsedMin = Math.floor((Date.now() - clockInTime.getTime()) / 60000)
+      if (elapsedMin >= 0 && n > elapsedMin) {
+        toast.error(
+          `Die Pause (${n} Min.) ist länger als die bisher gestempelte Zeit (${elapsedMin} Min.). Bitte korrigieren.`
+        )
+        return null
+      }
+    }
     return n
   }
 

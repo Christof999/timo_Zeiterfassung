@@ -2847,7 +2847,9 @@ class DataServiceClass {
         const pauseTotalTime = entry.pauseTotalTime || 0
         const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
         const hours = actualWorkTime / (1000 * 60 * 60)
-        totalHours += hours
+        // Negative Arbeitszeit (Pause länger als gestempelte Zeit) nicht vom
+        // Gesamttotal abziehen – konsistent mit der Überstunden-Berechnung.
+        totalHours += hours > 0 ? hours : 0
       }
     })
     

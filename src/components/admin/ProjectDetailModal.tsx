@@ -278,8 +278,14 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
     const hours = actualWorkTime / (1000 * 60 * 60)
 
-    if (isNaN(hours) || hours < 0) {
+    if (isNaN(hours)) {
       return '-'
+    }
+
+    // Negative Arbeitszeit (Pause länger als gestempelte Zeit) als 0,00h zeigen,
+    // statt verwirrend "-" – z. B. bei sehr kurzen Test-Stempelungen.
+    if (hours < 0) {
+      return '0.00h'
     }
 
     return hours.toFixed(2) + 'h'
