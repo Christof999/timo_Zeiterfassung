@@ -297,11 +297,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const [inH, inM] = clockIn.split(':').map(Number)
     const [outH, outM] = clockOut.split(':').map(Number)
     if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return '-'
-    let totalMinutes = (outH * 60 + outM) - (inH * 60 + inM) - pauseMinutes
-    if (totalMinutes < 0) totalMinutes += 24 * 60
-    totalMinutes += extraMinutes
+    // Brutto-Anwesenheit (Gehen - Kommen). Nur wenn DIESE negativ ist, lag die
+    // Stempelung ueber Mitternacht -> 24h addieren. Die Pause erst DANACH
+    // abziehen, sonst wuerde eine Pause > Arbeitszeit faelschlich als
+    // Nachtschicht interpretiert (z. B. 10 Min - 30 Min Pause -> 23:40).
+    let grossMinutes = (outH * 60 + outM) - (inH * 60 + inM)
+    if (grossMinutes < 0) grossMinutes += 24 * 60
+    let totalMinutes = grossMinutes - pauseMinutes + extraMinutes
+    // Negative Arbeitszeit (Pause laenger als Anwesenheit) als 0:00 zeigen.
+    if (totalMinutes < 0) totalMinutes = 0
     const hours = Math.floor(totalMinutes / 60)
-    const minutes = Math.abs(totalMinutes % 60)
+    const minutes = totalMinutes % 60
     return `${hours}:${minutes.toString().padStart(2, '0')}`
   }
 
@@ -316,9 +322,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const [inH, inM] = clockIn.split(':').map(Number)
     const [outH, outM] = clockOut.split(':').map(Number)
     if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0
-    let totalMinutes = outH * 60 + outM - (inH * 60 + inM) - pauseMinutes
-    if (totalMinutes < 0) totalMinutes += 24 * 60
-    return Math.max(0, totalMinutes)
+    // Mitternachts-Erkennung auf Basis der Brutto-Anwesenheit, NICHT nach
+    // Pausenabzug (sonst wird Pause > Arbeitszeit als Nachtschicht missgedeutet).
+    let grossMinutes = outH * 60 + outM - (inH * 60 + inM)
+    if (grossMinutes < 0) grossMinutes += 24 * 60
+    return Math.max(0, grossMinutes - pauseMinutes)
   }
 
   const minutesToHoursLabel = (totalMinutes: number): string => {
