@@ -133,3 +133,43 @@
 .manual-time-entry-secondary-btn:active:not(:disabled) {
   filter: brightness(0.95);
 }
+
+/* Bearbeitbare bestehende Live-Berichte im Nachtrag-Modal */
+.retro-live-edit-section {
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.retro-live-edit-title {
+  margin: 0 0 var(--spacing-sm);
+  font-size: 0.95rem;
+}
+
+.retro-live-edit-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+.retro-live-edit-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.retro-live-edit-counts {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.retro-live-edit-item textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.retro-live-edit-save {
+  align-self: flex-end;
+}

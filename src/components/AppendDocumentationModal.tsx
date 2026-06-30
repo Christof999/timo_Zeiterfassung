@@ -46,7 +46,31 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
   const [progressStep, setProgressStep] = useState(0)
   const [progressTotal, setProgressTotal] = useState(0)
 
+  // Bereits erfasste Live-Dokumentationen (z. B. während des Einstempelns) – bearbeitbar
+  const liveBlocks = timeEntry.liveDocumentation || []
+  const [liveNotes, setLiveNotes] = useState<string[]>(() =>
+    liveBlocks.map((block) => (block.notes || '').trim())
+  )
+  const [savingLiveIndex, setSavingLiveIndex] = useState<number | null>(null)
+
   const bookingDateForEntry = clockInToLocalDateString(timeEntry.clockInTime)
+
+  const handleSaveLiveBlock = async (index: number) => {
+    setSavingLiveIndex(index)
+    try {
+      await withTimeout(
+        DataService.updateLiveDocumentationNotes(timeEntry.id, index, liveNotes[index].trim()),
+        30_000,
+        'Speichern hat zu lange gedauert — vermutlich schlechtes Netz.'
+      )
+      toast.success('Bericht aktualisiert.')
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
+      toast.error('Fehler beim Speichern: ' + msg)
+    } finally {
+      setSavingLiveIndex(null)
+    }
+  }
 
   const mergeFileList = (existing: unknown, additions: FileUpload[]): unknown[] => {
     const base = Array.isArray(existing) ? [...existing] : []
@@ -183,6 +207,50 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
             Gleicher Umfang wie beim Ausstempeln mit Dokumentation (Notizen, Baustellenfotos und
             Belege für den Tag des Eintrags: {bookingDateForEntry}).
           </p>
+
+          {liveBlocks.length > 0 && (
+            <div className="retro-live-edit-section">
+              <h4 className="retro-live-edit-title">Bereits erfasste Berichte bearbeiten</h4>
+              {liveBlocks.map((block, index) => {
+                const original = (block.notes || '').trim()
+                const changed = liveNotes[index].trim() !== original
+                const counts =
+                  (block.photoCount || 0) > 0 || (block.documentCount || 0) > 0
+                    ? `${block.photoCount || 0} Fotos · ${block.documentCount || 0} Dok.`
+                    : ''
+                return (
+                  <div key={index} className="retro-live-edit-item">
+                    <div className="retro-live-edit-meta">
+                      <strong>{block.addedByName || 'Bericht'}</strong>
+                      {counts && <span className="retro-live-edit-counts">{counts}</span>}
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={liveNotes[index]}
+                      onChange={(e) =>
+                        setLiveNotes((prev) => {
+                          const next = [...prev]
+                          next[index] = e.target.value
+                          return next
+                        })
+                      }
+                      placeholder="Berichtstext..."
+                      disabled={savingLiveIndex === index}
+                    />
+                    <button
+                      type="button"
+                      className="btn secondary-btn retro-live-edit-save"
+                      onClick={() => handleSaveLiveBlock(index)}
+                      disabled={!changed || savingLiveIndex === index}
+                    >
+                      {savingLiveIndex === index ? 'Speichere…' : 'Änderung speichern'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="retro-doc-notes">Notizen zur durchgeführten Arbeit:</label>

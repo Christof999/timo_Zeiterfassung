@@ -1824,6 +1824,36 @@ class DataServiceClass {
     }
   }
 
+  /** Bearbeitet den Text eines bestehenden Live-Dokumentations-Berichts (z. B. durch den Mitarbeiter). */
+  async updateLiveDocumentationNotes(
+    timeEntryId: string,
+    index: number,
+    notes: string
+  ): Promise<void> {
+    await this.authReadyPromise
+    try {
+      const timeEntryRef = doc(db, 'timeEntries', timeEntryId)
+      const timeEntryDoc = await getDoc(timeEntryRef)
+
+      if (!timeEntryDoc.exists()) {
+        throw new Error('Zeiteintrag nicht gefunden')
+      }
+
+      const live = [...((timeEntryDoc.data().liveDocumentation as any[]) || [])]
+      if (!live[index]) {
+        throw new Error('Bericht nicht gefunden')
+      }
+
+      // serverTimestamp() ist in Array-Elementen nicht erlaubt → Timestamp.now()
+      live[index] = { ...live[index], notes, editedAt: Timestamp.now() }
+
+      await updateDoc(timeEntryRef, { liveDocumentation: live })
+    } catch (error) {
+      console.error('Fehler beim Bearbeiten des Berichts:', error)
+      throw error
+    }
+  }
+
   // Material types (Verbrauchsmaterial für Ausstempeln / Nachkalkulation)
   async getActiveMaterialTypes(): Promise<MaterialType[]> {
     await this.authReadyPromise
