@@ -284,6 +284,28 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     })
   }
 
+  // Dezimalstunden (z. B. 7.83) in „X Std Y Min" umwandeln.
+  const formatHoursMinutes = (decimalHours: number): string => {
+    if (!decimalHours || decimalHours <= 0) return '0 Std 0 Min'
+    const totalMinutes = Math.round(decimalHours * 60)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    return `${hours} Std ${minutes} Min`
+  }
+
+  // Glättet eine Uhrzeit auf das nächstgelegene 30-Minuten-Raster, z. B. 15:39 → 15:30, 15:23 → 15:30.
+  // Wird nur für die Anzeige & Stundenberechnung in diesem Projektbericht verwendet
+  // (gespeicherte Zeiten, Lohn- und Überstundenberechnung bleiben unverändert).
+  const TIME_ROUND_STEP_MINUTES = 30
+  const roundTimeToStep = (date: Date | null): Date | null => {
+    if (!date) return null
+    const minutes = date.getHours() * 60 + date.getMinutes()
+    const snapped = Math.round(minutes / TIME_ROUND_STEP_MINUTES) * TIME_ROUND_STEP_MINUTES
+    const rounded = new Date(date)
+    rounded.setHours(0, snapped, 0, 0)
+    return rounded
+  }
+
   const getProjectName = (projectId: string): string => {
     const project = projects.find(p => p.id === projectId)
     return project?.name || projectId
@@ -667,7 +689,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         dayMap.set(dateKey, bucket)
       }
       bucket.entries.push(entry)
-      const diffMs = clockOut.getTime() - clockIn.getTime()
+      // Stunden aus den geglätteten Zeiten berechnen (nur für diesen Bericht)
+      const rIn = roundTimeToStep(clockIn) || clockIn
+      const rOut = roundTimeToStep(clockOut) || clockOut
+      const diffMs = rOut.getTime() - rIn.getTime()
       const pauseMs = entry.pauseTotalTime || 0
       const workMs = Math.max(0, diffMs - pauseMs) + getReturnTravelCreditMs(entry)
       const hours = workMs / (1000 * 60 * 60)
@@ -1882,7 +1907,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                             <div className="project-day-title">
                               <strong>{day.dateLabel}</strong>
                               <span className="project-day-hours">
-                                Σ {day.totalHours.toFixed(2)} h (alle Mitarbeiter)
+                                Σ {formatHoursMinutes(day.totalHours)} (alle Mitarbeiter)
                               </span>
                             </div>
                             <button
@@ -1908,7 +1933,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                                 {day.byEmployee.map(row => (
                                   <tr key={row.employeeId}>
                                     <td>{row.name}</td>
-                                    <td className="number-cell">{row.hours.toFixed(2)} h</td>
+                                    <td className="number-cell">{formatHoursMinutes(row.hours)}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1922,8 +1947,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               <ul className="project-entry-text-list">
                                 {day.entries.map(entry => {
                                   const empName = getEmployeeDisplayName(entry.employeeId)
-                                  const cin = formatTimeForInput(convertToDate(entry.clockInTime))
-                                  const cout = formatTimeForInput(convertToDate(entry.clockOutTime))
+                                  const cin = formatTimeForInput(roundTimeToStep(convertToDate(entry.clockInTime)))
+                                  const cout = formatTimeForInput(roundTimeToStep(convertToDate(entry.clockOutTime)))
                                   const note = (entry.notes || '').trim()
                                   const live = entry.liveDocumentation || []
                                   const hasReport = !!note || live.length > 0
@@ -2086,8 +2111,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           {journalEntryDetail && (() => {
             const { entry, dayLabel } = journalEntryDetail
             const empName = getEmployeeDisplayName(entry.employeeId)
-            const cin = formatTimeForInput(convertToDate(entry.clockInTime))
-            const cout = formatTimeForInput(convertToDate(entry.clockOutTime))
+            const cin = formatTimeForInput(roundTimeToStep(convertToDate(entry.clockInTime)))
+            const cout = formatTimeForInput(roundTimeToStep(convertToDate(entry.clockOutTime)))
             const note = (entry.notes || '').trim()
             const live = entry.liveDocumentation || []
             const hasContent = !!note || live.length > 0
