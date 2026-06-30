@@ -13,6 +13,7 @@ import { Timestamp } from 'firebase/firestore'
 import { toast } from '../ToastContainer'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
 import { getReturnTravelCreditMs } from '../../utils/returnTravel'
+import { collectEntryDocumentation } from '../../utils/entryDocumentation'
 import '../../styles/Modal.css'
 
 interface ProjectDetailModalProps {
@@ -595,6 +596,20 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             )}
           </div>
 
+          {(() => {
+            const reportText = collectEntryDocumentation(timeEntryDetail).trim()
+            return (
+              <div className="time-entry-location-block time-entry-report-block">
+                <span className="time-entry-location-label">Bericht / Dokumentation</span>
+                {reportText ? (
+                  <p className="time-entry-report-text">{reportText}</p>
+                ) : (
+                  <p className="time-entry-location-missing">Kein schriftlicher Bericht erfasst</p>
+                )}
+              </div>
+            )
+          })()}
+
           <div className="time-entry-move-section">
             {!canMoveEntry ? (
               <p className="time-entry-move-disabled-hint">
@@ -937,7 +952,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 timeEntries.map((entry) => {
                   const clockInDate = convertToDate(entry.clockInTime)
                   const clockOutDate = convertToDate(entry.clockOutTime)
-                  
+                  const reportText = collectEntryDocumentation(entry).replace(/\s+/g, ' ').trim()
+
                   return (
                     <div
                       key={entry.id}
@@ -983,6 +999,11 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                             : 'Eingestempelt'}
                         </span>
                       </div>
+                      {reportText ? (
+                        <p className="time-entry-report-preview">📝 {reportText}</p>
+                      ) : (
+                        <p className="time-entry-report-preview is-empty">Kein schriftlicher Bericht</p>
+                      )}
                     </div>
                   )
                 })
