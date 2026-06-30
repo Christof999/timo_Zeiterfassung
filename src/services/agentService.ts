@@ -1,6 +1,7 @@
 import { DataService } from './dataService'
 import { auth } from './firebaseConfig'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
+import { roundedSpanMs } from '../utils/timeRounding'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import type { TimeEntry, TimeEntryMaterialUsage } from '../types'
 
@@ -70,7 +71,8 @@ function durationHours(entry: TimeEntry): number | null {
   const start = toJsDate(entry.clockInTime)
   const end = toJsDate(entry.clockOutTime)
   if (!start || !end) return null
-  const grossMs = end.getTime() - start.getTime()
+  // Zeiten auf 15-Min-Raster glätten (einheitliche Basis)
+  const grossMs = roundedSpanMs(start, end)
   const pauseMs = typeof entry.pauseTotalTime === 'number' ? entry.pauseTotalTime : 0
   return Math.max(0, (grossMs - pauseMs) / 3_600_000)
 }

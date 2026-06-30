@@ -7,6 +7,7 @@ import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
 import { getBavariaHolidayName } from '../../../utils/bavariaHolidays'
 import { collectEntryDocumentation } from '../../../utils/entryDocumentation'
 import { getFileImageSrc } from '../../../utils/fileImageSrc'
+import { roundTimeToStep } from '../../../utils/timeRounding'
 import SearchableSelect from '../../SearchableSelect'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
@@ -293,19 +294,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     return `${hours} Std ${minutes} Min`
   }
 
-  // Glättet eine Uhrzeit auf das nächstgelegene 30-Minuten-Raster, z. B. 15:39 → 15:30, 15:23 → 15:30.
-  // Wird nur für die Anzeige & Stundenberechnung in diesem Projektbericht verwendet
-  // (gespeicherte Zeiten, Lohn- und Überstundenberechnung bleiben unverändert).
-  const TIME_ROUND_STEP_MINUTES = 30
-  const roundTimeToStep = (date: Date | null): Date | null => {
-    if (!date) return null
-    const minutes = date.getHours() * 60 + date.getMinutes()
-    const snapped = Math.round(minutes / TIME_ROUND_STEP_MINUTES) * TIME_ROUND_STEP_MINUTES
-    const rounded = new Date(date)
-    rounded.setHours(0, snapped, 0, 0)
-    return rounded
-  }
-
   const getProjectName = (projectId: string): string => {
     const project = projects.find(p => p.id === projectId)
     return project?.name || projectId
@@ -426,8 +414,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const entries: ReportEntry[] = filteredEntries.map(entry => {
         const clockInDate = convertToDate(entry.clockInTime)
         const clockOutDate = convertToDate(entry.clockOutTime)
-        const clockIn = formatTimeForInput(clockInDate)
-        const clockOut = formatTimeForInput(clockOutDate)
+        // Zeiten auf 15-Min-Raster glätten (Anzeige + Stundenberechnung)
+        const clockIn = formatTimeForInput(roundTimeToStep(clockInDate))
+        const clockOut = formatTimeForInput(roundTimeToStep(clockOutDate))
         const pauseMs = entry.pauseTotalTime || 0
         const pauseMinutes = msToMinutes(pauseMs)
 
@@ -557,8 +546,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const original = prev[index].originalEntry
       const clockInDate = convertToDate(original.clockInTime)
       const clockOutDate = convertToDate(original.clockOutTime)
-      const clockIn = formatTimeForInput(clockInDate)
-      const clockOut = formatTimeForInput(clockOutDate)
+      const clockIn = formatTimeForInput(roundTimeToStep(clockInDate))
+      const clockOut = formatTimeForInput(roundTimeToStep(clockOutDate))
       const pauseMs = original.pauseTotalTime || 0
       const pauseMinutes = msToMinutes(pauseMs)
       updated[index] = {
@@ -804,8 +793,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         const cin = convertToDate(e.clockInTime)
         const cout = convertToDate(e.clockOutTime)
         const dateStr = cin ? cin.toLocaleDateString('de-DE') : '-'
-        const tIn = formatTimeForInput(cin)
-        const tOut = formatTimeForInput(cout)
+        // Zeiten auf 15-Min-Raster glätten (Anzeige + Stundenberechnung)
+        const tIn = formatTimeForInput(roundTimeToStep(cin))
+        const tOut = formatTimeForInput(roundTimeToStep(cout))
         const pauseMin = msToMinutes(e.pauseTotalTime || 0)
         const wh = calculateWorkHours(tIn, tOut, pauseMin)
         const name = getEmployeeDisplayName(e.employeeId)
@@ -907,8 +897,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         const clockIn = convertToDate(entry.clockInTime)
         const clockOut = convertToDate(entry.clockOutTime)
         if (!clockIn || !clockOut) return
-        
-        const diffMs = clockOut.getTime() - clockIn.getTime()
+
+        // Zeiten auf 15-Min-Raster glätten (einheitliche Basis für Kosten)
+        const diffMs = roundTimeToStep(clockOut).getTime() - roundTimeToStep(clockIn).getTime()
         const pauseMs = entry.pauseTotalTime || 0
         const workMs = diffMs - pauseMs + getReturnTravelCreditMs(entry)
         const hours = workMs / (1000 * 60 * 60)

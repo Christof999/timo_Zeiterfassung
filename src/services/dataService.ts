@@ -42,6 +42,7 @@ import { getFileImageSrc } from '../utils/fileImageSrc'
 import { toFileUploadRef } from '../utils/fileUploadRef'
 import { sanitizeTimeEntryForRead } from '../utils/sanitizeTimeEntry'
 import { estimateReturnTravel, getReturnTravelCreditMs } from '../utils/returnTravel'
+import { roundTimeToStep, roundedSpanMs } from '../utils/timeRounding'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
 
@@ -832,8 +833,9 @@ class DataServiceClass {
   private overtimeWorkedMinutesForEntry(entry: TimeEntry): number {
     if (entry.isVacationDay) return 0
     if (!entry.clockInTime || !entry.clockOutTime) return 0
-    const inMs = this.convertToDate(entry.clockInTime).getTime()
-    const outMs = this.convertToDate(entry.clockOutTime).getTime()
+    // Zeiten auf 15-Min-Raster glätten (einheitliche Basis für Überstunden)
+    const inMs = roundTimeToStep(this.convertToDate(entry.clockInTime)).getTime()
+    const outMs = roundTimeToStep(this.convertToDate(entry.clockOutTime)).getTime()
     const pauseMs = Number(entry.pauseTotalTime) || 0
     const creditMs = getReturnTravelCreditMs(entry)
     const ms = outMs - inMs - pauseMs + creditMs
@@ -2872,8 +2874,9 @@ class DataServiceClass {
           : entry.clockOutTime instanceof Date
           ? entry.clockOutTime
           : new Date(entry.clockOutTime)
-        
-        const diffMs = clockOut.getTime() - clockIn.getTime()
+
+        // Zeiten auf 15-Min-Raster glätten (einheitliche Basis)
+        const diffMs = roundedSpanMs(clockIn, clockOut)
         const pauseTotalTime = entry.pauseTotalTime || 0
         const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
         const hours = actualWorkTime / (1000 * 60 * 60)

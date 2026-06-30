@@ -3,6 +3,7 @@ import { DataService } from '../services/dataService'
 import type { TimeEntry, Project } from '../types'
 import { Timestamp } from 'firebase/firestore'
 import { getReturnTravelCreditMs } from '../utils/returnTravel'
+import { roundedSpanMs } from '../utils/timeRounding'
 import '../styles/RecentActivities.css'
 
 interface RecentActivitiesProps {
@@ -92,7 +93,8 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
       ? entry.clockOutTime
       : new Date(entry.clockOutTime)
 
-    const diffMs = clockOut.getTime() - clockIn.getTime()
+    // Zeiten auf 15-Min-Raster glätten (einheitliche Basis)
+    const diffMs = roundedSpanMs(clockIn, clockOut)
     const pauseTotalTime = entry.pauseTotalTime || 0
     const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
     const hours = actualWorkTime / (1000 * 60 * 60)

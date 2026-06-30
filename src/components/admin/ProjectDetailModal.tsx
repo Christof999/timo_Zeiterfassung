@@ -13,6 +13,7 @@ import { Timestamp } from 'firebase/firestore'
 import { toast } from '../ToastContainer'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
 import { getReturnTravelCreditMs } from '../../utils/returnTravel'
+import { roundedSpanMs } from '../../utils/timeRounding'
 import { collectEntryDocumentation } from '../../utils/entryDocumentation'
 import '../../styles/Modal.css'
 
@@ -274,7 +275,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       return '-'
     }
 
-    const diffMs = clockOut.getTime() - clockIn.getTime()
+    // Zeiten auf 15-Min-Raster glätten (einheitliche Basis)
+    const diffMs = roundedSpanMs(clockIn, clockOut)
     const pauseTotalTime = entry.pauseTotalTime || 0
     const actualWorkTime = diffMs - pauseTotalTime + getReturnTravelCreditMs(entry)
     const hours = actualWorkTime / (1000 * 60 * 60)

@@ -3,6 +3,7 @@ import { DataService } from '../../services/dataService'
 import type { TimeEntry, Project } from '../../types'
 import { toast } from '../ToastContainer'
 import { formatDateForInputLocal } from '../../utils/dateUtils'
+import { roundedSpanMs } from '../../utils/timeRounding'
 import '../../styles/Modal.css'
 
 interface TimeEntryEditModalProps {
@@ -138,8 +139,10 @@ const TimeEntryEditModal: React.FC<TimeEntryEditModalProps> = ({
     
     if (clockOut <= clockIn) return 'Ungültig'
 
-    let diffMs = clockOut.getTime() - clockIn.getTime()
+    // Zeiten auf 15-Min-Raster glätten (einheitliche Basis)
+    let diffMs = roundedSpanMs(clockIn, clockOut)
     diffMs -= formData.pauseMinutes * 60 * 1000
+    if (diffMs < 0) diffMs = 0
 
     const hours = Math.floor(diffMs / (1000 * 60 * 60))
     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
