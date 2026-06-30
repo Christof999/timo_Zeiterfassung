@@ -7,6 +7,7 @@ import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
 import { getBavariaHolidayName } from '../../../utils/bavariaHolidays'
 import { collectEntryDocumentation } from '../../../utils/entryDocumentation'
 import { getFileImageSrc } from '../../../utils/fileImageSrc'
+import SearchableSelect from '../../SearchableSelect'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
 
@@ -1677,12 +1678,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
             <div className="filter-row">
               <div className="filter-group">
                 <label>Projekt:</label>
-                <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-                  <option value="">-- Bitte wählen --</option>
-                  {projects.map(proj => (
-                    <option key={proj.id} value={proj.id}>{proj.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={projects.map(proj => ({
+                    value: proj.id,
+                    label: proj.client ? `${proj.name} (${proj.client})` : proj.name || proj.id
+                  }))}
+                  value={selectedProjectId}
+                  onChange={setSelectedProjectId}
+                  placeholder="-- Bitte wählen --"
+                  searchPlaceholder="Projekt oder Kunde suchen…"
+                  emptyText="Kein passendes Projekt"
+                />
               </div>
             </div>
             

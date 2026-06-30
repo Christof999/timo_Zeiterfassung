@@ -227,7 +227,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             <input
               type="text"
               inputMode="decimal"
-              placeholder="z.B. 12,5 — aus Zeiten (Tages-Summe über 8 Std) berechnet"
+              placeholder="z.B. 12,5 — aus Zeiten (Tages-Summe über 8,5 Std) berechnet"
               value={formData.overtimeBalanceHours}
               onChange={e => setFormData({ ...formData, overtimeBalanceHours: e.target.value })}
             />

@@ -3,6 +3,7 @@ import { DataService } from '../services/dataService'
 import type { TimeEntry, Project, Employee } from '../types'
 import { Timestamp } from 'firebase/firestore'
 import AppendDocumentationModal from './AppendDocumentationModal'
+import { collectEntryDocumentation } from '../utils/entryDocumentation'
 import '../styles/Modal.css'
 import '../styles/RetroactiveDocumentationModal.css'
 
@@ -77,6 +78,12 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
     return p?.name || 'Unbekanntes Projekt'
   }
 
+  const reportPreview = (entry: TimeEntry): string => {
+    const text = collectEntryDocumentation(entry).replace(/\s+/g, ' ').trim()
+    if (!text) return ''
+    return text.length > 140 ? `${text.slice(0, 140)}…` : text
+  }
+
   const formatDay = (entry: TimeEntry): string => {
     const d = toDate(entry.clockInTime)
     return d
@@ -101,8 +108,8 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
           </div>
           <div className="modal-body">
             <p className="form-hint retro-doc-list-intro">
-              Wählen Sie einen abgeschlossenen Zeiteintrag, um die Dokumentation (wie beim Ausstempeln mit
-              Dokumentation) nachzutragen.
+              Ihre abgeschlossenen Zeiteinträge mit Projekt. Tippen Sie auf einen Eintrag, um Ihren
+              Bericht anzusehen, zu bearbeiten oder nachzutragen.
             </p>
 
             {isLoading ? (
@@ -111,21 +118,35 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
               <p className="no-data">Keine abgeschlossenen Zeiteinträge vorhanden.</p>
             ) : (
               <ul className="retro-doc-entry-list">
-                {entries.map((entry) => (
-                  <li key={entry.id}>
-                    <button
-                      type="button"
-                      className="retro-doc-entry-row"
-                      onClick={() => setSelectedEntry(entry)}
-                    >
-                      <span className="retro-doc-entry-date">{formatDay(entry)}</span>
-                      <span className="retro-doc-entry-project">{projectName(entry.projectId)}</span>
-                      <span className="retro-doc-entry-chevron" aria-hidden="true">
-                        ›
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {entries.map((entry) => {
+                  const preview = reportPreview(entry)
+                  return (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        className="retro-doc-entry-row"
+                        onClick={() => setSelectedEntry(entry)}
+                      >
+                        <span className="retro-doc-entry-main">
+                          <span className="retro-doc-entry-head">
+                            <span className="retro-doc-entry-date">{formatDay(entry)}</span>
+                            <span className="retro-doc-entry-project">{projectName(entry.projectId)}</span>
+                          </span>
+                          {preview ? (
+                            <span className="retro-doc-entry-preview">{preview}</span>
+                          ) : (
+                            <span className="retro-doc-entry-preview is-empty">
+                              Noch kein Bericht – tippen zum Nachtragen
+                            </span>
+                          )}
+                        </span>
+                        <span className="retro-doc-entry-chevron" aria-hidden="true">
+                          ›
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

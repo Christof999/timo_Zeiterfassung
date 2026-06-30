@@ -825,8 +825,8 @@ class DataServiceClass {
     }
   }
 
-  /** Reguläre Tagesarbeitszeit (ohne Pause) in Minuten. */
-  private static readonly REGULAR_DAY_MINUTES = 8 * 60
+  /** Reguläre Tagesarbeitszeit (ohne Pause) in Minuten. Überstunden entstehen erst darüber. */
+  private static readonly REGULAR_DAY_MINUTES = 8.5 * 60
 
   /** Gebuchte Arbeitsminuten eines Eintrags (Kommen − Gehen − Pause + Rückfahrt-Gutschrift). */
   private overtimeWorkedMinutesForEntry(entry: TimeEntry): number {
@@ -840,7 +840,7 @@ class DataServiceClass {
     return ms > 0 ? ms / 60000 : 0
   }
 
-  /** Überstunden eines Kalendertags = max(0, Tages-Summe − 8 Std). */
+  /** Überstunden eines Kalendertags = max(0, Tages-Summe − 8,5 Std). */
   private async overtimeMinutesForDay(employeeId: string, dateKey: string): Promise<number> {
     const entries = await this.getTimeEntriesByEmployeeId(employeeId)
     let dayMinutes = 0
@@ -950,7 +950,7 @@ class DataServiceClass {
 
   /**
    * Vollständige Neuberechnung des Überstundenkontos eines Mitarbeiters:
-   * verdiente Überstunden (Tages-Summen über 8 Std) minus genehmigte
+   * verdiente Überstunden (Tages-Summen über 8,5 Std) minus genehmigte
    * „Urlaub auf Überstunden"-Tage. Setzt den Saldo neu und schreibt die
    * Tageswerte. Dient als Korrektur-/Migrations-Button.
    */
@@ -2652,7 +2652,7 @@ class DataServiceClass {
 
         // „Urlaub auf Überstunden": benötigte Stunden vom Überstundenkonto abziehen
         if (leaveRequest.type === 'overtime') {
-          const neededMinutes = (Number(leaveRequest.workingDays) || 0) * 8 * 60
+          const neededMinutes = (Number(leaveRequest.workingDays) || 0) * DataServiceClass.REGULAR_DAY_MINUTES
           const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
           const employeeDoc = await transaction.get(employeeRef)
           if (!employeeDoc.exists()) {

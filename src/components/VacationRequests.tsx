@@ -7,6 +7,10 @@ import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 
+// Reguläre Tagesarbeitszeit in Minuten (= Kosten eines „Urlaub auf Überstunden"-Tages).
+// Muss mit DataService.REGULAR_DAY_MINUTES übereinstimmen.
+const REGULAR_DAY_MINUTES = 8.5 * 60
+
 const VacationRequests: React.FC = () => {
   const navigate = useNavigate()
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
@@ -86,7 +90,7 @@ const VacationRequests: React.FC = () => {
     }
 
     if (formData.type === 'overtime') {
-      const neededMinutes = workingDays * 8 * 60
+      const neededMinutes = workingDays * REGULAR_DAY_MINUTES
       if (overtimeMinutes < neededMinutes) {
         toast.error(
           `Nicht genügend Überstunden: ${overtimeHoursLabel} h vorhanden, ${workingDays} Tag(e) benötigen ${Math.floor(neededMinutes / 60)}:00 h.`
@@ -207,8 +211,8 @@ const VacationRequests: React.FC = () => {
   // Überstundenkonto
   const overtimeMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
   const overtimeHoursLabel = `${Math.floor(overtimeMinutes / 60)}:${String(overtimeMinutes % 60).padStart(2, '0')}`
-  const overtimeDaysAvailable = Math.floor(overtimeMinutes / (8 * 60))
-  const canUseOvertime = overtimeMinutes >= 8 * 60
+  const overtimeDaysAvailable = Math.floor(overtimeMinutes / REGULAR_DAY_MINUTES)
+  const canUseOvertime = overtimeMinutes >= REGULAR_DAY_MINUTES
 
   // Min-Datum für Datumseingaben (heute)
   const today = getTodayLocalDateString()

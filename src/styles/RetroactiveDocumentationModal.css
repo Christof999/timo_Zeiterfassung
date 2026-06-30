@@ -32,7 +32,7 @@
 .retro-doc-entry-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
@@ -51,6 +51,20 @@
   border-color: var(--border-color);
 }
 
+.retro-doc-entry-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.retro-doc-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
 .retro-doc-entry-date {
   font-weight: 600;
   font-size: 0.9375rem;
@@ -64,6 +78,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 12rem;
+}
+
+.retro-doc-entry-preview {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.retro-doc-entry-preview.is-empty {
+  font-style: italic;
+  color: var(--text-muted);
 }
 
 .retro-doc-entry-chevron {
