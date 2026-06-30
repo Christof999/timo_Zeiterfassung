@@ -95,6 +95,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
   const [expandedProjectDays, setExpandedProjectDays] = useState<Set<string>>(new Set())
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
+  const [journalEntryDetail, setJournalEntryDetail] = useState<{ entry: TimeEntry; dayLabel: string } | null>(null)
   const [useTimeFilter, setUseTimeFilter] = useState(false)
   const [isPreparingPrint, setIsPreparingPrint] = useState(false)
   const printResetTimeoutRef = useRef<number | null>(null)
@@ -1925,15 +1926,38 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                                   const cout = formatTimeForInput(convertToDate(entry.clockOutTime))
                                   const note = (entry.notes || '').trim()
                                   const live = entry.liveDocumentation || []
+                                  const hasReport = !!note || live.length > 0
                                   return (
-                                    <li key={entry.id} className="project-entry-text-item">
+                                    <li
+                                      key={entry.id}
+                                      className="project-entry-text-item project-entry-text-item--clickable"
+                                      role="button"
+                                      tabIndex={0}
+                                      title="Bericht öffnen"
+                                      onClick={() => setJournalEntryDetail({ entry, dayLabel: day.dateLabel })}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault()
+                                          setJournalEntryDetail({ entry, dayLabel: day.dateLabel })
+                                        }
+                                      }}
+                                    >
                                       <div className="pet-head">
                                         <strong>{empName}</strong>
-                                        <span className="muted-small">
-                                          {cin}–{cout}
+                                        <span className="pet-head-right">
+                                          <span className="muted-small">
+                                            {cin}–{cout}
+                                          </span>
+                                          <span className="pet-chevron no-print" aria-hidden="true">›</span>
                                         </span>
                                       </div>
-                                      {note && <p className="pet-notes">{note}</p>}
+                                      {note ? (
+                                        <p className="pet-notes">{note}</p>
+                                      ) : (
+                                        !hasReport && (
+                                          <p className="pet-notes pet-notes--empty">Kein schriftlicher Bericht</p>
+                                        )
+                                      )}
                                       {live.length > 0 && (
                                         <ul className="pet-live-list">
                                           {live.map((block, bi) => (
@@ -2058,6 +2082,67 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               </div>
             </div>
           )}
+
+          {journalEntryDetail && (() => {
+            const { entry, dayLabel } = journalEntryDetail
+            const empName = getEmployeeDisplayName(entry.employeeId)
+            const cin = formatTimeForInput(convertToDate(entry.clockInTime))
+            const cout = formatTimeForInput(convertToDate(entry.clockOutTime))
+            const note = (entry.notes || '').trim()
+            const live = entry.liveDocumentation || []
+            const hasContent = !!note || live.length > 0
+            return (
+              <div className="journal-report-overlay" onClick={() => setJournalEntryDetail(null)}>
+                <div className="journal-report-modal" onClick={e => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="journal-report-close"
+                    onClick={() => setJournalEntryDetail(null)}
+                    aria-label="Schließen"
+                  >
+                    ×
+                  </button>
+                  <div className="journal-report-head">
+                    <h3>{empName}</h3>
+                    <p className="muted-small">{dayLabel} · {cin}–{cout}</p>
+                  </div>
+
+                  {!hasContent && (
+                    <p className="journal-report-empty">Kein schriftlicher Bericht erfasst.</p>
+                  )}
+
+                  {note && (
+                    <div className="journal-report-section">
+                      <h4>Notiz zur Arbeit</h4>
+                      <p className="journal-report-text">{note}</p>
+                    </div>
+                  )}
+
+                  {live.length > 0 && (
+                    <div className="journal-report-section">
+                      <h4>Live-Dokumentation</h4>
+                      <ul className="journal-report-live-list">
+                        {live.map((block, bi) => {
+                          const blockText = (block.notes || '').trim()
+                          return (
+                            <li key={bi}>
+                              <span className="muted-small">{block.addedByName || 'Team'}:</span>{' '}
+                              {blockText || `(${block.photoCount || 0} Fotos, ${block.documentCount || 0} Dok.)`}
+                              {blockText && (block.photoCount || block.documentCount) ? (
+                                <span className="muted-small">
+                                  {' '}({block.photoCount || 0} Fotos, {block.documentCount || 0} Dok.)
+                                </span>
+                              ) : null}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </>
       )}
     </div>

@@ -1268,3 +1268,108 @@
 .reports-tab .photo-grid.compact-grid {
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
+
+/* Klickbarer Bericht-Eintrag */
+.reports-tab .project-entry-text-item--clickable {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+
+.reports-tab .project-entry-text-item--clickable:hover,
+.reports-tab .project-entry-text-item--clickable:focus-visible {
+  background: var(--primary-light, #e8f5e9);
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+.reports-tab .pet-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.reports-tab .pet-chevron {
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.reports-tab .pet-notes--empty {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* Bericht-Detail-Modal */
+.journal-report-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  z-index: 1100;
+}
+
+.journal-report-modal {
+  position: relative;
+  background: var(--card-background);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl) var(--spacing-lg) var(--spacing-lg);
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.journal-report-close {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: var(--light-color);
+  border-radius: var(--radius-full, 999px);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.journal-report-head h3 {
+  margin: 0 0 2px;
+}
+
+.journal-report-section {
+  margin-top: var(--spacing-md);
+}
+
+.journal-report-section h4 {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.journal-report-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.journal-report-live-list {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  line-height: 1.45;
+}
+
+.journal-report-empty {
+  margin-top: var(--spacing-md);
+  font-style: italic;
+  color: var(--text-muted);
+}
