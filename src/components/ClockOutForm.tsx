@@ -19,7 +19,10 @@ interface ClockOutFormProps {
   onSimpleClockOut: (pauseMinutes: number, materialUsages: TimeEntryMaterialUsage[] | undefined) => void
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
-  onProjectSwitch: (newProjectId: string) => Promise<void>
+  onProjectSwitch: (
+    newProjectId: string,
+    materialUsages: TimeEntryMaterialUsage[] | undefined
+  ) => Promise<void>
 }
 
 const ClockOutForm: React.FC<ClockOutFormProps> = ({
@@ -116,28 +119,42 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
     return n
   }
 
+  // Sammelt die erfassten Materialpositionen. enforceSelection erzwingt eine Auswahl
+  // (beim Ausstempeln), beim Projektwechsel genügt „nichts erfasst" = leer.
+  // Rückgabe null = Validierungsfehler (Toast wurde bereits angezeigt).
+  const collectMaterialUsages = (enforceSelection: boolean): TimeEntryMaterialUsage[] | null => {
+    if (noMaterial) return []
+    const typesById = new Map(materialTypes.map((t) => [t.id, t]))
+    const built = buildMaterialUsagesFromRows(materialRows, typesById)
+    if (built === null) {
+      toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
+      return null
+    }
+    if (enforceSelection && built.length === 0) {
+      toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
+      return null
+    }
+    return built
+  }
+
   const handleSimpleClockOutClick = () => {
     const minutes = parsePauseMinutes()
     if (minutes === null) return
 
-    const typesById = new Map(materialTypes.map((t) => [t.id, t]))
-    let materialUsages: TimeEntryMaterialUsage[] | undefined
-    if (!noMaterial) {
-      const built = buildMaterialUsagesFromRows(materialRows, typesById)
-      if (built === null) {
-        toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
-        return
-      }
-      if (built.length === 0) {
-        toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
-        return
-      }
-      materialUsages = built
-    } else {
-      materialUsages = []
-    }
+    const materialUsages = collectMaterialUsages(true)
+    if (materialUsages === null) return
 
     onSimpleClockOut(minutes, materialUsages)
+  }
+
+  // Beim Projektwechsel: erfasstes Material dem alten Projekt zuordnen und mit übergeben.
+  const handleProjectSwitchWithMaterial = async (newProjectId: string) => {
+    const materialUsages = collectMaterialUsages(false)
+    if (materialUsages === null) {
+      // Ungültige Materialangabe – Wechsel abbrechen (Modal bleibt offen).
+      throw new Error('Ungültige Materialangabe')
+    }
+    await onProjectSwitch(newProjectId, materialUsages)
   }
 
   return (
@@ -252,7 +269,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           currentProjectId={timeEntry.projectId}
           currentProjectName={project?.name}
           onClose={() => setShowProjectSwitchModal(false)}
-          onSwitch={onProjectSwitch}
+          onSwitch={handleProjectSwitchWithMaterial}
         />
       )}
     </div>

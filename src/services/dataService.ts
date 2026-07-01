@@ -1051,7 +1051,8 @@ class DataServiceClass {
     employeeId: string,
     currentTimeEntryId: string,
     newProjectId: string,
-    location: { lat: number | null; lng: number | null } | null
+    location: { lat: number | null; lng: number | null } | null,
+    materialUsages?: TimeEntryMaterialUsage[]
   ): Promise<TimeEntry> {
     await this.authReadyPromise
     try {
@@ -1104,6 +1105,12 @@ class DataServiceClass {
         if (location) {
           clockOutUpdate.clockOutLocation = location
           clockOutUpdate.locationOut = location
+        }
+        // Auf dem alten Projekt erfasstes Material vor dem Wechsel verbuchen,
+        // damit es dem korrekten (verlassenen) Projekt zugeordnet bleibt.
+        if (materialUsages && materialUsages.length > 0) {
+          clockOutUpdate.materialUsages = materialUsages
+          clockOutUpdate.heroSyncStatus = 'pending'
         }
         transaction.update(currentRef, clockOutUpdate)
 

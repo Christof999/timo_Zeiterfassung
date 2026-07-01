@@ -140,7 +140,10 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleProjectSwitch = async (newProjectId: string) => {
+  const handleProjectSwitch = async (
+    newProjectId: string,
+    materialUsages: TimeEntryMaterialUsage[] | undefined
+  ) => {
     if (!currentTimeEntry || !currentUser?.id) return
 
     try {
@@ -149,7 +152,8 @@ const TimeTracking: React.FC = () => {
         currentUser.id,
         currentTimeEntry.id,
         newProjectId,
-        location
+        location,
+        materialUsages
       )
 
       const project = await DataService.getProjectById(newProjectId)
@@ -339,6 +343,7 @@ const TimeTracking: React.FC = () => {
           <ClockInForm onClockIn={handleClockIn} />
         ) : (
           <ClockOutForm
+            key={currentTimeEntry.id}
             timeEntry={currentTimeEntry}
             project={currentProject}
             clockInTime={clockInTime}

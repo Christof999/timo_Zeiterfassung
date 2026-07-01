@@ -84,7 +84,8 @@ const ProjectSwitchModal: React.FC<ProjectSwitchModalProps> = ({
               </>
             ) : null}{' '}
             ohne Pause ausgestempelt und direkt auf dem neuen Projekt eingestempelt. Pausen tragen Sie
-            erst beim Ausstempeln am Tagesende ein.
+            erst beim Ausstempeln am Tagesende ein. Bereits erfasstes Material wird noch dem aktuellen
+            Projekt verbucht.
           </p>
 
           {isLoadingProjects ? (
