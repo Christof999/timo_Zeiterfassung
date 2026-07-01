@@ -135,7 +135,9 @@ export interface TimeEntryMaterialUsage {
 export interface MaterialCredit {
   id: string
   projectId: string
-  /** Wer die Gutschrift erfasst hat (Mitarbeiter oder Admin) */
+  /** Art der Buchung: Gutschrift (Standard) oder nachgetragener Verbrauch. */
+  kind?: 'credit' | 'consumption'
+  /** Wer die Buchung erfasst hat (Mitarbeiter oder Admin) */
   employeeId?: string
   employeeName?: string
   /** Optionaler Bezug zum Material-Katalog */

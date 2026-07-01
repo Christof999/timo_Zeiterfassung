@@ -1980,6 +1980,7 @@ class DataServiceClass {
     const ref = collection(db, 'materialCredits')
     const payload: Record<string, unknown> = {
       projectId: data.projectId || '',
+      kind: data.kind === 'consumption' ? 'consumption' : 'credit',
       employeeId: data.employeeId,
       employeeName: data.employeeName,
       materialTypeId: data.materialTypeId,

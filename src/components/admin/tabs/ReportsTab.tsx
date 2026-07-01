@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, LeaveRequest } from '../../../types'
+import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, LeaveRequest, MaterialCredit } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -94,6 +94,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [projectPhotos, setProjectPhotos] = useState<FileUpload[]>([])
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
+  const [projectMaterialCredits, setProjectMaterialCredits] = useState<MaterialCredit[]>([])
   const [expandedProjectDays, setExpandedProjectDays] = useState<Set<string>>(new Set())
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [journalEntryDetail, setJournalEntryDetail] = useState<{ entry: TimeEntry; dayLabel: string } | null>(null)
@@ -147,6 +148,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setProjectPhotos([])
     setProjectDocuments([])
     setProjectRawEntries([])
+    setProjectMaterialCredits([])
     setExpandedProjectDays(new Set())
   }, [reportType])
 
@@ -928,6 +930,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
       setProjectRawEntries(timeEntries)
 
+      // Vom Admin nachgetragenes Material / Gutschriften laden
+      try {
+        const credits = await DataService.getMaterialCreditsByProject(selectedProjectId)
+        setProjectMaterialCredits(credits)
+      } catch (e) {
+        console.log('Keine Material-Buchungen gefunden')
+        setProjectMaterialCredits([])
+      }
+
       // Fotos und Dokumente laden
       try {
         const [photos, docs] = await Promise.all([
@@ -967,28 +978,44 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       string,
       { key: string; name: string; unitLabel: string; quantity: number; unitPriceEur?: number; cost: number }
     >()
+    const addUsage = (usage: {
+      materialTypeId?: string
+      materialName?: string
+      unitLabel?: string
+      quantity?: number
+      unitPriceEur?: number
+    }) => {
+      const key = usage.materialTypeId || usage.materialName || 'unbekannt'
+      const qty = Number(usage.quantity) || 0
+      const price = typeof usage.unitPriceEur === 'number' ? usage.unitPriceEur : undefined
+      const cost = price != null ? qty * price : 0
+      const existing = map.get(key)
+      if (existing) {
+        existing.quantity += qty
+        existing.cost += cost
+        if (existing.unitPriceEur == null && price != null) existing.unitPriceEur = price
+      } else {
+        map.set(key, {
+          key,
+          name: usage.materialName || 'Material',
+          unitLabel: usage.unitLabel || '',
+          quantity: qty,
+          unitPriceEur: price,
+          cost
+        })
+      }
+    }
+
+    // Von Mitarbeitern beim Ausstempeln erfasstes Material
     for (const entry of projectRawEntries) {
       for (const usage of entry.materialUsages || []) {
-        const key = usage.materialTypeId || usage.materialName || 'unbekannt'
-        const qty = Number(usage.quantity) || 0
-        const price = typeof usage.unitPriceEur === 'number' ? usage.unitPriceEur : undefined
-        const cost = price != null ? qty * price : 0
-        const existing = map.get(key)
-        if (existing) {
-          existing.quantity += qty
-          existing.cost += cost
-          if (existing.unitPriceEur == null && price != null) existing.unitPriceEur = price
-        } else {
-          map.set(key, {
-            key,
-            name: usage.materialName || 'Material',
-            unitLabel: usage.unitLabel || '',
-            quantity: qty,
-            unitPriceEur: price,
-            cost
-          })
-        }
+        addUsage(usage)
       }
+    }
+    // Vom Admin nachgetragener Verbrauch
+    for (const credit of projectMaterialCredits) {
+      if (credit.kind !== 'consumption') continue
+      addUsage(credit)
     }
     return Array.from(map.values()).sort(
       (a, b) => b.cost - a.cost || a.name.localeCompare(b.name, 'de')

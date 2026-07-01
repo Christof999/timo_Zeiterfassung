@@ -35,7 +35,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithEmployee[]>([])
   const [materialCredits, setMaterialCredits] = useState<MaterialCredit[]>([])
   const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
-  // Formular zum Erfassen einer Gutschrift
+  // Formular zum Erfassen einer Material-Buchung (Gutschrift oder nachgetragener Verbrauch)
+  const [movementKind, setMovementKind] = useState<'credit' | 'consumption'>('credit')
   const [creditTypeId, setCreditTypeId] = useState('')
   const [creditName, setCreditName] = useState('')
   const [creditQty, setCreditQty] = useState('')
@@ -339,7 +340,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     for (const credit of materialCredits) {
       rows.push({
         id: credit.id,
-        kind: 'credit',
+        kind: credit.kind === 'consumption' ? 'consumption' : 'credit',
         date: convertToDate(credit.createdAt),
         who: credit.employeeName || '—',
         name: credit.materialName || '—',
@@ -381,6 +382,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       const selectedType = materialTypes.find((t) => t.id === creditTypeId)
       await DataService.addMaterialCredit({
         projectId: project.id!,
+        kind: movementKind,
         employeeId: admin?.id,
         employeeName: admin?.name || 'Admin',
         materialTypeId: selectedType?.id,
@@ -390,7 +392,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
         quantity: qty,
         note: creditNote.trim() || undefined
       })
-      toast.success('Gutschrift erfasst.')
+      toast.success(movementKind === 'consumption' ? 'Verbrauch nachgetragen.' : 'Gutschrift erfasst.')
       setCreditTypeId('')
       setCreditName('')
       setCreditQty('')
@@ -399,7 +401,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       await loadProjectData()
       setActiveTab('material')
     } catch (err: any) {
-      toast.error('Fehler beim Speichern der Gutschrift: ' + (err?.message || err))
+      toast.error('Fehler beim Speichern: ' + (err?.message || err))
     } finally {
       setIsSavingCredit(false)
     }
@@ -1014,9 +1016,27 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           ) : activeTab === 'material' ? (
             <div className="material-overview">
               <form className="material-credit-form" onSubmit={handleAddCredit}>
-                <h4>Gutschrift erfassen</h4>
+                <div className="material-movement-toggle">
+                  <button
+                    type="button"
+                    className={`material-movement-toggle-btn ${movementKind === 'consumption' ? 'active' : ''}`}
+                    onClick={() => setMovementKind('consumption')}
+                  >
+                    Verbrauch nachtragen
+                  </button>
+                  <button
+                    type="button"
+                    className={`material-movement-toggle-btn ${movementKind === 'credit' ? 'active' : ''}`}
+                    onClick={() => setMovementKind('credit')}
+                  >
+                    Gutschrift
+                  </button>
+                </div>
+                <h4>{movementKind === 'consumption' ? 'Verbrauchtes Material nachtragen' : 'Gutschrift erfassen'}</h4>
                 <p className="material-credit-hint">
-                  Am Projektende zu viel geliefertes Material wieder gutschreiben.
+                  {movementKind === 'consumption'
+                    ? 'Auf der Baustelle verbrauchtes Material nachträglich verbuchen (z. B. wenn ein Mitarbeiter es beim Ausstempeln vergessen hat).'
+                    : 'Am Projektende zu viel geliefertes Material wieder gutschreiben.'}
                 </p>
                 <div className="material-credit-grid">
                   <select
@@ -1066,7 +1086,11 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   aria-label="Notiz"
                 />
                 <button type="submit" className="btn primary-btn" disabled={isSavingCredit}>
-                  {isSavingCredit ? 'Speichere…' : 'Gutschrift hinzufügen'}
+                  {isSavingCredit
+                    ? 'Speichere…'
+                    : movementKind === 'consumption'
+                      ? 'Verbrauch hinzufügen'
+                      : 'Gutschrift hinzufügen'}
                 </button>
               </form>
 
@@ -1109,12 +1133,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                         </td>
                         <td>{m.who}</td>
                         <td>
-                          {m.kind === 'credit' && m.deletable && (
+                          {m.deletable && (
                             <button
                               type="button"
                               className="action-btn delete-btn"
                               onClick={() => handleDeleteCredit(m.id)}
-                              aria-label="Gutschrift löschen"
+                              aria-label={m.kind === 'credit' ? 'Gutschrift löschen' : 'Verbrauch löschen'}
                             >
                               ×
                             </button>
