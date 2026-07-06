@@ -1059,10 +1059,14 @@ async function executeTool(
 
     // --- Berichte ---
     case 'mitarbeiterStunden': {
-      const entries = await DataService.getTimeEntriesByEmployeeId(args.mitarbeiterId)
       const von = args.vonDatum ? parseIsoDate(args.vonDatum) : null
       const bis = args.bisDatum ? parseIsoDate(args.bisDatum) : null
       if (bis) bis.setHours(23, 59, 59, 999)
+      // Serverseitig vorfiltern; die Schleife unten filtert zur Sicherheit nach
+      const entries = await DataService.getTimeEntriesByEmployeeId(args.mitarbeiterId, {
+        from: von ?? undefined,
+        to: bis ?? undefined
+      })
       let summe = 0
       let anzahl = 0
       for (const e of entries) {

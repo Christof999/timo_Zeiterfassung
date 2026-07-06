@@ -378,14 +378,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setHasSearched(true)
 
     try {
-      const [allEntries, leaveRequests] = await Promise.all([
-        DataService.getTimeEntriesByEmployeeId(selectedEmployeeId),
-        DataService.getLeaveRequestsByEmployee(selectedEmployeeId)
-      ])
       const start = new Date(startDate)
       start.setHours(0, 0, 0, 0)
       const end = new Date(endDate)
       end.setHours(23, 59, 59, 999)
+
+      // Zeitraum serverseitig vorfiltern; der Filter unten bleibt als
+      // Absicherung (die Query darf eine Obermenge liefern).
+      const [allEntries, leaveRequests] = await Promise.all([
+        DataService.getTimeEntriesByEmployeeId(selectedEmployeeId, { from: start, to: end }),
+        DataService.getLeaveRequestsByEmployee(selectedEmployeeId)
+      ])
 
       const filteredEntries = allEntries.filter(entry => {
         const entryDate = convertToDate(entry.clockInTime)
@@ -873,16 +876,24 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const project = projects.find(p => p.id === selectedProjectId)
       setSelectedProject(project || null)
 
-      // Zeiteinträge laden
-      let timeEntries = await DataService.getTimeEntriesByProject(selectedProjectId)
-      
+      // Zeiteinträge laden (bei aktivem Zeitfilter serverseitig vorgefiltert;
+      // der Filter unten bleibt als Absicherung, die Query darf eine Obermenge liefern)
+      const applyTimeFilter = useTimeFilter && !!startDate && !!endDate
+      const rangeStart = applyTimeFilter ? new Date(startDate) : null
+      if (rangeStart) rangeStart.setHours(0, 0, 0, 0)
+      const rangeEnd = applyTimeFilter ? new Date(endDate) : null
+      if (rangeEnd) rangeEnd.setHours(23, 59, 59, 999)
+
+      let timeEntries = await DataService.getTimeEntriesByProject(
+        selectedProjectId,
+        rangeStart && rangeEnd ? { from: rangeStart, to: rangeEnd } : undefined
+      )
+
       // Optional nach Zeitraum filtern
-      if (useTimeFilter && startDate && endDate) {
-        const start = new Date(startDate)
-        start.setHours(0, 0, 0, 0)
-        const end = new Date(endDate)
-        end.setHours(23, 59, 59, 999)
-        
+      if (rangeStart && rangeEnd) {
+        const start = rangeStart
+        const end = rangeEnd
+
         timeEntries = timeEntries.filter(entry => {
           const entryDate = convertToDate(entry.clockInTime)
           if (!entryDate) return false

@@ -20,31 +20,14 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
   useEffect(() => {
     const loadActivities = async () => {
       try {
-        // Lade Einträge und Projekte parallel
+        // Lade nur die letzten 5 Einträge (serverseitig begrenzt) und Projekte parallel
         const [entries, allProjects] = await Promise.all([
-          DataService.getTimeEntriesByEmployeeId(employeeId),
+          DataService.getRecentTimeEntriesByEmployeeId(employeeId, 5),
           DataService.getAllProjects()
         ])
-        
-        setProjects(allProjects)
-        
-        // Sortiere nach Datum (neueste zuerst)
-        entries.sort((a, b) => {
-          const dateA = a.clockInTime instanceof Timestamp
-            ? a.clockInTime.toDate()
-            : a.clockInTime instanceof Date
-            ? a.clockInTime
-            : new Date(a.clockInTime)
-          const dateB = b.clockInTime instanceof Timestamp
-            ? b.clockInTime.toDate()
-            : b.clockInTime instanceof Date
-            ? b.clockInTime
-            : new Date(b.clockInTime)
-          return dateB.getTime() - dateA.getTime()
-        })
 
-        // Nur die letzten 5 anzeigen
-        setActivities(entries.slice(0, 5))
+        setProjects(allProjects)
+        setActivities(entries)
       } catch (error) {
         console.error('Fehler beim Laden der Aktivitäten:', error)
       } finally {

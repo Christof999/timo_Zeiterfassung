@@ -8,9 +8,10 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
-  query, 
-  where, 
+  query,
+  where,
   limit,
+  orderBy,
   runTransaction,
   documentId,
   Timestamp,
@@ -48,6 +49,15 @@ const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
 
 /** Optionen beim Laden von Datei-Uploads — bei includeBinary=false bleibt Base64 außen vor. */
 export type FileUploadLoadOptions = { includeBinary?: boolean }
+
+/**
+ * Optionaler Zeitraumfilter für Zeiteintrag-Queries (bezogen auf clockInTime).
+ * Wird serverseitig gefiltert (spart Reads und Ladezeit bei wachsender Historie).
+ * WICHTIG: Die Methoden dürfen eine Obermenge liefern (Fallback ohne Filter,
+ * z. B. bei noch nicht deploytem Index) — Aufrufer filtern daher weiterhin
+ * clientseitig nach.
+ */
+export type TimeEntryDateRange = { from?: Date; to?: Date }
 
 // Timeouts für die Bild-/Upload-Pipeline — verhindern endloses „Speichere…“ bei schlechtem Netz.
 const STORAGE_UPLOAD_TIMEOUT_MS = 25_000
@@ -355,13 +365,76 @@ class DataServiceClass {
     }
   }
 
-  async getTimeEntriesByEmployeeId(employeeId: string): Promise<TimeEntry[]> {
+  async getTimeEntriesByEmployeeId(employeeId: string, range?: TimeEntryDateRange): Promise<TimeEntry[]> {
+    return this.queryTimeEntries('employeeId', employeeId, range)
+  }
+
+  /**
+   * Die letzten Zeiteinträge eines Mitarbeiters (neueste zuerst), serverseitig
+   * begrenzt. Fallback: alle Einträge laden und clientseitig sortieren/kürzen
+   * (z. B. solange der Composite-Index noch nicht deployt ist).
+   */
+  async getRecentTimeEntriesByEmployeeId(employeeId: string, count: number): Promise<TimeEntry[]> {
     await this.authReadyPromise
+    const timeEntriesRef = collection(db, 'timeEntries')
     try {
-      const timeEntriesRef = collection(db, 'timeEntries')
-      const q = query(timeEntriesRef, where('employeeId', '==', employeeId))
+      const q = query(
+        timeEntriesRef,
+        where('employeeId', '==', employeeId),
+        orderBy('clockInTime', 'desc'),
+        limit(count)
+      )
       const snapshot = await getDocs(q)
-      
+      return snapshot.docs.map((doc) =>
+        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+      )
+    } catch (error) {
+      console.warn('Sortierte Query fehlgeschlagen (Index fehlt?) – lade ungefiltert:', error)
+      const all = await this.getTimeEntriesByEmployeeId(employeeId)
+      return all
+        .sort(
+          (a, b) =>
+            this.convertToDate(b.clockInTime).getTime() - this.convertToDate(a.clockInTime).getTime()
+        )
+        .slice(0, count)
+    }
+  }
+
+  /**
+   * Zeiteinträge über ein Gleichheitsfeld, optional serverseitig auf einen
+   * clockInTime-Zeitraum eingegrenzt. Liefert bei leerem Ergebnis oder
+   * Query-Fehler (fehlender Index) die ungefilterte Menge — Aufrufer filtern
+   * clientseitig nach (siehe TimeEntryDateRange).
+   */
+  private async queryTimeEntries(
+    field: 'employeeId' | 'projectId',
+    value: string,
+    range?: TimeEntryDateRange
+  ): Promise<TimeEntry[]> {
+    await this.authReadyPromise
+    const timeEntriesRef = collection(db, 'timeEntries')
+    const hasRange = !!(range && (range.from || range.to))
+
+    if (hasRange) {
+      try {
+        const constraints = [where(field, '==', value)]
+        if (range!.from) constraints.push(where('clockInTime', '>=', Timestamp.fromDate(range!.from)))
+        if (range!.to) constraints.push(where('clockInTime', '<=', Timestamp.fromDate(range!.to)))
+        const snapshot = await getDocs(query(timeEntriesRef, ...constraints))
+        if (!snapshot.empty) {
+          return snapshot.docs.map((doc) =>
+            sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
+          )
+        }
+        // Leeres Ergebnis: kann korrekt sein — zur Sicherheit (Alt-Einträge mit
+        // abweichendem clockInTime-Typ) ungefiltert nachladen; Aufrufer filtern.
+      } catch (error) {
+        console.warn('Zeitraum-Query fehlgeschlagen (Index fehlt?) – lade ungefiltert:', error)
+      }
+    }
+
+    try {
+      const snapshot = await getDocs(query(timeEntriesRef, where(field, '==', value)))
       return snapshot.docs.map((doc) =>
         sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
       )
@@ -2897,20 +2970,8 @@ class DataServiceClass {
     return totalHours
   }
 
-  async getTimeEntriesByProject(projectId: string): Promise<TimeEntry[]> {
-    await this.authReadyPromise
-    try {
-      const timeEntriesRef = collection(db, 'timeEntries')
-      const q = query(timeEntriesRef, where('projectId', '==', projectId))
-      const snapshot = await getDocs(q)
-      
-      return snapshot.docs.map((doc) =>
-        sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
-      )
-    } catch (error) {
-      console.error(`Fehler beim Abrufen der Zeiteinträge für Projekt ${projectId}:`, error)
-      return []
-    }
+  async getTimeEntriesByProject(projectId: string, range?: TimeEntryDateRange): Promise<TimeEntry[]> {
+    return this.queryTimeEntries('projectId', projectId, range)
   }
 
   // Projekt-Dateien laden (wie in der alten App - aus Zeiteinträgen und zusätzlich direkt per projectId)
