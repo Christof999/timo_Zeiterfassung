@@ -2388,30 +2388,6 @@ class DataServiceClass {
         } as FileUpload)
       })
 
-      if (isDevMode) {
-        // Debug: Zeige alle Dateien VOR dem Filtern mit ALLEN Feldern
-        console.log(`📋 Alle Dateien für Projekt ${projectId} VOR Filterung (${files.length}):`, files.map(f => ({
-          id: f.id,
-          fileName: f.fileName,
-          fileType: f.fileType,
-          mimeType: f.mimeType,
-          hasBase64Data: !!f.base64Data,
-          hasFilePath: !!f.filePath,
-          hasData: !!(f as any).data,
-          hasUrl: !!(f as any).url,
-          allKeys: Object.keys(f)
-        })))
-        
-        // Zeige die ersten 2 Fotos komplett
-        const photoFiles = files.filter(f => {
-          const fileName = (f.fileName || '').toLowerCase()
-          return fileName.match(/\.(jpg|jpeg|png|gif)$/i)
-        }).slice(0, 2)
-        if (photoFiles.length > 0) {
-          console.log(`🖼️ Beispiel-Foto-Objekte (erste 2):`, photoFiles)
-        }
-      }
-
       // Endgültig nach Typ filtern (falls kein typ gesetzt, anhand mimeType raten)
       let filteredFiles = files.filter((f) => {
         const fileType = (f.fileType || '').toLowerCase()
@@ -2434,9 +2410,6 @@ class DataServiceClass {
           const isPhotoByBase64 = f.base64Data && (!mime || mime.startsWith('image/'))
           
           const isPhoto = isPhotoByType || isPhotoByMime || isPhotoByExtension || isPhotoByBase64
-          if (isDevMode) {
-            console.log(`🔍 Prüfe Foto ${f.fileName}: fileType="${fileType}", mime="${mime}", fileName="${fileName}", isPhoto=${isPhoto} (byType=${isPhotoByType}, byMime=${isPhotoByMime}, byExt=${!!isPhotoByExtension}, byBase64=${isPhotoByBase64})`)
-          }
           return isPhoto
         }
 
@@ -2542,25 +2515,8 @@ class DataServiceClass {
       }
       
       const snapshot = await getDocs(q)
-      let uploads = snapshot.docs.map((doc, index) => {
+      let uploads = snapshot.docs.map((doc) => {
         const data = doc.data() as Record<string, unknown>
-
-        // Debug: Zeige die ersten 3 Firestore-Dokumente KOMPLETT als JSON
-        if (isDevMode && index < 1) {
-          const largeFields = Object.keys(data).filter((key) => {
-            const val = data[key]
-            return typeof val === 'string' && val.length > 1000
-          })
-          const dataCopy = { ...data }
-          largeFields.forEach((key) => {
-            const v = data[key]
-            dataCopy[key] =
-              typeof v === 'string' ? `[${v.length} Zeichen] ${v.substring(0, 50)}...` : v
-          })
-          console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - ALLE KEYS: ${Object.keys(data).join(', ')}`)
-          console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - GROSSE FELDER: ${largeFields.length > 0 ? largeFields.join(', ') : 'KEINE!'}`)
-          console.log(`🔥 FIRESTORE DOC #${index} (${doc.id}) - DATEN:`, JSON.stringify(dataCopy, null, 2))
-        }
 
         return this.fileUploadFromDocData(doc.id, data, {
           includeBinary: opts?.includeBinary === true
