@@ -10,7 +10,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Firebase und React in eigene, langlebige Chunks auslagern —
+        // sie ändern sich selten und bleiben so im Browser-Cache.
+        manualChunks: {
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+          react: ['react', 'react-dom', 'react-router-dom']
+        }
+      }
+    }
   },
   root: '.',
   publicDir: 'public',
