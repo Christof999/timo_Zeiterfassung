@@ -1,12 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { TimeEntry, Employee, Project } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
-import {
-  migrateBase64UploadsToStorage,
-  type Base64MigrationProgress
-} from '../../../services/data/maintenance'
 import '../../../styles/AdminTabs.css'
 
 const OverviewTab: React.FC = () => {
@@ -21,9 +17,6 @@ const OverviewTab: React.FC = () => {
   }>>([])
   const [isLoading, setIsLoading] = useState(true)
   const [clockingOut, setClockingOut] = useState<string | null>(null)
-  const [migrationProgress, setMigrationProgress] = useState<Base64MigrationProgress | null>(null)
-  const [isMigrating, setIsMigrating] = useState(false)
-  const migrationCancelRef = useRef(false)
 
   useEffect(() => {
     loadDashboardData()
@@ -134,42 +127,6 @@ const OverviewTab: React.FC = () => {
     }
   }
 
-  const handleStartMigration = async () => {
-    if (isMigrating) return
-    if (!confirm(
-      'Alte Fotos aus der Datenbank nach Firebase Storage auslagern?\n\n' +
-      'Das kann je nach Menge einige Minuten dauern und lässt sich jederzeit abbrechen. ' +
-      'Die App bleibt für alle Mitarbeiter normal nutzbar.'
-    )) {
-      return
-    }
-
-    setIsMigrating(true)
-    migrationCancelRef.current = false
-    setMigrationProgress(null)
-
-    try {
-      const result = await migrateBase64UploadsToStorage(
-        (p) => setMigrationProgress(p),
-        () => !migrationCancelRef.current
-      )
-      const freedMb = (result.freedBytes / 1024 / 1024).toFixed(1)
-      if (result.migrated + result.cleaned === 0) {
-        toast.success('Nichts zu tun — alle Fotos liegen bereits in Storage.')
-      } else {
-        toast.success(
-          `Fertig: ${result.migrated} Foto(s) ausgelagert, ${result.cleaned} bereinigt, ${freedMb} MB Datenbank freigegeben.` +
-          (result.failed > 0 ? ` ${result.failed} fehlgeschlagen (bleiben unverändert).` : '')
-        )
-      }
-    } catch (error: any) {
-      console.error('Foto-Migration fehlgeschlagen:', error)
-      toast.error('Foto-Migration fehlgeschlagen: ' + (error?.message || error))
-    } finally {
-      setIsMigrating(false)
-    }
-  }
-
   if (isLoading) {
     return <div className="loading">Lade Dashboard...</div>
   }
@@ -275,43 +232,8 @@ const OverviewTab: React.FC = () => {
         )}
       </div>
 
-      <div className="maintenance-section">
-        <h4>Wartung</h4>
-        <div className="maintenance-card">
-          <div className="maintenance-info">
-            <strong>Alte Fotos in Storage auslagern</strong>
-            <p>
-              Frühere Uploads liegen teilweise direkt in der Datenbank (Base64) — das macht das
-              Laden von Berichten und Projektfotos langsam und teuer. Diese Funktion verschiebt
-              sie einmalig nach Firebase Storage. Läuft im Hintergrund, Mitarbeiter können
-              normal weiterarbeiten.
-            </p>
-            {migrationProgress && (
-              <p className="maintenance-progress">
-                Geprüft: {migrationProgress.scanned}/{migrationProgress.total} · Ausgelagert:{' '}
-                {migrationProgress.migrated} · Bereinigt: {migrationProgress.cleaned}
-                {migrationProgress.failed > 0 ? ` · Fehler: ${migrationProgress.failed}` : ''} ·{' '}
-                {(migrationProgress.freedBytes / 1024 / 1024).toFixed(1)} MB freigegeben
-              </p>
-            )}
-          </div>
-          {isMigrating ? (
-            <button
-              className="btn secondary-btn"
-              onClick={() => { migrationCancelRef.current = true }}
-            >
-              Abbrechen …
-            </button>
-          ) : (
-            <button className="btn primary-btn" onClick={handleStartMigration}>
-              Jetzt auslagern
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   )
 }
 
 export default OverviewTab
-

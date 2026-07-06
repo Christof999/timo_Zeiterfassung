@@ -15,6 +15,7 @@ import HeroIntegrationTab from './tabs/HeroIntegrationTab'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
+import { runUploadSelfHealing } from '../../services/data/maintenance'
 import '../../styles/AdminDashboard.css'
 
 type TabType =
@@ -61,6 +62,12 @@ const AdminDashboard: React.FC = () => {
       setCurrentAdmin(admin)
       await refreshPushStatus()
       setIsLoading(false)
+
+      // Selbstheilung im Hintergrund: verschiebt Notfall-Fotos (Base64-Fallback
+      // bei schlechtem Netz) automatisch nach Storage. Kein UI, nur Console-Log.
+      runUploadSelfHealing().catch((error) =>
+        console.warn('Foto-Selbstheilung übersprungen:', error)
+      )
     }
     checkAdmin()
   }, [navigate])

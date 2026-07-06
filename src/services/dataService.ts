@@ -1535,7 +1535,11 @@ class DataServiceClass {
           mimeType,
           notes,
           imageComment: comment,
-          uploadTime: serverTimestamp()
+          uploadTime: serverTimestamp(),
+          // Markierung für die automatische Nachmigration: sobald wieder Netz
+          // da ist, verschiebt die Selbstheilung (data/maintenance.ts) das
+          // Foto nach Storage und entfernt die Base64-Daten.
+          needsStorageMigration: true
         }
       }
 

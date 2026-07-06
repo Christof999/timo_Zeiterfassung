@@ -1,13 +1,29 @@
-import { collection, deleteField, doc, getDocs, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  deleteField,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+  type QueryDocumentSnapshot,
+  type DocumentData
+} from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../firebaseConfig'
 import { authReady } from './shared'
 
-// Wartungsfunktionen fürs Admin-Panel — bewusst so gebaut, dass sie ohne
-// Terminal/CLI direkt aus der App laufen (Firebase-Web-SDK, keine Admin-Rechte
-// nötig). Pendant für die Kommandozeile: scripts/migrate-base64-uploads.mjs.
+// Selbstheilung für Foto-Uploads:
+// Bei schlechtem Netz speichert die App Fotos notfalls als Base64 direkt in
+// Firestore (markiert mit needsStorageMigration). Diese Wartungslogik
+// verschiebt solche Fotos automatisch nach Firebase Storage, sobald ein Admin
+// das Dashboard öffnet — es ist kein manueller Eingriff und kein Terminal
+// nötig. Pendant für die Kommandozeile: scripts/migrate-base64-uploads.mjs.
 
 const BASE64_FIELDS = ['base64Data', 'base64String', 'base64', 'base64DataUrl'] as const
+
+/** Einmal pro Gerät: kompletter Bestands-Durchlauf (fängt Alt-Fotos ohne Markierung ab). */
+const FULL_SWEEP_DONE_KEY = 'zeiterfassung_base64_full_sweep_done_v1'
 
 export interface Base64MigrationProgress {
   /** Bisher geprüfte Dokumente */
@@ -26,6 +42,10 @@ export interface Base64MigrationProgress {
 
 export interface Base64MigrationResult extends Base64MigrationProgress {
   done: true
+}
+
+function emptyProgress(total: number): Base64MigrationProgress {
+  return { scanned: 0, total, migrated: 0, cleaned: 0, failed: 0, freedBytes: 0 }
 }
 
 function extractBase64(data: Record<string, unknown>): { field: string; base64: string } | null {
@@ -49,7 +69,7 @@ function resolveMimeType(data: Record<string, unknown>): string {
     const match = mime.match(/^data:([^;,]+)/)
     mime = match ? match[1] : ''
   }
-  // Storage-Rules erlauben nur image/* — Base64-Fallback war immer ein Bild.
+  // Storage-Rules erlauben nur image/* — der Base64-Fallback war immer ein Bild.
   return mime.startsWith('image/') ? mime : 'image/jpeg'
 }
 
@@ -77,11 +97,73 @@ function buildObjectPath(data: Record<string, unknown>, docId: string, mime: str
 }
 
 /**
- * Migriert Legacy-Base64-Fotos aus fileUploads-Dokumenten nach Firebase Storage.
- * Läuft komplett im Browser des Admins; kann jederzeit abgebrochen und später
- * fortgesetzt werden (bereits migrierte Dokumente werden übersprungen).
- * Der Lesepfad der App unterstützt beide Varianten — parallel arbeitende
- * Mitarbeiter werden nicht gestört.
+ * Migriert EIN fileUploads-Dokument: lädt Base64-Daten nach Storage hoch (falls
+ * nötig) und entfernt die Base64-Felder samt needsStorageMigration-Markierung.
+ * Aktualisiert progress in-place.
+ */
+async function migrateUploadDoc(
+  docSnap: QueryDocumentSnapshot<DocumentData>,
+  progress: Base64MigrationProgress
+): Promise<void> {
+  const data = docSnap.data() as Record<string, unknown>
+  const found = extractBase64(data)
+
+  const clearFlags = (extra: Record<string, unknown> = {}): Record<string, unknown> => {
+    const update: Record<string, unknown> = { ...extra }
+    for (const f of BASE64_FIELDS) if (f in data) update[f] = deleteField()
+    if ('needsStorageMigration' in data) update.needsStorageMigration = deleteField()
+    return update
+  }
+
+  if (!found) {
+    // Keine Base64-Daten (mehr) — ggf. nur die Markierung entfernen.
+    if ('needsStorageMigration' in data) {
+      await updateDoc(doc(db, 'fileUploads', docSnap.id), clearFlags())
+    }
+    return
+  }
+
+  const approxBytes = Math.round((found.base64.length * 3) / 4)
+  const hasStorageUrl =
+    (typeof data.filePath === 'string' && data.filePath.startsWith('http')) ||
+    (typeof data.url === 'string' && data.url.startsWith('http')) ||
+    (typeof data.storagePath === 'string' && String(data.storagePath).trim() !== '')
+
+  try {
+    if (hasStorageUrl) {
+      // Bild liegt schon in Storage → nur die Base64-Reste entfernen
+      await updateDoc(doc(db, 'fileUploads', docSnap.id), clearFlags())
+      progress.cleaned++
+      progress.freedBytes += approxBytes
+    } else {
+      const mime = resolveMimeType(data)
+      const objectPath = buildObjectPath(data, docSnap.id, mime)
+      const blob = base64ToBlob(found.base64, mime)
+      const objectRef = storageRef(storage, objectPath)
+      await uploadBytes(objectRef, blob, { contentType: mime })
+      const downloadUrl = await getDownloadURL(objectRef)
+
+      await updateDoc(
+        doc(db, 'fileUploads', docSnap.id),
+        clearFlags({
+          filePath: downloadUrl,
+          storagePath: objectPath,
+          mimeType: mime,
+          base64MigratedAt: new Date()
+        })
+      )
+      progress.migrated++
+      progress.freedBytes += approxBytes
+    }
+  } catch (error) {
+    progress.failed++
+    console.error(`Base64-Migration für ${docSnap.id} fehlgeschlagen:`, error)
+  }
+}
+
+/**
+ * Kompletter Bestands-Durchlauf über alle fileUploads (liest die ganze
+ * Collection — bewusst nur für die einmalige Alt-Migration gedacht).
  */
 export async function migrateBase64UploadsToStorage(
   onProgress?: (progress: Base64MigrationProgress) => void,
@@ -90,67 +172,65 @@ export async function migrateBase64UploadsToStorage(
   await authReady
 
   const snapshot = await getDocs(collection(db, 'fileUploads'))
-  const progress: Base64MigrationProgress = {
-    scanned: 0,
-    total: snapshot.size,
-    migrated: 0,
-    cleaned: 0,
-    failed: 0,
-    freedBytes: 0
-  }
+  const progress = emptyProgress(snapshot.size)
 
   for (const docSnap of snapshot.docs) {
     if (shouldContinue && !shouldContinue()) break
     progress.scanned++
-
-    const data = docSnap.data() as Record<string, unknown>
-    const found = extractBase64(data)
-    if (!found) {
-      if (progress.scanned % 25 === 0) onProgress?.({ ...progress })
-      continue
-    }
-
-    const approxBytes = Math.round((found.base64.length * 3) / 4)
-    const hasStorageUrl =
-      (typeof data.filePath === 'string' && data.filePath.startsWith('http')) ||
-      (typeof data.url === 'string' && data.url.startsWith('http')) ||
-      (typeof data.storagePath === 'string' && String(data.storagePath).trim() !== '')
-
-    try {
-      if (hasStorageUrl) {
-        // Bild liegt schon in Storage → nur die Base64-Reste entfernen
-        const cleanup: Record<string, unknown> = {}
-        for (const f of BASE64_FIELDS) if (f in data) cleanup[f] = deleteField()
-        await updateDoc(doc(db, 'fileUploads', docSnap.id), cleanup)
-        progress.cleaned++
-        progress.freedBytes += approxBytes
-      } else {
-        const mime = resolveMimeType(data)
-        const objectPath = buildObjectPath(data, docSnap.id, mime)
-        const blob = base64ToBlob(found.base64, mime)
-        const objectRef = storageRef(storage, objectPath)
-        await uploadBytes(objectRef, blob, { contentType: mime })
-        const downloadUrl = await getDownloadURL(objectRef)
-
-        const update: Record<string, unknown> = {
-          filePath: downloadUrl,
-          storagePath: objectPath,
-          mimeType: mime,
-          base64MigratedAt: new Date()
-        }
-        for (const f of BASE64_FIELDS) if (f in data) update[f] = deleteField()
-        await updateDoc(doc(db, 'fileUploads', docSnap.id), update)
-        progress.migrated++
-        progress.freedBytes += approxBytes
-      }
-    } catch (error) {
-      progress.failed++
-      console.error(`Base64-Migration für ${docSnap.id} fehlgeschlagen:`, error)
-    }
-
-    onProgress?.({ ...progress })
+    await migrateUploadDoc(docSnap, progress)
+    if (progress.scanned % 10 === 0) onProgress?.({ ...progress })
   }
 
   onProgress?.({ ...progress })
   return { ...progress, done: true }
+}
+
+/**
+ * Selbstheilung, läuft still beim Öffnen des Admin-Dashboards:
+ * 1. Verschiebt alle als needsStorageMigration markierten Notfall-Fotos
+ *    (Base64-Fallback bei schlechtem Netz) nach Storage — sehr günstig,
+ *    weil gezielt nur markierte Dokumente geladen werden.
+ * 2. Einmal pro Gerät zusätzlich ein kompletter Bestands-Durchlauf, um
+ *    Alt-Fotos ohne Markierung (oder eine abgebrochene manuelle Migration)
+ *    abzuräumen.
+ */
+export async function runUploadSelfHealing(): Promise<void> {
+  await authReady
+
+  try {
+    const flagged = await getDocs(
+      query(collection(db, 'fileUploads'), where('needsStorageMigration', '==', true))
+    )
+    if (!flagged.empty) {
+      const progress = emptyProgress(flagged.size)
+      for (const docSnap of flagged.docs) {
+        progress.scanned++
+        await migrateUploadDoc(docSnap, progress)
+      }
+      if (progress.migrated + progress.cleaned > 0) {
+        console.info(
+          `Foto-Selbstheilung: ${progress.migrated} Foto(s) nach Storage verschoben, ` +
+            `${progress.cleaned} bereinigt (${Math.round(progress.freedBytes / 1024)} KB freigegeben).`
+        )
+      }
+    }
+  } catch (error) {
+    console.warn('Foto-Selbstheilung (markierte Uploads) übersprungen:', error)
+  }
+
+  try {
+    if (localStorage.getItem(FULL_SWEEP_DONE_KEY) === '1') return
+    const result = await migrateBase64UploadsToStorage()
+    if (result.failed === 0) {
+      localStorage.setItem(FULL_SWEEP_DONE_KEY, '1')
+    }
+    if (result.migrated + result.cleaned > 0) {
+      console.info(
+        `Foto-Bestandsmigration: ${result.migrated} Foto(s) nach Storage verschoben, ` +
+          `${result.cleaned} bereinigt (${(result.freedBytes / 1024 / 1024).toFixed(1)} MB freigegeben).`
+      )
+    }
+  } catch (error) {
+    console.warn('Foto-Bestandsmigration übersprungen:', error)
+  }
 }
