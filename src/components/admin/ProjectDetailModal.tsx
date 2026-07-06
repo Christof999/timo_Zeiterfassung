@@ -1016,82 +1016,110 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           ) : activeTab === 'material' ? (
             <div className="material-overview">
               <form className="material-credit-form" onSubmit={handleAddCredit}>
-                <div className="material-movement-toggle">
+                <div className="material-movement-toggle" role="tablist" aria-label="Buchungsart">
                   <button
                     type="button"
-                    className={`material-movement-toggle-btn ${movementKind === 'consumption' ? 'active' : ''}`}
+                    role="tab"
+                    aria-selected={movementKind === 'consumption'}
+                    className={`material-movement-toggle-btn kind-consumption ${movementKind === 'consumption' ? 'active' : ''}`}
                     onClick={() => setMovementKind('consumption')}
                   >
+                    <span className="material-kind-dot" aria-hidden="true" />
                     Verbrauch nachtragen
                   </button>
                   <button
                     type="button"
-                    className={`material-movement-toggle-btn ${movementKind === 'credit' ? 'active' : ''}`}
+                    role="tab"
+                    aria-selected={movementKind === 'credit'}
+                    className={`material-movement-toggle-btn kind-credit ${movementKind === 'credit' ? 'active' : ''}`}
                     onClick={() => setMovementKind('credit')}
                   >
+                    <span className="material-kind-dot" aria-hidden="true" />
                     Gutschrift
                   </button>
                 </div>
-                <h4>{movementKind === 'consumption' ? 'Verbrauchtes Material nachtragen' : 'Gutschrift erfassen'}</h4>
-                <p className="material-credit-hint">
-                  {movementKind === 'consumption'
-                    ? 'Auf der Baustelle verbrauchtes Material nachträglich verbuchen (z. B. wenn ein Mitarbeiter es beim Ausstempeln vergessen hat).'
-                    : 'Am Projektende zu viel geliefertes Material wieder gutschreiben.'}
-                </p>
-                <div className="material-credit-grid">
-                  <select
-                    value={creditTypeId}
-                    onChange={(e) => handleCreditTypeChange(e.target.value)}
-                    aria-label="Material"
-                  >
-                    <option value="">– Material wählen / Freitext –</option>
-                    {materialTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.unitLabel ? ` (${t.unitLabel})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={creditName}
-                    onChange={(e) => setCreditName(e.target.value)}
-                    placeholder="Materialname"
-                    aria-label="Materialname"
-                  />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="any"
-                    value={creditQty}
-                    onChange={(e) => setCreditQty(e.target.value)}
-                    placeholder="Menge"
-                    aria-label="Menge"
-                  />
-                  <input
-                    type="text"
-                    value={creditUnit}
-                    onChange={(e) => setCreditUnit(e.target.value)}
-                    placeholder="Einheit"
-                    aria-label="Einheit"
-                  />
+
+                <div className="material-credit-header">
+                  <h4>{movementKind === 'consumption' ? 'Verbrauchtes Material nachtragen' : 'Gutschrift erfassen'}</h4>
+                  <p className="material-credit-hint">
+                    {movementKind === 'consumption'
+                      ? 'Auf der Baustelle verbrauchtes Material nachträglich verbuchen (z. B. wenn ein Mitarbeiter es beim Ausstempeln vergessen hat).'
+                      : 'Am Projektende zu viel geliefertes Material wieder gutschreiben.'}
+                  </p>
                 </div>
-                <input
-                  type="text"
-                  className="material-credit-note"
-                  value={creditNote}
-                  onChange={(e) => setCreditNote(e.target.value)}
-                  placeholder="Notiz (optional)"
-                  aria-label="Notiz"
-                />
-                <button type="submit" className="btn primary-btn" disabled={isSavingCredit}>
-                  {isSavingCredit
-                    ? 'Speichere…'
-                    : movementKind === 'consumption'
-                      ? 'Verbrauch hinzufügen'
-                      : 'Gutschrift hinzufügen'}
-                </button>
+
+                <div className="material-credit-grid">
+                  <label className="material-field material-field-type">
+                    <span className="material-field-label">Material</span>
+                    <select
+                      value={creditTypeId}
+                      onChange={(e) => handleCreditTypeChange(e.target.value)}
+                    >
+                      <option value="">Freitext / aus Liste wählen …</option>
+                      {materialTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                          {t.unitLabel ? ` (${t.unitLabel})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="material-field material-field-name">
+                    <span className="material-field-label">Materialname</span>
+                    <input
+                      type="text"
+                      value={creditName}
+                      onChange={(e) => setCreditName(e.target.value)}
+                      placeholder="z. B. Flexkleber M21"
+                      required
+                    />
+                  </label>
+                  <label className="material-field material-field-qty">
+                    <span className="material-field-label">Menge</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      value={creditQty}
+                      onChange={(e) => setCreditQty(e.target.value)}
+                      placeholder="0"
+                      required
+                    />
+                  </label>
+                  <label className="material-field material-field-unit">
+                    <span className="material-field-label">Einheit</span>
+                    <input
+                      type="text"
+                      value={creditUnit}
+                      onChange={(e) => setCreditUnit(e.target.value)}
+                      placeholder="Sack, m², Stück …"
+                    />
+                  </label>
+                  <label className="material-field material-field-note">
+                    <span className="material-field-label">Notiz <em>(optional)</em></span>
+                    <input
+                      type="text"
+                      value={creditNote}
+                      onChange={(e) => setCreditNote(e.target.value)}
+                      placeholder="z. B. Rest an Lager zurück"
+                    />
+                  </label>
+                </div>
+
+                <div className="material-credit-actions">
+                  <button
+                    type="submit"
+                    className={`btn primary-btn ${movementKind === 'credit' ? 'material-submit-credit' : ''}`}
+                    disabled={isSavingCredit}
+                  >
+                    {isSavingCredit
+                      ? 'Speichere…'
+                      : movementKind === 'consumption'
+                        ? '+ Verbrauch verbuchen'
+                        : '+ Gutschrift verbuchen'}
+                  </button>
+                </div>
               </form>
 
               {materialMovements.length === 0 ? (
@@ -1103,7 +1131,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       <th>Datum</th>
                       <th>Art</th>
                       <th>Material</th>
-                      <th>Menge</th>
+                      <th className="num">Menge</th>
                       <th>Von</th>
                       <th></th>
                     </tr>
@@ -1111,7 +1139,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   <tbody>
                     {materialMovements.map((m) => (
                       <tr key={m.id} className={m.kind === 'credit' ? 'movement-credit' : 'movement-consumption'}>
-                        <td>
+                        <td className="material-date-cell">
                           {m.date
                             ? m.date.toLocaleDateString('de-DE', {
                                 day: '2-digit',
@@ -1121,23 +1149,24 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                             : '–'}
                         </td>
                         <td>
-                          <span className={`status-badge ${m.kind === 'credit' ? 'inactive' : 'active'}`}>
+                          <span className={`material-kind-badge ${m.kind === 'credit' ? 'badge-credit' : 'badge-consumption'}`}>
                             {m.kind === 'credit' ? 'Gutschrift' : 'Verbrauch'}
                           </span>
                         </td>
-                        <td>{m.name}</td>
-                        <td>
+                        <td className="material-name-cell">{m.name}</td>
+                        <td className={`num material-qty-cell ${m.kind === 'credit' ? 'qty-credit' : ''}`}>
                           {m.kind === 'credit' ? '−' : ''}
                           {m.quantity}
                           {m.unit ? ` ${m.unit}` : ''}
                         </td>
-                        <td>{m.who}</td>
-                        <td>
+                        <td className="material-who-cell">{m.who}</td>
+                        <td className="material-actions-cell">
                           {m.deletable && (
                             <button
                               type="button"
-                              className="action-btn delete-btn"
+                              className="material-delete-btn"
                               onClick={() => handleDeleteCredit(m.id)}
+                              title={m.kind === 'credit' ? 'Gutschrift löschen' : 'Verbrauch löschen'}
                               aria-label={m.kind === 'credit' ? 'Gutschrift löschen' : 'Verbrauch löschen'}
                             >
                               ×

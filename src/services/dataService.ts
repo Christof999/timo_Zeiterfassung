@@ -316,6 +316,14 @@ class DataServiceClass {
   }
 
   /**
+   * Merkt sich pro Sitzung, ob die Zeitraum-Query am fehlenden Composite-Index
+   * gescheitert ist — dann wird sie nicht bei jeder Suche erneut versucht.
+   * Die Indexe lassen sich ohne CLI in der Firebase Console (Website) anlegen;
+   * der Link dazu steht in der geloggten Fehlermeldung.
+   */
+  private static rangedTimeEntryQueryUnavailable: Partial<Record<'employeeId' | 'projectId', boolean>> = {}
+
+  /**
    * Zeiteinträge über ein Gleichheitsfeld, optional serverseitig auf einen
    * clockInTime-Zeitraum eingegrenzt. Liefert bei leerem Ergebnis oder
    * Query-Fehler (fehlender Index) die ungefilterte Menge — Aufrufer filtern
@@ -328,7 +336,9 @@ class DataServiceClass {
   ): Promise<TimeEntry[]> {
     await this.authReadyPromise
     const timeEntriesRef = collection(db, 'timeEntries')
-    const hasRange = !!(range && (range.from || range.to))
+    const hasRange =
+      !!(range && (range.from || range.to)) &&
+      !DataServiceClass.rangedTimeEntryQueryUnavailable[field]
 
     if (hasRange) {
       try {
@@ -344,7 +354,20 @@ class DataServiceClass {
         // Leeres Ergebnis: kann korrekt sein — zur Sicherheit (Alt-Einträge mit
         // abweichendem clockInTime-Typ) ungefiltert nachladen; Aufrufer filtern.
       } catch (error) {
-        console.warn('Zeitraum-Query fehlgeschlagen (Index fehlt?) – lade ungefiltert:', error)
+        const code = (error as { code?: string })?.code
+        if (code === 'failed-precondition') {
+          // Composite-Index fehlt → für diese Sitzung nicht erneut versuchen.
+          // Der Link in der Fehlermeldung legt den Index per Klick in der
+          // Firebase Console an (Browser, keine CLI nötig).
+          DataServiceClass.rangedTimeEntryQueryUnavailable[field] = true
+          console.warn(
+            `Firestore-Index für ${field}+clockInTime fehlt — Berichte laden vorerst ungefiltert (funktioniert, nur langsamer). ` +
+              'Index per Klick anlegen über den Link in dieser Meldung:',
+            (error as Error)?.message || error
+          )
+        } else {
+          console.warn('Zeitraum-Query fehlgeschlagen – lade ungefiltert:', error)
+        }
       }
     }
 
