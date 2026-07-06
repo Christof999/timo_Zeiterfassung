@@ -1,16 +1,19 @@
 {
   "name": "zeiterfassung",
   "version": "1.0.0",
-  "description": "",
-  "main": "admin-minimal.js",
+  "description": "Zeiterfassung mit Nachkalkulation und HERO-Anbindung",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Christof999/Zeiterfassung.git"
+    "url": "git+https://github.com/Christof999/timo_Zeiterfassung.git"
   },
   "keywords": [],
   "author": "",
@@ -20,20 +23,27 @@
     "node": "20.x"
   },
   "bugs": {
-    "url": "https://github.com/Christof999/Zeiterfassung/issues"
+    "url": "https://github.com/Christof999/timo_Zeiterfassung/issues"
   },
-  "homepage": "https://github.com/Christof999/Zeiterfassung#readme",
+  "homepage": "https://github.com/Christof999/timo_Zeiterfassung#readme",
   "dependencies": {
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.7.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.1",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.6",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.62.1",
+    "vite": "^7.2.6",
+    "vitest": "^4.1.9"
   }
 }

@@ -28,7 +28,7 @@ function App() {
   useEffect(() => {
     // Initialize Firebase - DataService initializes itself
     // Just ensure auth is ready
-    DataService.authReady
+    void DataService.authReady
 
     // Offline-Upload-Queue starten: reicht zwischengespeicherte Baustellenfotos nach,
     // sobald wieder Netz da ist (auch nach App-Neustart).
