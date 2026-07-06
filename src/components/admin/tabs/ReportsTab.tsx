@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, LeaveRequest, MaterialCredit } from '../../../types'
+import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, MaterialCredit } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -8,44 +8,29 @@ import { getBavariaHolidayName } from '../../../utils/bavariaHolidays'
 import { collectEntryDocumentation } from '../../../utils/entryDocumentation'
 import { getFileImageSrc } from '../../../utils/fileImageSrc'
 import { roundTimeToStep } from '../../../utils/timeRounding'
+import {
+  type ReportType,
+  type ReportEntry,
+  type EmployeeSummary,
+  VACATION_WORK_HOURS_LABEL,
+  convertToDate,
+  formatDateForDisplay,
+  getDateKey,
+  getApprovedVacationDates,
+  formatTimeForInput,
+  formatHoursMinutes,
+  calculateWorkHours,
+  msToMinutes,
+  entryCreditMinutes,
+  workMinutesFromParts,
+  minutesToHoursLabel,
+  workMinutesFromOriginalEntry,
+  formatCurrency
+} from './reports/reportUtils'
+import { buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
-
-type ReportType = 'employee' | 'project'
-type ReportEntrySource = 'time-entry' | 'leave-request'
-
-const VACATION_WORK_MINUTES = 8 * 60
-const VACATION_WORK_HOURS_LABEL = '8:00'
-
-interface ReportEntry {
-  id: string
-  originalEntry: TimeEntry
-  source: ReportEntrySource
-  date: string
-  dateRaw: Date | null
-  dateKey: string
-  projectId: string
-  projectName: string
-  clockIn: string
-  clockOut: string
-  pauseMinutes: number
-  pauseMs: number
-  workHours: string
-  notes: string
-  originalNotes: string
-  isEdited: boolean
-  isReadOnly?: boolean
-  holidayName?: string | null
-}
-
-interface EmployeeSummary {
-  employeeId: string
-  employeeName: string
-  totalHours: number
-  hourlyRate: number
-  totalCost: number
-}
 
 interface ReportsTabProps {
   defaultReportType?: ReportType
@@ -176,191 +161,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
-  const convertToDate = (date: any): Date | null => {
-    if (!date) return null
-    if (date?.toDate) return date.toDate()
-    if (date?.seconds) return new Date(date.seconds * 1000)
-    if (date instanceof Date) return date
-    const d = new Date(date)
-    return isNaN(d.getTime()) ? null : d
-  }
-
-  const formatDateForDisplay = (date: Date): string => {
-    return date.toLocaleDateString('de-DE', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    })
-  }
-
-  const parseDateInputAsLocalDate = (value: string): Date | null => {
-    if (!value) return null
-    const date = new Date(`${value}T12:00:00`)
-    return isNaN(date.getTime()) ? null : date
-  }
-
-  const getDateKey = (date: Date): string => formatDateForInputLocal(date)
-
-  const isWeekendDate = (date: Date): boolean => {
-    const day = date.getDay()
-    return day === 0 || day === 6
-  }
-
-  const getWeekStart = (date: Date): Date => {
-    const start = new Date(date)
-    start.setHours(12, 0, 0, 0)
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
-    return start
-  }
-
-  const getWeekEnd = (date: Date): Date => {
-    const end = getWeekStart(date)
-    end.setDate(end.getDate() + 6)
-    return end
-  }
-
-  const enumerateDays = (start: Date, end: Date): Date[] => {
-    const days: Date[] = []
-    const current = new Date(start)
-    current.setHours(12, 0, 0, 0)
-    const last = new Date(end)
-    last.setHours(12, 0, 0, 0)
-    while (current <= last) {
-      days.push(new Date(current))
-      current.setDate(current.getDate() + 1)
-    }
-    return days
-  }
-
-  const isLeaveDateCancelled = (request: LeaveRequest, dateKey: string): boolean =>
-    (request.cancelledDates || []).some((key) => String(key).slice(0, 10) === dateKey)
-
-  const getApprovedVacationDates = (
-    requests: LeaveRequest[],
-    rangeStart: Date,
-    rangeEnd: Date,
-    occupiedTimeEntryDates: Set<string>
-  ): Array<{ date: Date; request: LeaveRequest }> => {
-    const vacationDates = new Map<string, { date: Date; request: LeaveRequest }>()
-    const start = new Date(rangeStart)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(rangeEnd)
-    end.setHours(23, 59, 59, 999)
-
-    for (const request of requests) {
-      if (request.status !== 'approved' || request.type !== 'vacation') continue
-      const reqStart = convertToDate(request.startDate)
-      const reqEnd = convertToDate(request.endDate)
-      if (!reqStart || !reqEnd) continue
-
-      const first = new Date(Math.max(
-        new Date(reqStart.getFullYear(), reqStart.getMonth(), reqStart.getDate()).getTime(),
-        start.getTime()
-      ))
-      const last = new Date(Math.min(
-        new Date(reqEnd.getFullYear(), reqEnd.getMonth(), reqEnd.getDate()).getTime(),
-        end.getTime()
-      ))
-      if (last < first) continue
-
-      for (const date of enumerateDays(first, last)) {
-        const dateKey = getDateKey(date)
-        if (isWeekendDate(date)) continue
-        if (occupiedTimeEntryDates.has(dateKey)) continue
-        if (isLeaveDateCancelled(request, dateKey)) continue
-        if (!vacationDates.has(dateKey)) {
-          vacationDates.set(dateKey, { date, request })
-        }
-      }
-    }
-
-    return [...vacationDates.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
-  }
-
-  const formatTimeForInput = (date: Date | null): string => {
-    if (!date) return ''
-    return date.toLocaleTimeString('de-DE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
-  }
-
-  // Dezimalstunden (z. B. 7.83) in „X Std Y Min" umwandeln.
-  const formatHoursMinutes = (decimalHours: number): string => {
-    if (!decimalHours || decimalHours <= 0) return '0 Std 0 Min'
-    const totalMinutes = Math.round(decimalHours * 60)
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    return `${hours} Std ${minutes} Min`
-  }
-
   const getProjectName = (projectId: string): string => {
     const project = projects.find(p => p.id === projectId)
     return project?.name || projectId
-  }
-
-  const calculateWorkHours = (
-    clockIn: string,
-    clockOut: string,
-    pauseMinutes: number,
-    extraMinutes = 0
-  ): string => {
-    if (!clockIn || !clockOut) return '-'
-    const [inH, inM] = clockIn.split(':').map(Number)
-    const [outH, outM] = clockOut.split(':').map(Number)
-    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return '-'
-    // Brutto-Anwesenheit (Gehen - Kommen). Nur wenn DIESE negativ ist, lag die
-    // Stempelung ueber Mitternacht -> 24h addieren. Die Pause erst DANACH
-    // abziehen, sonst wuerde eine Pause > Arbeitszeit faelschlich als
-    // Nachtschicht interpretiert (z. B. 10 Min - 30 Min Pause -> 23:40).
-    let grossMinutes = (outH * 60 + outM) - (inH * 60 + inM)
-    if (grossMinutes < 0) grossMinutes += 24 * 60
-    let totalMinutes = grossMinutes - pauseMinutes + extraMinutes
-    // Negative Arbeitszeit (Pause laenger als Anwesenheit) als 0:00 zeigen.
-    if (totalMinutes < 0) totalMinutes = 0
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    return `${hours}:${minutes.toString().padStart(2, '0')}`
-  }
-
-  const msToMinutes = (ms: number): number => Math.round(ms / (1000 * 60))
-
-  /** Beim Ausstempeln gutgeschriebene halbe Rückfahrt (in Minuten). */
-  const entryCreditMinutes = (entry: TimeEntry): number =>
-    msToMinutes(getReturnTravelCreditMs(entry))
-
-  const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMinutes: number): number => {
-    if (!clockIn || !clockOut) return 0
-    const [inH, inM] = clockIn.split(':').map(Number)
-    const [outH, outM] = clockOut.split(':').map(Number)
-    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0
-    // Mitternachts-Erkennung auf Basis der Brutto-Anwesenheit, NICHT nach
-    // Pausenabzug (sonst wird Pause > Arbeitszeit als Nachtschicht missgedeutet).
-    let grossMinutes = outH * 60 + outM - (inH * 60 + inM)
-    if (grossMinutes < 0) grossMinutes += 24 * 60
-    return Math.max(0, grossMinutes - pauseMinutes)
-  }
-
-  const minutesToHoursLabel = (totalMinutes: number): string => {
-    const h = Math.floor(totalMinutes / 60)
-    const m = Math.round(totalMinutes % 60)
-    return `${h}:${m.toString().padStart(2, '0')}`
-  }
-
-  const workMinutesFromOriginalEntry = (entry: TimeEntry): number => {
-    if (entry.isVacationDay) return VACATION_WORK_MINUTES
-    const clockInDate = convertToDate(entry.clockInTime)
-    const clockOutDate = convertToDate(entry.clockOutTime)
-    const cin = formatTimeForInput(clockInDate)
-    const cout = formatTimeForInput(clockOutDate)
-    const pauseMinutes = msToMinutes(entry.pauseTotalTime || 0)
-    return workMinutesFromParts(cin, cout, pauseMinutes) + entryCreditMinutes(entry)
-  }
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount)
   }
 
   // ==================== MITARBEITER-BERICHT ====================
@@ -784,68 +587,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       return
     }
 
-    const esc = escapeHtml
-    const projName = selectedProject?.name || ''
-
-    const timeRows = projectRawEntries
-      .filter(e => e.clockOutTime)
-      .sort((a, b) => {
-        const ta = convertToDate(a.clockInTime)?.getTime() || 0
-        const tb = convertToDate(b.clockInTime)?.getTime() || 0
-        return ta - tb
-      })
-      .map(e => {
-        const cin = convertToDate(e.clockInTime)
-        const cout = convertToDate(e.clockOutTime)
-        const dateStr = cin ? cin.toLocaleDateString('de-DE') : '-'
-        // Zeiten auf 15-Min-Raster glätten (Anzeige + Stundenberechnung)
-        const tIn = formatTimeForInput(roundTimeToStep(cin))
-        const tOut = formatTimeForInput(roundTimeToStep(cout))
-        const pauseMin = msToMinutes(e.pauseTotalTime || 0)
-        const wh = calculateWorkHours(tIn, tOut, pauseMin)
-        const name = getEmployeeDisplayName(e.employeeId)
-        return `<tr>
-  <td>${esc(dateStr)}</td>
-  <td>${esc(name)}</td>
-  <td>${esc(tIn)}</td>
-  <td>${esc(tOut)}</td>
-  <td class="right">${pauseMin}</td>
-  <td class="right">${esc(wh)}</td>
-  <td>${esc((e.notes || '').trim())}</td>
-</tr>`
-      })
-      .join('')
-
     const period =
       useTimeFilter && startDate && endDate
         ? `${new Date(startDate).toLocaleDateString('de-DE')} – ${new Date(endDate).toLocaleDateString('de-DE')}`
         : 'Gesamte Projektlaufzeit'
 
-    const html = `<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <title>Mitarbeiter-Auszug</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
-    h1 { font-size: 1.25rem; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 16px; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
-    th { background: #f4f4f4; }
-    .right { text-align: right; }
-    .muted { color: #555; font-size: 12px; margin-top: 8px; }
-  </style>
-</head>
-<body>
-  <h1>${esc(projName)}</h1>
-  <p class="muted">Gebuchte Zeiten (ohne Stundensätze, ohne Gesamtkosten, ohne Bilder). Zeitraum: ${esc(period)}</p>
-  <h2>Zeiten</h2>
-  <table>
-    <thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Kommen</th><th>Gehen</th><th>Pause (min)</th><th>Arbeitszeit</th><th>Kommentar</th></tr></thead>
-    <tbody>${timeRows || '<tr><td colspan="7">Keine Zeiten</td></tr>'}</tbody>
-  </table>
-</body>
-</html>`
+    const html = buildProjectStaffPrintHtml({
+      entries: projectRawEntries,
+      projectName: selectedProject?.name || '',
+      periodLabel: period,
+      getEmployeeDisplayName
+    })
 
     printWindow.document.open()
     printWindow.document.write(html)
@@ -1079,277 +831,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     return `${start.toLocaleDateString('de-DE')} - ${end.toLocaleDateString('de-DE')}`
   }
 
-  const escapeHtml = (value: string): string => {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  }
-
-  const formatNotesForPrintHtml = (notes: string): string => {
-    if (!notes.trim()) return '—'
-    return escapeHtml(notes).replace(/\n/g, '<br />')
-  }
-
-  interface EmployeePrintRow {
-    id: string
-    date: Date
-    dateKey: string
-    dateLabel: string
-    projectName: string
-    clockIn: string
-    clockOut: string
-    pauseMinutes: number | null
-    notes: string
-    workHours: string
-    workMinutes: number
-    holidayName: string | null
-    isWeekend: boolean
-    isVacation: boolean
-    isEmpty: boolean
-  }
-
-  const workMinutesFromReportEntry = (entry: ReportEntry): number => {
-    if (entry.workHours && entry.workHours !== '-') {
-      const [h, m] = entry.workHours.split(':').map(Number)
-      if (Number.isFinite(h) && Number.isFinite(m)) return h * 60 + m
-    }
-    return 0
-  }
-
-  const buildPrintDateCellHtml = (row: EmployeePrintRow): string => {
-    const notes: string[] = []
-    if (row.isWeekend) notes.push('Wochenende')
-    if (row.holidayName) notes.push(`Feiertag: ${row.holidayName}`)
-    if (notes.length === 0) return escapeHtml(row.dateLabel)
-    return `${escapeHtml(row.dateLabel)}<br /><span class="day-subnote">${escapeHtml(notes.join(' · '))}</span>`
-  }
-
-  const buildEmployeePrintRows = (): EmployeePrintRow[] => {
-    const selectedStart = parseDateInputAsLocalDate(startDate)
-    const selectedEnd = parseDateInputAsLocalDate(endDate)
-    const fallbackDates = reportEntries
-      .map((entry) => entry.dateRaw)
-      .filter((date): date is Date => !!date)
-      .sort((a, b) => a.getTime() - b.getTime())
-    const firstDate = selectedStart || fallbackDates[0]
-    const lastDate = selectedEnd || fallbackDates[fallbackDates.length - 1]
-    if (!firstDate || !lastDate) return []
-
-    const weekStart = getWeekStart(firstDate)
-    const weekEnd = getWeekEnd(lastDate)
-    const entriesByDate = new Map<string, ReportEntry[]>()
-    for (const entry of reportEntries) {
-      if (!entry.dateRaw) continue
-      const dateKey = entry.dateKey || getDateKey(entry.dateRaw)
-      const list = entriesByDate.get(dateKey) || []
-      list.push(entry)
-      entriesByDate.set(dateKey, list)
-    }
-
-    const rows: EmployeePrintRow[] = []
-    for (const date of enumerateDays(weekStart, weekEnd)) {
-      const dateKey = getDateKey(date)
-      const dateLabel = formatDateForDisplay(date)
-      const holidayName = getBavariaHolidayName(date)
-      const isWeekend = isWeekendDate(date)
-      const entriesForDay = entriesByDate.get(dateKey) || []
-
-      if (entriesForDay.length > 0) {
-        entriesForDay.forEach((entry, index) => {
-          const notes = [
-            entry.notes,
-            holidayName ? `Feiertag: ${holidayName}` : '',
-            isWeekend ? 'Wochenende' : ''
-          ]
-            .map((value) => value.trim())
-            .filter(Boolean)
-            .join('\n')
-          rows.push({
-            id: `${entry.id}-${index}`,
-            date,
-            dateKey,
-            dateLabel,
-            projectName: entry.projectName,
-            clockIn: entry.clockIn || '—',
-            clockOut: entry.clockOut || '—',
-            pauseMinutes: entry.pauseMinutes,
-            notes,
-            workHours: entry.workHours || '0:00',
-            workMinutes: workMinutesFromReportEntry(entry),
-            holidayName,
-            isWeekend,
-            isVacation: entry.source === 'leave-request',
-            isEmpty: false
-          })
-        })
-        continue
-      }
-
-      const notes = [
-        holidayName ? `Feiertag: ${holidayName}` : '',
-        isWeekend ? 'Wochenende' : ''
-      ].filter(Boolean)
-
-      rows.push({
-        id: `empty-${dateKey}`,
-        date,
-        dateKey,
-        dateLabel,
-        projectName: holidayName ? 'Feiertag' : isWeekend ? 'Wochenende' : '—',
-        clockIn: '—',
-        clockOut: '—',
-        pauseMinutes: null,
-        notes: notes.join('\n'),
-        workHours: '0:00',
-        workMinutes: 0,
-        holidayName,
-        isWeekend,
-        isVacation: false,
-        isEmpty: true
-      })
-    }
-
-    return rows
-  }
-
-  const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): string =>
-    minutesToHoursLabel(rows.reduce((sum, row) => sum + row.workMinutes, 0))
-
-  const buildEmployeePrintHtml = (): string => {
-    const printRows = buildEmployeePrintRows()
-    const rowsHtml = printRows
-      .map((row) => {
-        const classes = [
-          row.isWeekend ? 'weekend-row' : '',
-          row.holidayName ? 'holiday-row' : '',
-          row.isVacation ? 'vacation-row' : '',
-          row.isEmpty ? 'empty-row' : ''
-        ].filter(Boolean).join(' ')
-        return `<tr>
-  <td class="date-print-cell ${classes}">${buildPrintDateCellHtml(row)}</td>
-  <td>${escapeHtml(row.projectName)}</td>
-  <td>${escapeHtml(row.clockIn)}</td>
-  <td>${escapeHtml(row.clockOut)}</td>
-  <td>${row.pauseMinutes ?? '—'}</td>
-  <td class="doc-cell">${formatNotesForPrintHtml(row.notes)}</td>
-  <td>${escapeHtml(row.workHours)}</td>
-</tr>`
-      })
-      .join('')
-
-    return `<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Arbeitszeitnachweis</title>
-  <style>
-    body {
-      margin: 24px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      color: #222;
-      background: #fff;
-    }
-    .meta {
-      margin-bottom: 16px;
-      line-height: 1.45;
-      font-size: 14px;
-    }
-    .meta strong {
-      display: inline-block;
-      min-width: 110px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th, td {
-      border: 1px solid #d6d6d6;
-      padding: 8px 10px;
-      text-align: left;
-      vertical-align: middle;
-    }
-    td.doc-cell {
-      vertical-align: top;
-      white-space: normal;
-      word-break: break-word;
-      max-width: 280px;
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    th {
-      background: #f4f4f4;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-    tfoot td {
-      font-weight: 700;
-      background: #fafafa;
-    }
-    .right {
-      text-align: right;
-    }
-    .day-subnote {
-      display: inline-block;
-      margin-top: 2px;
-      color: #555;
-      font-size: 11px;
-      line-height: 1.25;
-    }
-    .date-print-cell.weekend-row,
-    tr:has(.date-print-cell.weekend-row) {
-      background: #f8f8f8;
-    }
-    .date-print-cell.holiday-row,
-    tr:has(.date-print-cell.holiday-row) {
-      background: #fff7df;
-    }
-    .date-print-cell.vacation-row,
-    tr:has(.date-print-cell.vacation-row) {
-      background: #eaf5ea;
-    }
-    @page {
-      margin: 12mm;
-      size: A4 portrait;
-    }
-  </style>
-</head>
-<body>
-  <div class="meta">
-    <div><strong>Mitarbeiter:</strong> ${escapeHtml(selectedEmployeeName || '-')}</div>
-    <div><strong>Zeitraum:</strong> ${escapeHtml(formatPeriod())}</div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Tag</th>
-        <th>Projekt</th>
-        <th>Kommen</th>
-        <th>Gehen</th>
-        <th>Pause</th>
-        <th>Dokumentation</th>
-        <th>Arbeitszeit</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="6">Gesamt:</td>
-        <td class="right">${escapeHtml(calculateEmployeePrintTotalHours(printRows))}</td>
-      </tr>
-    </tfoot>
-  </table>
-</body>
-</html>`
-  }
-
   const handleEmployeeTablePrint = () => {
     if (reportEntries.length === 0) {
       toast.error('Keine Zeiteinträge zum Drucken vorhanden')
@@ -1402,7 +883,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     try {
       printWindow.document.open()
-      printWindow.document.write(buildEmployeePrintHtml())
+      printWindow.document.write(
+        buildEmployeePrintHtml({
+          reportEntries,
+          startDate,
+          endDate,
+          employeeName: selectedEmployeeName,
+          periodLabel: formatPeriod()
+        })
+      )
       printWindow.document.close()
 
       printWindow.addEventListener('afterprint', cleanup, { once: true })
