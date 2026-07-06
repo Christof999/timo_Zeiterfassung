@@ -18,9 +18,18 @@ import {
   serverTimestamp,
   arrayUnion
 } from 'firebase/firestore'
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, auth, storage } from './firebaseConfig'
+import { db, storage } from './firebaseConfig'
+import { authReady, convertToDate as sharedConvertToDate, REGULAR_DAY_MINUTES } from './data/shared'
+import * as session from './data/session'
+import * as customers from './data/customers'
+import * as vehicles from './data/vehicles'
+import * as materials from './data/materials'
+import * as employees from './data/employees'
+import * as projects from './data/projects'
+import * as leave from './data/leave'
+import * as settlements from './data/settlements'
+import * as hero from './data/hero'
 import type {
   Employee,
   Project,
@@ -115,11 +124,8 @@ function collectFileReferenceIds(value: unknown, into: Set<string>, depth = 0): 
 }
 
 class DataServiceClass {
-  private authReadyPromise: Promise<void>
-
-  constructor() {
-    this.authReadyPromise = this.initAuth()
-  }
+  // Auth-Bereitschaft kommt zentral aus data/shared.ts
+  private authReadyPromise: Promise<void> = authReady
 
   /** Einheitliche Abbildung fileUploads-Dokument → FileUpload (gleiche Base64-/URL-Logik wie getFileUploads). */
   private fileUploadFromDocData(
@@ -203,125 +209,34 @@ class DataServiceClass {
     return out
   }
 
-  private initAuth(): Promise<void> {
-    return new Promise((resolve) => {
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
-        if (user) {
-          console.log('✅ Firebase Auth bereit:', user.uid)
-          resolve()
-          unsubscribe()
-        } else {
-          console.log('Kein Benutzer, starte anonyme Anmeldung...')
-          signInAnonymously(auth).catch((error) => {
-            console.error('❌ Fehler bei der anonymen Anmeldung:', error)
-            if (error?.code === 'auth/configuration-not-found') {
-              console.error(
-                'Firebase Auth: Im Projekt Authentication aktivieren, Provider „Anonym“ einschalten und die Vercel-Domain unter Authentication → Settings → Authorized domains eintragen. Ohne gültige Anmeldung sind Firestore-Schreibzugriffe (Admin) gesperrt.'
-              )
-            }
-            resolve() // Trotzdem auflösen, damit die App weiterläuft
-          })
-        }
-      })
-    })
-  }
-
-  // DataService initialisiert sich automatisch beim Instanziieren
-
   get authReady() {
     return this.authReadyPromise
   }
 
-  // Employee Management
+  // ==================== SESSION (data/session.ts) ====================
   async getCurrentUser(): Promise<Employee | null> {
-    try {
-      const savedUser = localStorage.getItem('lauffer_current_user')
-      return savedUser ? JSON.parse(savedUser) : null
-    } catch (error) {
-      console.error('Fehler beim Laden des Benutzers:', error)
-      return null
-    }
+    return session.getCurrentUser()
   }
 
   setCurrentUser(user: Employee | null) {
-    if (user) {
-      const { password, ...safeUserData } = user
-      localStorage.setItem('lauffer_current_user', JSON.stringify(safeUserData))
-    } else {
-      localStorage.removeItem('lauffer_current_user')
-    }
+    session.setCurrentUser(user)
   }
 
   clearCurrentUser() {
-    localStorage.removeItem('lauffer_current_user')
+    session.clearCurrentUser()
   }
 
-  async authenticateEmployee(username: string, password: string): Promise<Employee | null> {
-    await this.authReadyPromise
-    try {
-      const employeesRef = collection(db, 'employees')
-      const q = query(employeesRef, where('username', '==', username), limit(1))
-      const snapshot = await getDocs(q)
-      
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0]
-        const employee = { id: doc.id, ...doc.data() } as Employee
-        
-        if (employee.password === password && employee.status === 'active') {
-          const { password, ...employeeData } = employee
-          return employeeData as Employee
-        }
-      }
-      return null
-    } catch (error) {
-      console.error('Fehler bei der Authentifizierung:', error)
-      return null
-    }
+  authenticateEmployee(username: string, password: string): Promise<Employee | null> {
+    return session.authenticateEmployee(username, password)
   }
 
-  // Project Management
-  async getActiveProjects(): Promise<Project[]> {
-    await this.authReadyPromise
-    try {
-      const projectsRef = collection(db, 'projects')
-      const snapshot = await getDocs(projectsRef)
-      let projects = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
-      
-      projects = projects.filter(
-        (project) => {
-          const isActiveFlag = project.isActive !== false
-          const normalizedStatus = (project.status || '').toLowerCase()
-          const isActiveStatus = !project.status || normalizedStatus === 'active' || normalizedStatus === 'aktiv'
-          return isActiveFlag && isActiveStatus
-        }
-      )
-      
-      projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-      return projects
-    } catch (error) {
-      console.error('Fehler beim Abrufen aktiver Projekte:', error)
-      return []
-    }
+  // ==================== PROJEKTE (data/projects.ts) ====================
+  getActiveProjects(): Promise<Project[]> {
+    return projects.getActiveProjects()
   }
 
-  async getProjectById(projectId: string): Promise<Project | null> {
-    await this.authReadyPromise
-    if (!projectId) {
-      return null
-    }
-    
-    try {
-      const projectRef = doc(db, 'projects', projectId)
-      const projectDoc = await getDoc(projectRef)
-      
-      if (projectDoc.exists()) {
-        return { id: projectDoc.id, ...projectDoc.data() } as Project
-      }
-      return null
-    } catch (error) {
-      console.error(`Fehler beim Abrufen des Projekts ${projectId}:`, error)
-      return null
-    }
+  getProjectById(projectId: string): Promise<Project | null> {
+    return projects.getProjectById(projectId)
   }
 
   // Time Entry Management
@@ -900,7 +815,7 @@ class DataServiceClass {
   }
 
   /** Reguläre Tagesarbeitszeit (ohne Pause) in Minuten. Überstunden entstehen erst darüber. */
-  private static readonly REGULAR_DAY_MINUTES = 8.5 * 60
+  private static readonly REGULAR_DAY_MINUTES = REGULAR_DAY_MINUTES
 
   /** Gebuchte Arbeitsminuten eines Eintrags (Kommen − Gehen − Pause + Rückfahrt-Gutschrift). */
   private overtimeWorkedMinutesForEntry(entry: TimeEntry): number {
@@ -1937,964 +1852,219 @@ class DataServiceClass {
   }
 
   // Material types (Verbrauchsmaterial für Ausstempeln / Nachkalkulation)
-  async getActiveMaterialTypes(): Promise<MaterialType[]> {
-    await this.authReadyPromise
-    try {
-      const ref = collection(db, 'materialTypes')
-      const snapshot = await getDocs(ref)
-      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialType))
-      return list
-        .filter((m) => m.isActive !== false && (m.name || '').trim())
-        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Materialtypen:', error)
-      return []
-    }
+  // ==================== MATERIAL (data/materials.ts) ====================
+  getActiveMaterialTypes(): Promise<MaterialType[]> {
+    return materials.getActiveMaterialTypes()
   }
 
-  async getAllMaterialTypes(): Promise<MaterialType[]> {
-    await this.authReadyPromise
-    try {
-      const ref = collection(db, 'materialTypes')
-      const snapshot = await getDocs(ref)
-      return snapshot.docs
-        .map((d) => ({ id: d.id, ...d.data() } as MaterialType))
-        .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || (a.name || '').localeCompare(b.name || '', 'de'))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Materialtypen:', error)
-      return []
-    }
+  getAllMaterialTypes(): Promise<MaterialType[]> {
+    return materials.getAllMaterialTypes()
   }
 
-  async createMaterialType(data: Partial<MaterialType>): Promise<string> {
-    await this.authReadyPromise
-    const ref = collection(db, 'materialTypes')
-    const docRef = await addDoc(ref, {
-      name: data.name || '',
-      unitLabel: data.unitLabel || 'm²',
-      unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
-      isActive: data.isActive !== false,
-      sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
-      createdAt: new Date()
-    })
-    return docRef.id
+  createMaterialType(data: Partial<MaterialType>): Promise<string> {
+    return materials.createMaterialType(data)
   }
 
-  async updateMaterialType(id: string, data: Partial<MaterialType>): Promise<void> {
-    await this.authReadyPromise
-    await updateDoc(doc(db, 'materialTypes', id), {
-      ...data,
-      updatedAt: new Date()
-    })
+  updateMaterialType(id: string, data: Partial<MaterialType>): Promise<void> {
+    return materials.updateMaterialType(id, data)
   }
 
-  async deleteMaterialType(id: string): Promise<void> {
-    await this.authReadyPromise
-    await deleteDoc(doc(db, 'materialTypes', id))
+  deleteMaterialType(id: string): Promise<void> {
+    return materials.deleteMaterialType(id)
   }
 
-  /**
-   * Löscht Materialarten. Ohne Filter werden alle gelöscht; mit
-   * { onlyHero: true } nur die aus HERO importierten Artikel.
-   * Liefert die Anzahl gelöschter Einträge.
-   */
-  async deleteAllMaterialTypes(options?: { onlyHero?: boolean }): Promise<number> {
-    await this.authReadyPromise
-    const snapshot = await getDocs(collection(db, 'materialTypes'))
-    const docs = snapshot.docs.filter((d) =>
-      options?.onlyHero ? (d.data() as MaterialType).source === 'hero' : true
-    )
-    let batch = writeBatch(db)
-    let inBatch = 0
-    let deleted = 0
-    for (const d of docs) {
-      batch.delete(d.ref)
-      inBatch += 1
-      deleted += 1
-      if (inBatch >= 450) {
-        await batch.commit()
-        batch = writeBatch(db)
-        inBatch = 0
-      }
-    }
-    if (inBatch > 0) {
-      await batch.commit()
-    }
-    return deleted
+  deleteAllMaterialTypes(options?: { onlyHero?: boolean }): Promise<number> {
+    return materials.deleteAllMaterialTypes(options)
   }
 
-  // ==================== MATERIAL-GUTSCHRIFTEN ====================
-
-  /** Alle Gutschriften einer Baustelle (neueste zuerst). */
-  async getMaterialCreditsByProject(projectId: string): Promise<MaterialCredit[]> {
-    await this.authReadyPromise
-    try {
-      const ref = collection(db, 'materialCredits')
-      const q = query(ref, where('projectId', '==', projectId))
-      const snapshot = await getDocs(q)
-      const list = snapshot.docs.map((d) => {
-        const data = d.data()
-        const createdAt =
-          data.createdAt instanceof Timestamp
-            ? data.createdAt.toDate()
-            : data.createdAt?.toDate?.() || data.createdAt || new Date()
-        return { id: d.id, ...data, createdAt } as MaterialCredit
-      })
-      return list.sort((a, b) => this.convertToDate(b.createdAt).getTime() - this.convertToDate(a.createdAt).getTime())
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Material-Gutschriften:', error)
-      return []
-    }
+  getMaterialCreditsByProject(projectId: string): Promise<MaterialCredit[]> {
+    return materials.getMaterialCreditsByProject(projectId)
   }
 
-  /** Eine Material-Gutschrift erfassen. */
-  async addMaterialCredit(data: Partial<MaterialCredit>): Promise<MaterialCredit> {
-    await this.authReadyPromise
-    const ref = collection(db, 'materialCredits')
-    const payload: Record<string, unknown> = {
-      projectId: data.projectId || '',
-      kind: data.kind === 'consumption' ? 'consumption' : 'credit',
-      employeeId: data.employeeId,
-      employeeName: data.employeeName,
-      materialTypeId: data.materialTypeId,
-      materialName: data.materialName || '',
-      unitLabel: data.unitLabel,
-      quantity: typeof data.quantity === 'number' ? data.quantity : 0,
-      unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
-      note: data.note,
-      createdAt: serverTimestamp()
-    }
-    const clean = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined))
-    const docRef = await addDoc(ref, clean)
-    return { id: docRef.id, ...data, createdAt: new Date() } as MaterialCredit
+  addMaterialCredit(data: Partial<MaterialCredit>): Promise<MaterialCredit> {
+    return materials.addMaterialCredit(data)
   }
 
-  /** Eine Material-Gutschrift löschen. */
-  async deleteMaterialCredit(id: string): Promise<void> {
-    await this.authReadyPromise
-    await deleteDoc(doc(db, 'materialCredits', id))
+  deleteMaterialCredit(id: string): Promise<void> {
+    return materials.deleteMaterialCredit(id)
   }
 
-  // ==================== KUNDEN ====================
-
-  async getAllCustomers(): Promise<Customer[]> {
-    await this.authReadyPromise
-    try {
-      const customersRef = collection(db, 'customers')
-      const snapshot = await getDocs(customersRef)
-      const customers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Customer))
-      return customers.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Kunden:', error)
-      return []
-    }
+  // ==================== KUNDEN (data/customers.ts) ====================
+  getAllCustomers(): Promise<Customer[]> {
+    return customers.getAllCustomers()
   }
 
-  async getActiveCustomers(): Promise<Customer[]> {
-    const customers = await this.getAllCustomers()
-    return customers.filter((c) => c.isActive !== false)
+  getActiveCustomers(): Promise<Customer[]> {
+    return customers.getActiveCustomers()
   }
 
-  async getCustomerById(id: string): Promise<Customer | null> {
-    await this.authReadyPromise
-    if (!id) return null
-    try {
-      const customerRef = doc(db, 'customers', id)
-      const customerDoc = await getDoc(customerRef)
-      if (!customerDoc.exists()) return null
-      return { id: customerDoc.id, ...customerDoc.data() } as Customer
-    } catch (error) {
-      console.error('Fehler beim Abrufen des Kunden:', error)
-      return null
-    }
+  getCustomerById(id: string): Promise<Customer | null> {
+    return customers.getCustomerById(id)
   }
 
-  async createCustomer(customerData: Partial<Customer>): Promise<string> {
-    await this.authReadyPromise
-    try {
-      const customersRef = collection(db, 'customers')
-      const payload = {
-        ...customerData,
-        source: customerData.source || 'manual',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-      const cleaned = Object.fromEntries(
-        Object.entries(payload).filter(([, value]) => value !== undefined)
-      )
-      const docRef = await addDoc(customersRef, cleaned)
-      return docRef.id
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Kunden:', error)
-      throw error
-    }
+  createCustomer(customerData: Partial<Customer>): Promise<string> {
+    return customers.createCustomer(customerData)
   }
 
-  async updateCustomer(id: string, customerData: Partial<Customer>): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const customerRef = doc(db, 'customers', id)
-      const payload = { ...customerData, updatedAt: new Date() }
-      const cleaned = Object.fromEntries(
-        Object.entries(payload).filter(([, value]) => value !== undefined)
-      )
-      await updateDoc(customerRef, cleaned)
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Kunden:', error)
-      throw error
-    }
+  updateCustomer(id: string, customerData: Partial<Customer>): Promise<void> {
+    return customers.updateCustomer(id, customerData)
   }
 
-  async deleteCustomer(id: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      await deleteDoc(doc(db, 'customers', id))
-    } catch (error) {
-      console.error(`Fehler beim Löschen des Kunden ${id}:`, error)
-      throw error
-    }
+  deleteCustomer(id: string): Promise<void> {
+    return customers.deleteCustomer(id)
   }
 
-  async getAllVehicles(): Promise<Vehicle[]> {
-    await this.authReadyPromise
-    try {
-      const vehiclesRef = collection(db, 'vehicles')
-      const snapshot = await getDocs(vehiclesRef)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Vehicle))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Fahrzeuge:', error)
-      return []
-    }
+  // ==================== FAHRZEUGE (data/vehicles.ts) ====================
+  getAllVehicles(): Promise<Vehicle[]> {
+    return vehicles.getAllVehicles()
   }
 
-  async createVehicle(vehicleData: Partial<Vehicle>): Promise<string> {
-    await this.authReadyPromise
-    try {
-      const vehiclesRef = collection(db, 'vehicles')
-      const docRef = await addDoc(vehiclesRef, {
-        ...vehicleData,
-        createdAt: new Date()
-      })
-      return docRef.id
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Fahrzeugs:', error)
-      throw error
-    }
+  createVehicle(vehicleData: Partial<Vehicle>): Promise<string> {
+    return vehicles.createVehicle(vehicleData)
   }
 
-  async updateVehicle(id: string, vehicleData: Partial<Vehicle>): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const vehicleRef = doc(db, 'vehicles', id)
-      await updateDoc(vehicleRef, {
-        ...vehicleData,
-        updatedAt: new Date()
-      })
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Fahrzeugs:', error)
-      throw error
-    }
+  updateVehicle(id: string, vehicleData: Partial<Vehicle>): Promise<void> {
+    return vehicles.updateVehicle(id, vehicleData)
   }
 
-  async deleteVehicle(id: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const vehicleRef = doc(db, 'vehicles', id)
-      const vehicleDoc = await getDoc(vehicleRef)
-      if (!vehicleDoc.exists()) {
-        return
-      }
-
-      const vehicle = vehicleDoc.data() as Vehicle
-      const vehicleName = vehicle.name || ''
-
-      if (vehicleName) {
-        const vehicleUsagesRef = collection(db, 'vehicleUsages')
-        const usageQuery = query(vehicleUsagesRef, where('vehicleId', '==', id))
-        const usageSnapshot = await getDocs(usageQuery)
-
-        const updatePromises = usageSnapshot.docs
-          .filter((usageDoc) => {
-            const usage = usageDoc.data() as VehicleUsage
-            return !usage.vehicleName
-          })
-          .map((usageDoc) => updateDoc(usageDoc.ref, { vehicleName }))
-
-        if (updatePromises.length > 0) {
-          await Promise.all(updatePromises)
-        }
-      }
-
-      await deleteDoc(vehicleRef)
-    } catch (error) {
-      console.error(`Fehler beim Löschen des Fahrzeugs ${id}:`, error)
-      throw error
-    }
+  deleteVehicle(id: string): Promise<void> {
+    return vehicles.deleteVehicle(id)
   }
 
-  async getVehicleUsagesByProject(projectId: string): Promise<VehicleUsage[]> {
-    await this.authReadyPromise
-    try {
-      const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const q = query(vehicleUsagesRef, where('projectId', '==', projectId))
-      const snapshot = await getDocs(q)
-      
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Fahrzeugnutzungen:', error)
-      return []
-    }
+  getVehicleUsagesByProject(projectId: string): Promise<VehicleUsage[]> {
+    return vehicles.getVehicleUsagesByProject(projectId)
   }
 
-  async getVehicleUsagesByEmployeeId(employeeId: string): Promise<VehicleUsage[]> {
-    await this.authReadyPromise
-    try {
-      if (!employeeId) return []
-      const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const q = query(vehicleUsagesRef, where('employeeId', '==', employeeId))
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Mitarbeiter):', error)
-      return []
-    }
+  getVehicleUsagesByEmployeeId(employeeId: string): Promise<VehicleUsage[]> {
+    return vehicles.getVehicleUsagesByEmployeeId(employeeId)
   }
 
-  async getVehicleUsagesByTimeEntryId(timeEntryId: string): Promise<VehicleUsage[]> {
-    await this.authReadyPromise
-    try {
-      if (!timeEntryId) return []
-      const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const q = query(vehicleUsagesRef, where('timeEntryId', '==', timeEntryId))
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VehicleUsage))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Fahrzeugnutzungen (Zeiteintrag):', error)
-      return []
-    }
+  getVehicleUsagesByTimeEntryId(timeEntryId: string): Promise<VehicleUsage[]> {
+    return vehicles.getVehicleUsagesByTimeEntryId(timeEntryId)
   }
 
-  async addVehicleUsage(usageData: Partial<VehicleUsage>): Promise<VehicleUsage> {
-    await this.authReadyPromise
-    try {
-      const vehicleUsagesRef = collection(db, 'vehicleUsages')
-      const normalizedUsageData: Partial<VehicleUsage> = { ...usageData }
-
-      if (!normalizedUsageData.vehicleName && normalizedUsageData.vehicleId) {
-        const vehicleRef = doc(db, 'vehicles', normalizedUsageData.vehicleId)
-        const vehicleDoc = await getDoc(vehicleRef)
-        if (vehicleDoc.exists()) {
-          const vehicleData = vehicleDoc.data() as Vehicle
-          normalizedUsageData.vehicleName = vehicleData.name
-        }
-      }
-
-      const rawPayload = {
-        ...normalizedUsageData,
-        createdAt: serverTimestamp()
-      }
-      // Firestore lehnt undefined in Feldern ab (z. B. optionales comment)
-      const payload = Object.fromEntries(
-        Object.entries(rawPayload).filter(([, value]) => value !== undefined)
-      )
-
-      const docRef = await addDoc(vehicleUsagesRef, payload)
-      const usageDoc = await getDoc(docRef)
-      
-      return { id: docRef.id, ...usageDoc.data() } as VehicleUsage
-    } catch (error) {
-      console.error('Fehler beim Erstellen der Fahrzeugnutzung:', error)
-      throw error
-    }
+  addVehicleUsage(usageData: Partial<VehicleUsage>): Promise<VehicleUsage> {
+    return vehicles.addVehicleUsage(usageData)
   }
 
-  // Admin Management
-  async getCurrentAdmin(): Promise<any | null> {
-    try {
-      let savedAdmin = localStorage.getItem('lauffer_admin_user')
-      if (!savedAdmin) {
-        savedAdmin = localStorage.getItem('lauffer_current_admin')
-      }
-      return savedAdmin ? JSON.parse(savedAdmin) : null
-    } catch (error) {
-      console.error('Fehler beim Laden des Admins:', error)
-      return null
-    }
+  // ==================== ADMIN-SESSION (data/session.ts) ====================
+  async getCurrentAdmin(): Promise<session.AdminSession | null> {
+    return session.getCurrentAdmin()
   }
 
-  setCurrentAdmin(admin: any | null) {
-    if (admin) {
-      localStorage.setItem('lauffer_admin_user', JSON.stringify(admin))
-      localStorage.setItem('lauffer_current_admin', JSON.stringify(admin))
-    } else {
-      localStorage.removeItem('lauffer_admin_user')
-      localStorage.removeItem('lauffer_current_admin')
-    }
+  setCurrentAdmin(admin: session.AdminSession | null) {
+    session.setCurrentAdmin(admin)
   }
 
   clearCurrentAdmin() {
-    localStorage.removeItem('lauffer_admin_user')
-    localStorage.removeItem('lauffer_current_admin')
+    session.clearCurrentAdmin()
   }
 
-  async saveAdminPushSubscription(
+  saveAdminPushSubscription(
     subscription: PushSubscriptionJSON,
     admin: { id?: string; username?: string; name?: string }
   ): Promise<void> {
-    if (!subscription.endpoint) {
-      throw new Error('Push-Subscription enthält keinen Endpoint')
-    }
-
-    await this.authReadyPromise
-    const currentAuthUser = auth.currentUser
-    if (!currentAuthUser) {
-      throw new Error('Kein Firebase Auth User vorhanden')
-    }
-    const idToken = await currentAuthUser.getIdToken()
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
-
-    const response = await fetch('/api/push/subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
-      },
-      body: JSON.stringify({
-        action: 'upsert',
-        subscription,
-        admin,
-        permission: Notification.permission,
-        isStandalone,
-        userAgent: navigator.userAgent
-      })
-    })
-
-    if (!response.ok) {
-      const errorPayload = await response.json().catch(() => null)
-      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
-      throw new Error(errorMessage)
-    }
+    return session.saveAdminPushSubscription(subscription, admin)
   }
 
-  async removeAdminPushSubscription(endpoint: string): Promise<void> {
-    if (!endpoint) {
-      return
-    }
-
-    await this.authReadyPromise
-    const currentAuthUser = auth.currentUser
-    if (!currentAuthUser) {
-      throw new Error('Kein Firebase Auth User vorhanden')
-    }
-    const idToken = await currentAuthUser.getIdToken()
-
-    const response = await fetch('/api/push/subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
-      },
-      body: JSON.stringify({
-        action: 'disable',
-        endpoint
-      })
-    })
-
-    if (!response.ok) {
-      const errorPayload = await response.json().catch(() => null)
-      const errorMessage = errorPayload?.error || `HTTP ${response.status}`
-      throw new Error(errorMessage)
-    }
+  removeAdminPushSubscription(endpoint: string): Promise<void> {
+    return session.removeAdminPushSubscription(endpoint)
   }
 
-  async authenticateAdmin(username: string, password: string): Promise<any | null> {
-    await this.authReadyPromise
-    try {
-      // Einfache Admin-Authentifizierung (wie in der alten Version)
-      if (username === 'admin' && password === 'admin123') {
-        const admin = { username: 'admin', name: 'Administrator', isAdmin: true }
-        this.setCurrentAdmin(admin)
-        return admin
-      }
-      
-      // Prüfe auch ob es ein Admin-Mitarbeiter ist
-      const employeesRef = collection(db, 'employees')
-      const q = query(employeesRef, where('username', '==', username), limit(1))
-      const snapshot = await getDocs(q)
-      
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0]
-        const employee = { id: doc.id, ...doc.data() } as Employee
-        
-        if (employee.password === password && employee.isAdmin === true) {
-          const admin = { 
-            id: employee.id,
-            username: employee.username, 
-            name: employee.name || `${employee.firstName} ${employee.lastName}`,
-            isAdmin: true 
-          }
-          this.setCurrentAdmin(admin)
-          return admin
-        }
-      }
-      
-      return null
-    } catch (error) {
-      console.error('Fehler bei der Admin-Authentifizierung:', error)
-      return null
-    }
+  authenticateAdmin(username: string, password: string): Promise<session.AdminSession | null> {
+    return session.authenticateAdmin(username, password)
   }
 
-  // Admin: Alle Mitarbeiter abrufen
-  async getAllEmployees(): Promise<Employee[]> {
-    await this.authReadyPromise
-    try {
-      const employeesRef = collection(db, 'employees')
-      const snapshot = await getDocs(employeesRef)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Employee))
-    } catch (error) {
-      console.error('Fehler beim Abrufen aller Mitarbeiter:', error)
-      return []
-    }
+  // ==================== MITARBEITER (data/employees.ts) ====================
+  getAllEmployees(): Promise<Employee[]> {
+    return employees.getAllEmployees()
   }
 
-  async getAllActiveEmployees(): Promise<Employee[]> {
-    await this.authReadyPromise
-    try {
-      const employeesRef = collection(db, 'employees')
-      const snapshot = await getDocs(employeesRef)
-      const allEmployees = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Employee))
-      
-      return allEmployees.filter(employee => 
-        employee.status !== 'inactive' && 
-        employee.name !== 'Administrator'
-      )
-    } catch (error) {
-      console.error('Fehler beim Abrufen der aktiven Mitarbeiter:', error)
-      return []
-    }
+  getAllActiveEmployees(): Promise<Employee[]> {
+    return employees.getAllActiveEmployees()
   }
 
-  async createEmployee(employeeData: Partial<Employee>): Promise<string> {
-    await this.authReadyPromise
-    try {
-      // Prüfe auf doppelten Benutzernamen – nur gegen AKTIVE Mitarbeiter.
-      // (Gelöschte/inaktive blockieren den Benutzernamen nicht mehr.)
-      const employeesRef = collection(db, 'employees')
-      const q = query(employeesRef, where('username', '==', employeeData.username))
-      const existingSnapshot = await getDocs(q)
-      const hasActiveDuplicate = existingSnapshot.docs.some(
-        (d) => (d.data() as any).status !== 'inactive'
-      )
-      if (hasActiveDuplicate) {
-        throw new Error('Dieser Benutzername ist bereits vergeben.')
-      }
-
-      // Standard-Urlaubsdaten hinzufügen
-      if (!employeeData.vacationDays) {
-        employeeData.vacationDays = {
-          total: 30,
-          used: 0,
-          year: new Date().getFullYear()
-        }
-      }
-
-      const docRef = await addDoc(employeesRef, employeeData)
-      return docRef.id
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Mitarbeiters:', error)
-      throw error
-    }
+  createEmployee(employeeData: Partial<Employee>): Promise<string> {
+    return employees.createEmployee(employeeData)
   }
 
-  async updateEmployee(id: string, employeeData: Partial<Employee>): Promise<void> {
-    await this.authReadyPromise
-    try {
-      if (!id) {
-        throw new Error('Keine gültige Mitarbeiter-ID angegeben')
-      }
-
-      // Prüfe auf doppelten Benutzernamen (außer dem aktuellen, nur AKTIVE)
-      if (employeeData.username) {
-        const employeesRef = collection(db, 'employees')
-        const q = query(employeesRef, where('username', '==', employeeData.username))
-        const existingSnapshot = await getDocs(q)
-        const hasOtherActiveDuplicate = existingSnapshot.docs.some(
-          (d) => d.id !== id && (d.data() as any).status !== 'inactive'
-        )
-        if (hasOtherActiveDuplicate) {
-          throw new Error('Dieser Benutzername ist bereits vergeben.')
-        }
-      }
-
-      const employeeRef = doc(db, 'employees', id)
-      await updateDoc(employeeRef, employeeData)
-    } catch (error) {
-      console.error(`Fehler beim Aktualisieren des Mitarbeiters ${id}:`, error)
-      throw error
-    }
+  updateEmployee(id: string, employeeData: Partial<Employee>): Promise<void> {
+    return employees.updateEmployee(id, employeeData)
   }
 
-  async getEmployeeById(id: string): Promise<Employee | null> {
-    await this.authReadyPromise
-    if (!id) return null
-    try {
-      const snap = await getDoc(doc(db, 'employees', id))
-      return snap.exists() ? ({ id: snap.id, ...snap.data() } as Employee) : null
-    } catch (error) {
-      console.error(`Fehler beim Laden des Mitarbeiters ${id}:`, error)
-      return null
-    }
+  getEmployeeById(id: string): Promise<Employee | null> {
+    return employees.getEmployeeById(id)
   }
 
-  async deleteEmployee(id: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      // Prüfe auf aktive Zeiteinträge
-      const timeEntriesRef = collection(db, 'timeEntries')
-      const q = query(
-        timeEntriesRef,
-        where('employeeId', '==', id),
-        where('clockOutTime', '==', null),
-        limit(1)
-      )
-      const activeEntries = await getDocs(q)
-      
-      if (!activeEntries.empty) {
-        throw new Error('Dieser Mitarbeiter hat noch aktive Zeiteinträge und kann nicht gelöscht werden.')
-      }
-
-      // Mitarbeiter wirklich entfernen.
-      const employeeRef = doc(db, 'employees', id)
-      await deleteDoc(employeeRef)
-    } catch (error) {
-      console.error(`Fehler beim Löschen des Mitarbeiters ${id}:`, error)
-      throw error
-    }
+  deleteEmployee(id: string): Promise<void> {
+    return employees.deleteEmployee(id)
   }
 
-  // Admin: Alle Projekte abrufen
-  async getAllProjects(): Promise<Project[]> {
-    await this.authReadyPromise
-    try {
-      const projectsRef = collection(db, 'projects')
-      const snapshot = await getDocs(projectsRef)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
-    } catch (error) {
-      console.error('Fehler beim Abrufen aller Projekte:', error)
-      return []
-    }
+  // ==================== PROJEKTE CRUD (data/projects.ts) ====================
+  getAllProjects(): Promise<Project[]> {
+    return projects.getAllProjects()
   }
 
-  async createProject(projectData: Partial<Project>): Promise<string> {
-    await this.authReadyPromise
-    try {
-      const projectsRef = collection(db, 'projects')
-      const raw = {
-        ...projectData,
-        isActive: projectData.isActive !== false,
-        status: projectData.status || 'active'
-      }
-      // Firestore verwirft Schreibvorgänge mit undefined-Feldern — optionale Daten weglassen
-      const payload = Object.fromEntries(
-        Object.entries(raw).filter(([, value]) => value !== undefined)
-      )
-      const docRef = await addDoc(projectsRef, payload)
-      return docRef.id
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Projekts:', error)
-      throw error
-    }
+  createProject(projectData: Partial<Project>): Promise<string> {
+    return projects.createProject(projectData)
   }
 
-  async updateProject(
-    id: string,
-    projectData: Partial<Project> & Record<string, unknown>
-  ): Promise<void> {
-    await this.authReadyPromise
-    try {
-      if (!id) {
-        throw new Error('Keine gültige Projekt-ID angegeben')
-      }
-
-      const projectRef = doc(db, 'projects', id)
-      const payload = Object.fromEntries(
-        Object.entries(projectData).filter(([, value]) => value !== undefined)
-      )
-      await updateDoc(projectRef, payload)
-    } catch (error) {
-      console.error(`Fehler beim Aktualisieren des Projekts ${id}:`, error)
-      throw error
-    }
+  updateProject(id: string, projectData: Partial<Project> & Record<string, unknown>): Promise<void> {
+    return projects.updateProject(id, projectData)
   }
 
-  async deleteProject(id: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const projectRef = doc(db, 'projects', id)
-      await updateDoc(projectRef, { 
-        status: 'archived',
-        isActive: false 
-      })
-    } catch (error) {
-      console.error(`Fehler beim Löschen des Projekts ${id}:`, error)
-      throw error
-    }
+  deleteProject(id: string): Promise<void> {
+    return projects.deleteProject(id)
   }
 
-  // Leave Request Management
-  async getLeaveRequestsByEmployee(employeeId: string): Promise<LeaveRequest[]> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestsRef = collection(db, 'leaveRequests')
-      const q = query(leaveRequestsRef, where('employeeId', '==', employeeId))
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LeaveRequest))
-    } catch (error) {
-      console.error('Fehler beim Abrufen der Urlaubsanträge:', error)
-      return []
-    }
+  // ==================== URLAUB (data/leave.ts) ====================
+  getLeaveRequestsByEmployee(employeeId: string): Promise<LeaveRequest[]> {
+    return leave.getLeaveRequestsByEmployee(employeeId)
   }
 
-  async getAllLeaveRequests(): Promise<LeaveRequest[]> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestsRef = collection(db, 'leaveRequests')
-      const snapshot = await getDocs(leaveRequestsRef)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LeaveRequest))
-    } catch (error) {
-      console.error('Fehler beim Abrufen aller Urlaubsanträge:', error)
-      return []
-    }
+  getAllLeaveRequests(): Promise<LeaveRequest[]> {
+    return leave.getAllLeaveRequests()
   }
 
-  private async triggerLeaveRequestPushNotification(payload: {
-    leaveRequestId: string
-    employeeId: string | null
-    employeeName: string
-    startDate: string | null
-    endDate: string | null
-    type: LeaveRequest['type'] | null
-    workingDays: number | null
-  }): Promise<void> {
-    try {
-      const currentAuthUser = auth.currentUser
-      if (!currentAuthUser) {
-        if (isDevMode) {
-          console.warn('Push-Trigger übersprungen: kein Firebase Auth User vorhanden')
-        }
-        return
-      }
-
-      const idToken = await currentAuthUser.getIdToken()
-      const response = await fetch('/api/push/leave-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null)
-        const errorMessage = errorPayload?.error || `HTTP ${response.status}`
-        throw new Error(errorMessage)
-      }
-    } catch (error) {
-      // Push-Fehler dürfen den Urlaubsantrag nicht blockieren.
-      console.error('Fehler beim Auslösen der Push-Benachrichtigung:', error)
-    }
+  createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
+    return leave.createLeaveRequest(requestData)
   }
 
-  async createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestsRef = collection(db, 'leaveRequests')
-      const docRef = await addDoc(leaveRequestsRef, {
-        ...requestData,
-        status: 'pending',
-        createdAt: new Date()
-      })
-
-      await this.triggerLeaveRequestPushNotification({
-        leaveRequestId: docRef.id,
-        employeeId: requestData.employeeId || null,
-        employeeName: requestData.employeeName || 'Mitarbeiter',
-        startDate: requestData.startDate ? new Date(requestData.startDate as any).toISOString() : null,
-        endDate: requestData.endDate ? new Date(requestData.endDate as any).toISOString() : null,
-        type: requestData.type || null,
-        workingDays: typeof requestData.workingDays === 'number' ? requestData.workingDays : null
-      })
-
-      return docRef.id
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Urlaubsantrags:', error)
-      throw error
-    }
+  updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {
+    return leave.updateLeaveRequest(id, requestData)
   }
 
-  async updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await updateDoc(leaveRequestRef, {
-        ...requestData,
-        updatedAt: new Date()
-      })
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Urlaubsantrags:', error)
-      throw error
-    }
+  approveLeaveRequest(id: string, approvedBy: string): Promise<void> {
+    return leave.approveLeaveRequest(id, approvedBy)
   }
 
-  async approveLeaveRequest(id: string, approvedBy: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await runTransaction(db, async (transaction) => {
-        const leaveRequestDoc = await transaction.get(leaveRequestRef)
-        if (!leaveRequestDoc.exists()) {
-          throw new Error('Urlaubsantrag nicht gefunden')
-        }
-
-        const leaveRequest = leaveRequestDoc.data() as LeaveRequest
-        if (leaveRequest.status === 'approved') {
-          return
-        }
-
-        // „Urlaub auf Überstunden": benötigte Stunden vom Überstundenkonto abziehen
-        if (leaveRequest.type === 'overtime') {
-          const neededMinutes = (Number(leaveRequest.workingDays) || 0) * DataServiceClass.REGULAR_DAY_MINUTES
-          const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
-          const employeeDoc = await transaction.get(employeeRef)
-          if (!employeeDoc.exists()) {
-            throw new Error('Mitarbeiter nicht gefunden')
-          }
-          const current = Number((employeeDoc.data() as any).overtimeBalanceMinutes) || 0
-          if (current < neededMinutes) {
-            throw new Error('Nicht genügend Überstunden für diesen Antrag vorhanden.')
-          }
-          transaction.update(employeeRef, {
-            overtimeBalanceMinutes: current - neededMinutes,
-            updatedAt: new Date()
-          })
-        }
-
-        transaction.update(leaveRequestRef, {
-          status: 'approved',
-          approvedBy,
-          approvedAt: new Date(),
-          updatedAt: new Date()
-        })
-      })
-    } catch (error) {
-      console.error('Fehler beim Genehmigen des Urlaubsantrags:', error)
-      throw error
-    }
+  rejectLeaveRequest(id: string, rejectionReason: string): Promise<void> {
+    return leave.rejectLeaveRequest(id, rejectionReason)
   }
 
-  async rejectLeaveRequest(id: string, rejectionReason: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await updateDoc(leaveRequestRef, {
-        status: 'rejected',
-        rejectionReason,
-        updatedAt: new Date()
-      })
-    } catch (error) {
-      console.error('Fehler beim Ablehnen des Urlaubsantrags:', error)
-      throw error
-    }
+  deleteLeaveRequest(id: string): Promise<void> {
+    return leave.deleteLeaveRequest(id)
   }
 
-  async deleteLeaveRequest(id: string): Promise<void> {
-    await this.authReadyPromise
-    try {
-      const leaveRequestRef = doc(db, 'leaveRequests', id)
-      await deleteDoc(leaveRequestRef)
-    } catch (error) {
-      console.error('Fehler beim Löschen des Urlaubsantrags:', error)
-      throw error
-    }
-  }
-
+  // ==================== ABRECHNUNGEN (data/settlements.ts) ====================
   settlementDocId(employeeId: string, periodStart: string, periodEnd: string): string {
-    return `${employeeId}_${periodStart}_${periodEnd}`.replace(/\//g, '-')
+    return settlements.settlementDocId(employeeId, periodStart, periodEnd)
   }
 
-  async saveTimeReportSettlement(data: Omit<TimeReportSettlement, 'id' | 'settledAt'>): Promise<void> {
-    await this.authReadyPromise
-    const id = this.settlementDocId(data.employeeId, data.periodStart, data.periodEnd)
-    const settlementRef = doc(db, 'timeReportSettlements', id)
-
-    try {
-      await setDoc(settlementRef, {
-        ...data,
-        settledAt: new Date()
-      })
-    } catch (error: unknown) {
-      console.error('Fehler beim Speichern der Zeiterfassungs-Abrechnung:', error)
-      const code = (error as { code?: string })?.code
-      if (code === 'permission-denied') {
-        throw new Error(
-          'Keine Berechtigung für „timeReportSettlements“ in Firestore. Bitte in den Security Rules Lesen/Schreiben für angemeldete Nutzer erlauben.'
-        )
-      }
-      throw error
-    }
-
-    try {
-      const empRef = doc(db, 'employees', data.employeeId)
-      const empSnap = await getDoc(empRef)
-      if (empSnap.exists()) {
-        const emp = empSnap.data() as Employee
-        const paid = Number(data.paidOutMinutes) || 0
-        if (emp.overtimeBalanceMinutes != null && typeof emp.overtimeBalanceMinutes === 'number') {
-          const next = Math.max(0, emp.overtimeBalanceMinutes - paid)
-          await updateDoc(empRef, { overtimeBalanceMinutes: next })
-        }
-      }
-    } catch (error) {
-      console.warn('Abrechnung gespeichert, aber Überstunden-Saldo am Mitarbeiter konnte nicht angepasst werden:', error)
-    }
+  saveTimeReportSettlement(data: Omit<TimeReportSettlement, 'id' | 'settledAt'>): Promise<void> {
+    return settlements.saveTimeReportSettlement(data)
   }
 
-  async getTimeReportSettlement(
+  getTimeReportSettlement(
     employeeId: string,
     periodStart: string,
     periodEnd: string
   ): Promise<TimeReportSettlement | null> {
-    await this.authReadyPromise
-    try {
-      const id = this.settlementDocId(employeeId, periodStart, periodEnd)
-      const settlementRef = doc(db, 'timeReportSettlements', id)
-      const snap = await getDoc(settlementRef)
-      if (!snap.exists()) return null
-      return { id: snap.id, ...snap.data() } as TimeReportSettlement
-    } catch (error) {
-      console.error('Fehler beim Laden der Zeiterfassungs-Abrechnung:', error)
-      return null
-    }
+    return settlements.getTimeReportSettlement(employeeId, periodStart, periodEnd)
   }
 
-  // Hilfsfunktion: Arbeitstage berechnen (ohne Wochenenden)
   calculateWorkingDays(startDate: Date, endDate: Date): number {
-    let count = 0
-    const current = new Date(startDate)
-    const end = new Date(endDate)
-    
-    while (current <= end) {
-      const dayOfWeek = current.getDay()
-      // 0 = Sonntag, 6 = Samstag
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        count++
-      }
-      current.setDate(current.getDate() + 1)
-    }
-    
-    return count
+    return settlements.calculateWorkingDays(startDate, endDate)
   }
 
   // Admin: Dashboard-Daten
@@ -3305,30 +2475,8 @@ class DataServiceClass {
   }
 
   // Hilfsfunktion zum Konvertieren von Timestamps
-  private convertToDate(timestamp: any): Date {
-    if (!timestamp) return new Date()
-    
-    if (timestamp instanceof Date) {
-      return timestamp
-    }
-    
-    if (timestamp instanceof Timestamp) {
-      return timestamp.toDate()
-    }
-    
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate()
-    }
-    
-    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-      return new Date(timestamp)
-    }
-    
-    if (timestamp.seconds !== undefined) {
-      return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000)
-    }
-    
-    return new Date()
+  private convertToDate(timestamp: unknown): Date {
+    return sharedConvertToDate(timestamp)
   }
 
   async getAllTimeEntries(): Promise<TimeEntry[]> {
@@ -3430,40 +2578,13 @@ class DataServiceClass {
     }
   }
 
-  async getHeroIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
-    await this.authReadyPromise
-    try {
-      const configRef = doc(db, 'integrations', 'hero')
-      const snap = await getDoc(configRef)
-      if (!snap.exists()) return null
-      return snap.data() as HeroIntegrationConfig
-    } catch (error) {
-      console.error('Fehler beim Laden der HERO-Integration:', error)
-      return null
-    }
+  // ==================== HERO (data/hero.ts) ====================
+  getHeroIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
+    return hero.getHeroIntegrationConfig()
   }
 
-  async getHeroSyncLogs(limit = 10): Promise<HeroSyncLogEntry[]> {
-    await this.authReadyPromise
-    try {
-      const logsRef = collection(db, 'heroSyncLogs')
-      const snapshot = await getDocs(logsRef)
-      const logs = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      })) as HeroSyncLogEntry[]
-
-      logs.sort((a, b) => {
-        const aTime = this.convertToDate(a.createdAt)?.getTime() ?? 0
-        const bTime = this.convertToDate(b.createdAt)?.getTime() ?? 0
-        return bTime - aTime
-      })
-
-      return logs.slice(0, limit)
-    } catch (error) {
-      console.error('Fehler beim Laden der HERO-Sync-Logs:', error)
-      return []
-    }
+  getHeroSyncLogs(limit = 10): Promise<HeroSyncLogEntry[]> {
+    return hero.getHeroSyncLogs(limit)
   }
 }
 
