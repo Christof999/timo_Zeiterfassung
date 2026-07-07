@@ -1,11 +1,17 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, FileUpload } from '../types'
+import type { FileUpload, MaterialType, TimeEntry, TimeEntryMaterialUsage } from '../types'
 import PhotoUpload, { type PhotoUploadItem } from './PhotoUpload'
+import MaterialUsageFields, {
+  buildMaterialUsagesFromRows,
+  createMaterialUsageRow,
+  type MaterialUsageRow
+} from './MaterialUsageFields'
 import SaveProgressOverlay from './SaveProgressOverlay'
 import { uploadDocumentationWithOfflineFallback } from '../utils/saveDocumentationPhotos'
 import { withTimeout } from '../utils/withTimeout'
 import { toFileUploadRef } from '../utils/fileUploadRef'
+import { getFileImageSrc } from '../utils/fileImageSrc'
 import { toast } from './ToastContainer'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 import '../styles/Modal.css'
@@ -33,6 +39,30 @@ function clockInToLocalDateString(clockIn: TimeEntry['clockInTime']): string {
   }
 }
 
+/** Ein neuer Zeilen-Key (für MaterialUsageRow). */
+function rowKey(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+/** Wandelt bereits gebuchtes Material in bearbeitbare Eingabezeilen um. */
+function usagesToRows(usages: TimeEntryMaterialUsage[] | undefined): MaterialUsageRow[] {
+  if (!usages || usages.length === 0) return [createMaterialUsageRow()]
+  return usages.map((u) => ({
+    key: rowKey(),
+    materialTypeId: u.materialTypeId || '',
+    label: u.materialName || '',
+    quantity: u.quantity != null ? String(u.quantity) : '',
+    unit: u.unitLabel,
+    unitPriceEur: typeof u.unitPriceEur === 'number' ? u.unitPriceEur : undefined
+  }))
+}
+
+/** Ist ein Datei-Datensatz ein Beleg/Dokument (statt Baustellenfoto)? */
+function isDocumentFile(file: FileUpload): boolean {
+  const t = (file.fileType || '').toLowerCase()
+  return t === 'invoice' || t === 'delivery_note' || t === 'document'
+}
+
 const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
   timeEntry,
   onClose,
@@ -53,7 +83,54 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
   )
   const [savingLiveIndex, setSavingLiveIndex] = useState<number | null>(null)
 
+  // ── Material (gebucht) – anzeigen & korrigieren ──
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
+  const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() =>
+    usagesToRows(timeEntry.materialUsages)
+  )
+  const [noMaterial, setNoMaterial] = useState<boolean>(
+    () => (timeEntry.materialUsages?.length ?? 0) === 0
+  )
+  const [materialDirty, setMaterialDirty] = useState(false)
+  const [isSavingMaterial, setIsSavingMaterial] = useState(false)
+
+  // ── Bereits hochgeladene Fotos/Dokumente – nur ansehen ──
+  const [existingFiles, setExistingFiles] = useState<FileUpload[]>([])
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+
   const bookingDateForEntry = clockInToLocalDateString(timeEntry.clockInTime)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [types, files] = await Promise.all([
+          DataService.getActiveMaterialTypes(),
+          DataService.getFileUploadsByTimeEntryIds([timeEntry.id], { includeBinary: true })
+        ])
+        if (cancelled) return
+        setMaterialTypes(types)
+        setExistingFiles(files)
+      } catch (error) {
+        console.error('Fehler beim Laden von Material/Dateien:', error)
+      } finally {
+        if (!cancelled) setIsLoadingFiles(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [timeEntry.id])
+
+  const existingSitePhotos = useMemo(
+    () => existingFiles.filter((f) => !isDocumentFile(f)),
+    [existingFiles]
+  )
+  const existingDocuments = useMemo(
+    () => existingFiles.filter((f) => isDocumentFile(f)),
+    [existingFiles]
+  )
 
   const handleSaveLiveBlock = async (index: number) => {
     setSavingLiveIndex(index)
@@ -69,6 +146,39 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
       toast.error('Fehler beim Speichern: ' + msg)
     } finally {
       setSavingLiveIndex(null)
+    }
+  }
+
+  const handleSaveMaterial = async () => {
+    setIsSavingMaterial(true)
+    try {
+      let materialUsages: TimeEntryMaterialUsage[]
+      if (noMaterial) {
+        materialUsages = []
+      } else {
+        const typesById = new Map(materialTypes.map((t) => [t.id, t]))
+        const built = buildMaterialUsagesFromRows(materialRows, typesById)
+        if (built === null) {
+          toast.error('Bitte bei jeder Position eine gültige Menge größer 0 eintragen.')
+          setIsSavingMaterial(false)
+          return
+        }
+        materialUsages = built
+      }
+
+      await withTimeout(
+        DataService.updateTimeEntry(timeEntry.id, { materialUsages }),
+        30_000,
+        'Speichern hat zu lange gedauert — vermutlich schlechtes Netz.'
+      )
+      toast.success('Material aktualisiert.')
+      setMaterialDirty(false)
+      onSaved()
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
+      toast.error('Fehler beim Speichern des Materials: ' + msg)
+    } finally {
+      setIsSavingMaterial(false)
     }
   }
 
@@ -185,6 +295,39 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
     }
   }
 
+  const renderFileGallery = (files: FileUpload[], emptyLabel: string) => {
+    if (files.length === 0) {
+      return <p className="retro-existing-empty">{emptyLabel}</p>
+    }
+    return (
+      <div className="retro-existing-gallery">
+        {files.map((file) => {
+          const src = getFileImageSrc(file)
+          const comment = (file.imageComment || file.notes || '').trim()
+          return (
+            <figure key={file.id} className="retro-existing-thumb">
+              {src ? (
+                <button
+                  type="button"
+                  className="retro-existing-thumb-btn"
+                  onClick={() => setLightboxSrc(src)}
+                  aria-label="Vergrößern"
+                >
+                  <img src={src} alt={file.fileName || 'Dokumentation'} loading="lazy" />
+                </button>
+              ) : (
+                <span className="retro-existing-thumb-file" title={file.fileName}>
+                  📄 {file.fileName || 'Datei'}
+                </span>
+              )}
+              {comment && <figcaption>{comment}</figcaption>}
+            </figure>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div
       className="modal-overlay retro-doc-detail-overlay"
@@ -192,7 +335,7 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Bericht / Dokumentation nachtragen</h3>
+          <h3>Eintrag ansehen & korrigieren</h3>
           <button
             type="button"
             className="close-modal-btn"
@@ -204,9 +347,52 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
         </div>
         <div className="modal-body">
           <p className="form-hint" style={{ marginTop: 0 }}>
-            Gleicher Umfang wie beim Ausstempeln mit Dokumentation (Notizen, Baustellenfotos und
-            Belege für den Tag des Eintrags: {bookingDateForEntry}).
+            Stempelsatz vom {bookingDateForEntry}: gebuchtes Material und Dokumentation ansehen,
+            korrigieren oder ergänzen.
           </p>
+
+          {/* ── Gebuchtes Material: anzeigen & korrigieren ── */}
+          <div className="retro-section">
+            <h4 className="retro-section-title">Gebuchtes Material</h4>
+            <MaterialUsageFields
+              noMaterial={noMaterial}
+              onNoMaterialChange={(v) => {
+                setNoMaterial(v)
+                setMaterialDirty(true)
+              }}
+              rows={materialRows}
+              onRowsChange={(rows) => {
+                setMaterialRows(rows)
+                setMaterialDirty(true)
+              }}
+              title=""
+              intro="Prüfen und bei Bedarf korrigieren, was auf diesem Stempelsatz verbucht wurde."
+              noMaterialLabel="Auf diesem Stempelsatz wurde kein Material verbucht"
+            />
+            <button
+              type="button"
+              className="btn secondary-btn retro-section-save"
+              onClick={handleSaveMaterial}
+              disabled={!materialDirty || isSavingMaterial}
+            >
+              {isSavingMaterial ? 'Speichere…' : 'Material speichern'}
+            </button>
+          </div>
+
+          {/* ── Bereits erfasste Fotos/Belege: nur ansehen ── */}
+          <div className="retro-section">
+            <h4 className="retro-section-title">Bereits erfasste Fotos & Belege</h4>
+            {isLoadingFiles ? (
+              <p className="retro-existing-empty">Lade Dokumentation…</p>
+            ) : (
+              <>
+                <p className="retro-existing-subhead">Baustellenfotos</p>
+                {renderFileGallery(existingSitePhotos, 'Noch keine Baustellenfotos erfasst.')}
+                <p className="retro-existing-subhead">Lieferscheine & Rechnungen</p>
+                {renderFileGallery(existingDocuments, 'Noch keine Belege erfasst.')}
+              </>
+            )}
+          </div>
 
           {liveBlocks.length > 0 && (
             <div className="retro-live-edit-section">
@@ -252,6 +438,7 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
           )}
 
           <form onSubmit={handleSubmit}>
+            <h4 className="retro-section-title">Bericht & Dokumentation ergänzen</h4>
             <div className="form-group">
               <label htmlFor="retro-doc-notes">Notizen zur durchgeführten Arbeit:</label>
               <textarea
@@ -263,10 +450,10 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
               />
             </div>
 
-            <PhotoUpload label="Fotos von der Baustelle:" onItemsChange={setSitePhotoItems} />
+            <PhotoUpload label="Weitere Fotos von der Baustelle:" onItemsChange={setSitePhotoItems} />
 
             <PhotoUpload
-              label="Lieferscheine oder Rechnungen:"
+              label="Weitere Lieferscheine oder Rechnungen:"
               onItemsChange={setDocumentPhotoItems}
               commentFieldLabel="Kommentar zu diesem Dokument (optional)"
               captureMode="document"
@@ -282,12 +469,30 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
                 onClick={onClose}
                 disabled={isSubmitting}
               >
-                Abbrechen
+                Schließen
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      {lightboxSrc && (
+        <div className="retro-lightbox-overlay" onClick={() => setLightboxSrc(null)}>
+          <button
+            type="button"
+            className="retro-lightbox-close"
+            onClick={() => setLightboxSrc(null)}
+            aria-label="Schließen"
+          >
+            ×
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Dokumentation groß"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       <SaveProgressOverlay
         visible={isSubmitting}

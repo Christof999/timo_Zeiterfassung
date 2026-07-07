@@ -55,6 +55,8 @@ export interface MaterialUsageFieldsProps {
   intro?: string
   /** „kein Material“-Checkbox ausblenden (z. B. für optionale Gutschrift-Erfassung). */
   hideNoMaterialToggle?: boolean
+  /** Beschriftung der „kein Material“-Checkbox (Standard: Tagesbezug beim Ausstempeln). */
+  noMaterialLabel?: string
 }
 
 export function buildMaterialUsagesFromRows(
@@ -169,7 +171,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   offerMaterials,
   title,
   intro,
-  hideNoMaterialToggle
+  hideNoMaterialToggle,
+  noMaterialLabel
 }) => {
   const [types, setTypes] = useState<MaterialType[]>([])
   const [loading, setLoading] = useState(true)
@@ -263,7 +266,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
 
   return (
     <div className="material-usage-fields">
-      <h4 className="material-usage-title">{title || 'Verbrauchsmaterial'}</h4>
+      {/* Leerer String blendet die Überschrift bewusst aus (Aufrufer setzt eigene). */}
+      {title !== '' && <h4 className="material-usage-title">{title || 'Verbrauchsmaterial'}</h4>}
       <p className="material-usage-intro">
         {intro ||
           (hasOffer
@@ -278,7 +282,7 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
             checked={noMaterial}
             onChange={(e) => onNoMaterialChange(e.target.checked)}
           />
-          <span>Heute wurde kein Verbrauchsmaterial verbucht</span>
+          <span>{noMaterialLabel || 'Heute wurde kein Verbrauchsmaterial verbucht'}</span>
         </label>
       )}
 

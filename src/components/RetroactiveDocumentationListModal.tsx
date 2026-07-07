@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { DataService } from '../services/dataService'
 import type { TimeEntry, Project, Employee } from '../types'
 import { Timestamp } from 'firebase/firestore'
@@ -38,9 +38,9 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null)
 
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true)
+  const loadEntries = useCallback(
+    async (showSpinner = true) => {
+      if (showSpinner) setIsLoading(true)
       try {
         const [allEntries, allProjects] = await Promise.all([
           DataService.getTimeEntriesByEmployeeId(employee.id!),
@@ -67,11 +67,15 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
       } catch (err) {
         console.error('Fehler beim Laden der Zeiteinträge:', err)
       } finally {
-        setIsLoading(false)
+        if (showSpinner) setIsLoading(false)
       }
-    }
-    load()
-  }, [employee.id])
+    },
+    [employee.id]
+  )
+
+  useEffect(() => {
+    loadEntries()
+  }, [loadEntries])
 
   const projectName = (projectId: string): string => {
     const p = projects.find((x) => x.id === projectId)
@@ -82,6 +86,16 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
     const text = collectEntryDocumentation(entry).replace(/\s+/g, ' ').trim()
     if (!text) return ''
     return text.length > 140 ? `${text.slice(0, 140)}…` : text
+  }
+
+  const entryBadges = (entry: TimeEntry): string[] => {
+    const badges: string[] = []
+    const materialCount = entry.materialUsages?.length ?? 0
+    if (materialCount > 0) badges.push(`${materialCount}× Material`)
+    const photoCount =
+      (entry.sitePhotoUploads?.length ?? 0) + (entry.documentPhotoUploads?.length ?? 0)
+    if (photoCount > 0) badges.push(`${photoCount} Foto/Beleg`)
+    return badges
   }
 
   const formatDay = (entry: TimeEntry): string => {
@@ -101,15 +115,15 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content retro-doc-list-modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>Bericht nachtragen</h3>
+            <h3>Meine Einträge</h3>
             <button type="button" className="close-modal-btn" onClick={onClose}>
               ×
             </button>
           </div>
           <div className="modal-body">
             <p className="form-hint retro-doc-list-intro">
-              Ihre abgeschlossenen Zeiteinträge mit Projekt. Tippen Sie auf einen Eintrag, um Ihren
-              Bericht anzusehen, zu bearbeiten oder nachzutragen.
+              Ihre abgeschlossenen Zeiteinträge mit Projekt. Tippen Sie auf einen Eintrag, um
+              gebuchtes Material und Dokumentation anzusehen, zu korrigieren oder nachzutragen.
             </p>
 
             {isLoading ? (
@@ -120,6 +134,7 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
               <ul className="retro-doc-entry-list">
                 {entries.map((entry) => {
                   const preview = reportPreview(entry)
+                  const badges = entryBadges(entry)
                   return (
                     <li key={entry.id}>
                       <button
@@ -137,6 +152,15 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
                           ) : (
                             <span className="retro-doc-entry-preview is-empty">
                               Noch kein Bericht – tippen zum Nachtragen
+                            </span>
+                          )}
+                          {badges.length > 0 && (
+                            <span className="retro-doc-entry-badges">
+                              {badges.map((b) => (
+                                <span key={b} className="retro-doc-entry-badge">
+                                  {b}
+                                </span>
+                              ))}
                             </span>
                           )}
                         </span>
@@ -158,8 +182,10 @@ const RetroactiveDocumentationListModal: React.FC<RetroactiveDocumentationListMo
           timeEntry={selectedEntry}
           onClose={() => setSelectedEntry(null)}
           onSaved={() => {
+            // Nur die Liste im Hintergrund auffrischen (Badges/Vorschau) — das
+            // Detail-Modal bleibt offen; der Haupt-Speichern-Button schließt selbst.
             onDocumentationSaved()
-            setSelectedEntry(null)
+            loadEntries(false)
           }}
         />
       )}
