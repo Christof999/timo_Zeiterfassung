@@ -91,7 +91,7 @@ const MaterialTypesTab: React.FC = () => {
         <div>
           <h3>Material</h3>
           <p className="no-data" style={{ marginTop: 4, marginBottom: 0 }}>
-            Hier legen Sie Verbrauchsmaterial mit Einheit und optional Preis fest. Mitarbeiter wählen beim Ausstempeln aus dieser Liste.
+            Hier legen Sie Verbrauchsmaterial mit Einheit, Verkaufs- und Einkaufspreis fest. Die Marge (Verkauf − Einkauf) ist nur intern sichtbar; Mitarbeiter wählen beim Ausstempeln nur Bezeichnung und Menge.
           </p>
         </div>
         <div className="tab-header-actions">
@@ -132,18 +132,36 @@ const MaterialTypesTab: React.FC = () => {
                   <tr>
                     <th>Bezeichnung</th>
                     <th>Einheit</th>
-                    <th>Preis / Einheit</th>
+                    <th>Verkauf</th>
+                    <th>Einkauf</th>
+                    <th>Marge</th>
                     <th>Sort.</th>
                     <th>Status</th>
                     <th>Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((m) => (
+                  {filteredItems.map((m) => {
+                  const hasMargin =
+                    typeof m.unitPriceEur === 'number' && typeof m.purchasePriceEur === 'number'
+                  const margin = hasMargin ? m.unitPriceEur! - m.purchasePriceEur! : null
+                  const marginPct =
+                    margin != null && m.unitPriceEur! > 0 ? (margin / m.unitPriceEur!) * 100 : null
+                  return (
                 <tr key={m.id}>
                   <td data-label="Bezeichnung">{m.name}</td>
                   <td data-label="Einheit">{m.unitLabel || '—'}</td>
-                  <td data-label="Preis / Einheit">{typeof m.unitPriceEur === 'number' ? `${m.unitPriceEur.toFixed(2)} €` : '—'}</td>
+                  <td data-label="Verkauf">{typeof m.unitPriceEur === 'number' ? `${m.unitPriceEur.toFixed(2)} €` : '—'}</td>
+                  <td data-label="Einkauf">{typeof m.purchasePriceEur === 'number' ? `${m.purchasePriceEur.toFixed(2)} €` : '—'}</td>
+                  <td data-label="Marge">
+                    {margin != null ? (
+                      <span className={`material-margin-cell ${margin < 0 ? 'is-negative' : ''}`}>
+                        {margin.toFixed(2)} €{marginPct != null ? ` · ${marginPct.toFixed(0)} %` : ''}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td data-label="Sort.">{m.sortOrder ?? 0}</td>
                   <td data-label="Status">
                     <span className={`status-badge ${m.isActive !== false ? 'active' : 'inactive'}`}>
@@ -176,7 +194,8 @@ const MaterialTypesTab: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+                  )
+                })}
                 </tbody>
               </table>
             </div>

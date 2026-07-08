@@ -1234,3 +1234,15 @@
   }
 }
 
+
+/* Marge-Zelle in der Materialliste */
+.material-margin-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--success-color, #15803d);
+  white-space: nowrap;
+}
+
+.material-margin-cell.is-negative {
+  color: var(--danger-color, #b91c1c);
+}

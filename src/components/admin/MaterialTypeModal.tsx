@@ -14,6 +14,7 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
   const [name, setName] = useState('')
   const [unitLabel, setUnitLabel] = useState('m²')
   const [unitPriceEur, setUnitPriceEur] = useState('')
+  const [purchasePriceEur, setPurchasePriceEur] = useState('')
   const [sortOrder, setSortOrder] = useState('0')
   const [isActive, setIsActive] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
@@ -23,16 +24,40 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
       setName(item.name || '')
       setUnitLabel(item.unitLabel || 'm²')
       setUnitPriceEur(typeof item.unitPriceEur === 'number' ? String(item.unitPriceEur) : '')
+      setPurchasePriceEur(typeof item.purchasePriceEur === 'number' ? String(item.purchasePriceEur) : '')
       setSortOrder(String(item.sortOrder ?? 0))
       setIsActive(item.isActive !== false)
     } else {
       setName('')
       setUnitLabel('m²')
       setUnitPriceEur('')
+      setPurchasePriceEur('')
       setSortOrder('0')
       setIsActive(true)
     }
   }, [item])
+
+  const parsePrice = (value: string): number | null => {
+    const v = value.trim()
+    if (v === '') return null
+    const n = Number.parseFloat(v.replace(',', '.'))
+    return Number.isFinite(n) ? n : NaN
+  }
+
+  // Live-Marge-Vorschau (Verkauf − Einkauf) pro Einheit
+  const sale = parsePrice(unitPriceEur)
+  const purchase = parsePrice(purchasePriceEur)
+  const marginPreview =
+    typeof sale === 'number' &&
+    Number.isFinite(sale) &&
+    typeof purchase === 'number' &&
+    Number.isFinite(purchase)
+      ? sale - purchase
+      : null
+  const marginPct =
+    marginPreview != null && typeof sale === 'number' && sale > 0
+      ? (marginPreview / sale) * 100
+      : null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,7 +69,14 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
     try {
       const price = unitPriceEur.trim() === '' ? undefined : Number.parseFloat(unitPriceEur.replace(',', '.'))
       if (unitPriceEur.trim() !== '' && (!Number.isFinite(price!) || (price as number) < 0)) {
-        toast.error('Ungültiger Preis.')
+        toast.error('Ungültiger Verkaufspreis.')
+        setIsLoading(false)
+        return
+      }
+      const purchase =
+        purchasePriceEur.trim() === '' ? undefined : Number.parseFloat(purchasePriceEur.replace(',', '.'))
+      if (purchasePriceEur.trim() !== '' && (!Number.isFinite(purchase!) || (purchase as number) < 0)) {
+        toast.error('Ungültiger Einkaufspreis.')
         setIsLoading(false)
         return
       }
@@ -53,6 +85,7 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
         name: name.trim(),
         unitLabel: unitLabel.trim() || 'm²',
         unitPriceEur: price,
+        purchasePriceEur: purchase,
         sortOrder: Number.isFinite(so) ? so : 0,
         isActive
       }
@@ -103,7 +136,7 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
             />
           </div>
           <div className="form-group">
-            <label htmlFor="mt-price">Preis pro Einheit (EUR, optional)</label>
+            <label htmlFor="mt-price">Verkaufspreis pro Einheit (EUR, optional)</label>
             <input
               id="mt-price"
               type="text"
@@ -113,6 +146,32 @@ const MaterialTypeModal: React.FC<MaterialTypeModalProps> = ({ item, onClose, on
               placeholder="z. B. 24,50"
             />
           </div>
+          <div className="form-group">
+            <label htmlFor="mt-purchase">Einkaufspreis pro Einheit (EUR, optional)</label>
+            <input
+              id="mt-purchase"
+              type="text"
+              inputMode="decimal"
+              value={purchasePriceEur}
+              onChange={(e) => setPurchasePriceEur(e.target.value)}
+              placeholder="z. B. 16,80"
+            />
+            <p className="form-hint" style={{ margin: '4px 0 0' }}>
+              Nur intern (Admin & Nachkalkulation) – wird Mitarbeitern nicht angezeigt.
+            </p>
+          </div>
+          {marginPreview != null && (
+            <div className={`material-margin-preview ${marginPreview < 0 ? 'is-negative' : ''}`}>
+              <span>Marge pro Einheit</span>
+              <strong>
+                {marginPreview.toLocaleString('de-DE', {
+                  style: 'currency',
+                  currency: 'EUR'
+                })}
+                {marginPct != null ? ` · ${marginPct.toFixed(0)} %` : ''}
+              </strong>
+            </div>
+          )}
           <div className="form-group">
             <label htmlFor="mt-sort">Sortierung (klein = oben)</label>
             <input

@@ -1373,3 +1373,29 @@
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* Marge in der Nachkalkulation (Material) */
+.cost-table td.margin-positive {
+  color: var(--success-color, #15803d);
+  font-weight: 600;
+}
+
+.cost-table td.margin-negative {
+  color: var(--danger-color, #b91c1c);
+  font-weight: 600;
+}
+
+.material-margin-note {
+  margin: var(--spacing-sm) 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.total-cost-box.total-cost-box-margin {
+  margin-top: var(--spacing-sm);
+  border-color: var(--success-color, #15803d);
+}
+
+.total-cost-box.total-cost-box-margin .total-value {
+  color: var(--success-color, #15803d);
+}

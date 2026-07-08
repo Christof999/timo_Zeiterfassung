@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, MaterialCredit } from '../../../types'
+import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, MaterialCredit, MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -80,6 +80,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
   const [projectMaterialCredits, setProjectMaterialCredits] = useState<MaterialCredit[]>([])
+  // Materialkatalog (für Einkaufspreis/Marge in der Nachkalkulation)
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
   const [expandedProjectDays, setExpandedProjectDays] = useState<Set<string>>(new Set())
   const [lightboxImage, setLightboxImage] = useState<FileUpload | null>(null)
   const [journalEntryDetail, setJournalEntryDetail] = useState<{ entry: TimeEntry; dayLabel: string } | null>(null)
@@ -139,12 +141,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const loadInitialData = async () => {
     try {
-      const [fetchedEmployees, fetchedProjects] = await Promise.all([
+      const [fetchedEmployees, fetchedProjects, fetchedMaterialTypes] = await Promise.all([
         DataService.getAllEmployees(),
-        DataService.getAllProjects()
+        DataService.getAllProjects(),
+        DataService.getAllMaterialTypes()
       ])
 
       setAllEmployees(fetchedEmployees)
+      setMaterialTypes(fetchedMaterialTypes)
       
       const filteredEmployees = fetchedEmployees.filter(e => {
         if (e.status === 'inactive') return false
@@ -735,11 +739,38 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const getEmployeeTotalCost = () => employeeSummaries.reduce((sum, e) => sum + e.totalCost, 0)
 
+  // Einkaufspreis pro Einheit aus dem Materialkatalog auflösen (per ID, sonst Name).
+  // Nur intern (Admin/Nachkalkulation) – auf dem gebuchten Material selbst ist er nicht gespeichert.
+  const resolvePurchaseUnitPrice = (usage: {
+    materialTypeId?: string
+    materialName?: string
+  }): number | undefined => {
+    let type: MaterialType | undefined
+    if (usage.materialTypeId) {
+      type = materialTypes.find((t) => t.id === usage.materialTypeId)
+    }
+    if (!type && usage.materialName) {
+      const n = usage.materialName.trim().toLowerCase()
+      type = materialTypes.find((t) => (t.name || '').trim().toLowerCase() === n)
+    }
+    return typeof type?.purchasePriceEur === 'number' ? type.purchasePriceEur : undefined
+  }
+
   // Gebuchtes Material (beim Ausstempeln erfasst) für die Nachkalkulation aggregieren
   const getProjectMaterialSummaries = () => {
     const map = new Map<
       string,
-      { key: string; name: string; unitLabel: string; quantity: number; unitPriceEur?: number; cost: number }
+      {
+        key: string
+        name: string
+        unitLabel: string
+        quantity: number
+        unitPriceEur?: number
+        purchaseUnitEur?: number
+        cost: number
+        purchaseCost: number
+        hasPurchase: boolean
+      }
     >()
     const addUsage = (usage: {
       materialTypeId?: string
@@ -751,12 +782,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const key = usage.materialTypeId || usage.materialName || 'unbekannt'
       const qty = Number(usage.quantity) || 0
       const price = typeof usage.unitPriceEur === 'number' ? usage.unitPriceEur : undefined
+      const purchaseUnit = resolvePurchaseUnitPrice(usage)
       const cost = price != null ? qty * price : 0
+      const purchaseCost = purchaseUnit != null ? qty * purchaseUnit : 0
       const existing = map.get(key)
       if (existing) {
         existing.quantity += qty
         existing.cost += cost
+        existing.purchaseCost += purchaseCost
         if (existing.unitPriceEur == null && price != null) existing.unitPriceEur = price
+        if (existing.purchaseUnitEur == null && purchaseUnit != null) existing.purchaseUnitEur = purchaseUnit
+        if (purchaseUnit != null) existing.hasPurchase = true
       } else {
         map.set(key, {
           key,
@@ -764,7 +800,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           unitLabel: usage.unitLabel || '',
           quantity: qty,
           unitPriceEur: price,
-          cost
+          purchaseUnitEur: purchaseUnit,
+          cost,
+          purchaseCost,
+          hasPurchase: purchaseUnit != null
         })
       }
     }
@@ -786,6 +825,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const getMaterialTotalCost = () => getProjectMaterialSummaries().reduce((sum, m) => sum + m.cost, 0)
+
+  // Summe Einkauf (nur Positionen mit hinterlegtem Einkaufspreis)
+  const getMaterialTotalPurchaseCost = () =>
+    getProjectMaterialSummaries().reduce((sum, m) => sum + (m.hasPurchase ? m.purchaseCost : 0), 0)
+
+  // Summe Marge = Verkauf − Einkauf (nur Positionen mit hinterlegtem Einkaufspreis)
+  const getMaterialTotalMargin = () =>
+    getProjectMaterialSummaries().reduce(
+      (sum, m) => sum + (m.hasPurchase ? m.cost - m.purchaseCost : 0),
+      0
+    )
 
   const getProjectTotalCost = () => getEmployeeTotalCost() + getMaterialTotalCost()
 
@@ -1359,17 +1409,21 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 {getProjectMaterialSummaries().length === 0 ? (
                   <p className="no-data">Kein gebuchtes Material vorhanden</p>
                 ) : (
+                  <>
                   <table className="cost-table">
                     <thead>
                       <tr>
                         <th>Material</th>
                         <th className="number-cell">Menge</th>
-                        <th className="number-cell">Preis / Einheit</th>
-                        <th className="number-cell">Kosten</th>
+                        <th className="number-cell">Verkauf (Kosten)</th>
+                        <th className="number-cell">Einkauf</th>
+                        <th className="number-cell">Marge</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {getProjectMaterialSummaries().map(mat => (
+                      {getProjectMaterialSummaries().map(mat => {
+                        const margin = mat.hasPurchase ? mat.cost - mat.purchaseCost : null
+                        return (
                         <tr key={mat.key}>
                           <td>{mat.name}</td>
                           <td className="number-cell">
@@ -1377,21 +1431,32 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                             {mat.unitLabel ? ` ${mat.unitLabel}` : ''}
                           </td>
                           <td className="number-cell">
-                            {mat.unitPriceEur != null ? formatCurrency(mat.unitPriceEur) : '—'}
-                          </td>
-                          <td className="number-cell">
                             {mat.unitPriceEur != null ? formatCurrency(mat.cost) : '—'}
                           </td>
+                          <td className="number-cell">
+                            {mat.hasPurchase ? formatCurrency(mat.purchaseCost) : '—'}
+                          </td>
+                          <td className={`number-cell ${margin != null && margin < 0 ? 'margin-negative' : 'margin-positive'}`}>
+                            {margin != null ? formatCurrency(margin) : '—'}
+                          </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="subtotal-row">
-                        <td colSpan={3}><strong>Summe Materialkosten:</strong></td>
+                        <td colSpan={2}><strong>Summen:</strong></td>
                         <td className="number-cell"><strong>{formatCurrency(getMaterialTotalCost())}</strong></td>
+                        <td className="number-cell"><strong>{formatCurrency(getMaterialTotalPurchaseCost())}</strong></td>
+                        <td className="number-cell"><strong>{formatCurrency(getMaterialTotalMargin())}</strong></td>
                       </tr>
                     </tfoot>
                   </table>
+                  <p className="material-margin-note">
+                    Marge = Verkauf − Einkauf. Nur Positionen mit im Material hinterlegtem
+                    Einkaufspreis fließen in Einkauf/Marge ein.
+                  </p>
+                  </>
                 )}
               </div>
 
@@ -1401,6 +1466,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   <span className="total-label">Gesamtkosten Projekt:</span>
                   <span className="total-value">{formatCurrency(getProjectTotalCost())}</span>
                 </div>
+                {getMaterialTotalPurchaseCost() > 0 && (
+                  <div className="total-cost-box total-cost-box-margin">
+                    <span className="total-label">Materialmarge (Verkauf − Einkauf):</span>
+                    <span className="total-value">{formatCurrency(getMaterialTotalMargin())}</span>
+                  </div>
+                )}
               </div>
 
               {/* Tagesweise Dokumentation & Medien */}

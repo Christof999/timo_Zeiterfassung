@@ -47,14 +47,18 @@ export async function getAllMaterialTypes(): Promise<MaterialType[]> {
 export async function createMaterialType(data: Partial<MaterialType>): Promise<string> {
   await authReady
   const ref = collection(db, 'materialTypes')
-  const docRef = await addDoc(ref, {
+  const payload: Record<string, unknown> = {
     name: data.name || '',
     unitLabel: data.unitLabel || 'm²',
     unitPriceEur: typeof data.unitPriceEur === 'number' ? data.unitPriceEur : undefined,
+    purchasePriceEur: typeof data.purchasePriceEur === 'number' ? data.purchasePriceEur : undefined,
     isActive: data.isActive !== false,
     sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : 0,
     createdAt: new Date()
-  })
+  }
+  // Firestore lehnt undefined-Felder ab (z. B. wenn kein Ein-/Verkaufspreis gesetzt)
+  const cleaned = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined))
+  const docRef = await addDoc(ref, cleaned)
   return docRef.id
 }
 

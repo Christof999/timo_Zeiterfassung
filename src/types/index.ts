@@ -156,8 +156,10 @@ export interface MaterialType {
   name: string
   /** z. B. m², Stück, Sack */
   unitLabel?: string
-  /** Preis pro Mengeneinheit (EUR) */
+  /** Verkaufspreis pro Mengeneinheit (EUR) */
   unitPriceEur?: number
+  /** Einkaufspreis pro Mengeneinheit (EUR) – nur Admin/Nachkalkulation, nicht in der Mitarbeiter-Auswahl */
+  purchasePriceEur?: number
   isActive?: boolean
   sortOrder?: number
   /** 'hero' = aus HERO-Artikel importiert, sonst manuell */

@@ -1142,3 +1142,26 @@
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* Marge-Vorschau im Material-Modal */
+.material-margin-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-md);
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(22, 163, 74, 0.1);
+  color: var(--success-color, #15803d);
+  font-size: 0.9rem;
+}
+
+.material-margin-preview strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.material-margin-preview.is-negative {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger-color, #b91c1c);
+}
