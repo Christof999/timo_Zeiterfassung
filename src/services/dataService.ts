@@ -316,61 +316,25 @@ class DataServiceClass {
   }
 
   /**
-   * Merkt sich pro Sitzung, ob die Zeitraum-Query am fehlenden Composite-Index
-   * gescheitert ist — dann wird sie nicht bei jeder Suche erneut versucht.
-   * Die Indexe lassen sich ohne CLI in der Firebase Console (Website) anlegen;
-   * der Link dazu steht in der geloggten Fehlermeldung.
-   */
-  private static rangedTimeEntryQueryUnavailable: Partial<Record<'employeeId' | 'projectId', boolean>> = {}
-
-  /**
-   * Zeiteinträge über ein Gleichheitsfeld, optional serverseitig auf einen
-   * clockInTime-Zeitraum eingegrenzt. Liefert bei leerem Ergebnis oder
-   * Query-Fehler (fehlender Index) die ungefilterte Menge — Aufrufer filtern
-   * clientseitig nach (siehe TimeEntryDateRange).
+   * Zeiteinträge über ein Gleichheitsfeld (employeeId/projectId).
+   *
+   * WICHTIG: Bewusst KEINE serverseitige clockInTime-Bereichsfilterung mehr.
+   * Grund: `where('clockInTime', '>=', Timestamp)` findet nur Einträge, deren
+   * clockInTime ein echter Firestore-Timestamp ist. Alt-/Sonderdaten speichern
+   * clockInTime teils als einfaches `{seconds, nanoseconds}`-Objekt — die werden
+   * von Firestore bei einem Timestamp-Bereichsfilter ignoriert (und da die Query
+   * andere Treffer liefert, würden solche Einträge lautlos aus den Berichten
+   * fallen). Der `range`-Parameter bleibt für die Aufrufer erhalten, wird hier
+   * aber nicht mehr für die Query genutzt: Die Aufrufer filtern den Zeitraum
+   * ohnehin clientseitig über convertToDate (das alle Timestamp-Formate liest).
    */
   private async queryTimeEntries(
     field: 'employeeId' | 'projectId',
     value: string,
-    range?: TimeEntryDateRange
+    _range?: TimeEntryDateRange
   ): Promise<TimeEntry[]> {
     await this.authReadyPromise
     const timeEntriesRef = collection(db, 'timeEntries')
-    const hasRange =
-      !!(range && (range.from || range.to)) &&
-      !DataServiceClass.rangedTimeEntryQueryUnavailable[field]
-
-    if (hasRange) {
-      try {
-        const constraints = [where(field, '==', value)]
-        if (range!.from) constraints.push(where('clockInTime', '>=', Timestamp.fromDate(range!.from)))
-        if (range!.to) constraints.push(where('clockInTime', '<=', Timestamp.fromDate(range!.to)))
-        const snapshot = await getDocs(query(timeEntriesRef, ...constraints))
-        if (!snapshot.empty) {
-          return snapshot.docs.map((doc) =>
-            sanitizeTimeEntryForRead({ id: doc.id, ...doc.data() } as TimeEntry)
-          )
-        }
-        // Leeres Ergebnis: kann korrekt sein — zur Sicherheit (Alt-Einträge mit
-        // abweichendem clockInTime-Typ) ungefiltert nachladen; Aufrufer filtern.
-      } catch (error) {
-        const code = (error as { code?: string })?.code
-        if (code === 'failed-precondition') {
-          // Composite-Index fehlt → für diese Sitzung nicht erneut versuchen.
-          // Der Link in der Fehlermeldung legt den Index per Klick in der
-          // Firebase Console an (Browser, keine CLI nötig).
-          DataServiceClass.rangedTimeEntryQueryUnavailable[field] = true
-          console.warn(
-            `Firestore-Index für ${field}+clockInTime fehlt — Berichte laden vorerst ungefiltert (funktioniert, nur langsamer). ` +
-              'Index per Klick anlegen über den Link in dieser Meldung:',
-            (error as Error)?.message || error
-          )
-        } else {
-          console.warn('Zeitraum-Query fehlgeschlagen – lade ungefiltert:', error)
-        }
-      }
-    }
-
     try {
       const snapshot = await getDocs(query(timeEntriesRef, where(field, '==', value)))
       return snapshot.docs.map((doc) =>

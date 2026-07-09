@@ -7,8 +7,42 @@ import {
   escapeHtml,
   getWeekStart,
   getWeekEnd,
-  enumerateDays
+  enumerateDays,
+  convertToDate
 } from './reportUtils'
+
+describe('convertToDate – liest alle clockInTime-Formate', () => {
+  // Regression: Die Zeitraumfilterung der Berichte läuft clientseitig über
+  // convertToDate. Sie MUSS auch Alt-/Sonderformate lesen (Firestore-Timestamp
+  // als toDate(), einfaches {seconds}-Objekt, ISO-String, Date), sonst fallen
+  // Stempelungen aus Mitarbeiter-/Projektberichten heraus.
+  const target = new Date(2026, 5, 15, 8, 30)
+
+  it('liest ein Date direkt', () => {
+    expect(convertToDate(target)?.getTime()).toBe(target.getTime())
+  })
+
+  it('liest ein Timestamp-artiges Objekt mit toDate()', () => {
+    const tsLike = { toDate: () => target }
+    expect(convertToDate(tsLike)?.getTime()).toBe(target.getTime())
+  })
+
+  it('liest ein einfaches {seconds}-Objekt (Alt-/Sonderdaten)', () => {
+    const seconds = Math.floor(target.getTime() / 1000)
+    const secondsObj = { seconds, nanoseconds: 0 }
+    expect(convertToDate(secondsObj)?.getTime()).toBe(seconds * 1000)
+  })
+
+  it('liest einen ISO-String', () => {
+    expect(convertToDate('2026-06-15T08:30:00')?.getFullYear()).toBe(2026)
+  })
+
+  it('gibt null bei fehlendem/ungültigem Wert', () => {
+    expect(convertToDate(null)).toBeNull()
+    expect(convertToDate(undefined)).toBeNull()
+    expect(convertToDate('kein-datum')).toBeNull()
+  })
+})
 
 describe('calculateWorkHours', () => {
   it('berechnet normale Arbeitszeit mit Pause', () => {
