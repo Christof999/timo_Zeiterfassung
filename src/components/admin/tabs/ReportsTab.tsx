@@ -1273,10 +1273,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               <div className="filter-group">
                 <label>Projekt:</label>
                 <SearchableSelect
-                  options={projects.map(proj => ({
-                    value: proj.id,
-                    label: proj.client ? `${proj.name} (${proj.client})` : proj.name || proj.id
-                  }))}
+                  options={[...projects]
+                    .sort((a, b) => {
+                      // Aktive zuerst, archivierte ans Ende; sonst alphabetisch
+                      const aArchived = a.status === 'archived' || a.isActive === false
+                      const bArchived = b.status === 'archived' || b.isActive === false
+                      if (aArchived !== bArchived) return aArchived ? 1 : -1
+                      return (a.name || '').localeCompare(b.name || '', 'de')
+                    })
+                    .map(proj => {
+                      const archived = proj.status === 'archived' || proj.isActive === false
+                      const base = proj.client ? `${proj.name} (${proj.client})` : proj.name || proj.id
+                      // Archivierte klar kennzeichnen, damit doppelte Namen unterscheidbar sind
+                      return { value: proj.id, label: archived ? `${base} — archiviert` : base }
+                    })}
                   value={selectedProjectId}
                   onChange={setSelectedProjectId}
                   placeholder="-- Bitte wählen --"
