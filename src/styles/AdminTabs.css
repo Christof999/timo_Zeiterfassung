@@ -1246,3 +1246,31 @@
 .material-margin-cell.is-negative {
   color: var(--danger-color, #b91c1c);
 }
+
+/* Klickbare KPI-Kachel (Tagesbericht) */
+button.stat-card {
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
+  display: block;
+  position: relative;
+  transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+}
+
+button.stat-card.stat-card-clickable:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+}
+
+button.stat-card:active {
+  transform: translateY(0);
+}
+
+.stat-card-cta {
+  display: block;
+  margin-top: var(--spacing-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}

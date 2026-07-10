@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { TimeEntry, Employee, Project } from '../../../types'
+import type { TimeEntry, Employee, Project, MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
+import DailyReportModal from '../DailyReportModal'
 import '../../../styles/AdminTabs.css'
 
 const OverviewTab: React.FC = () => {
@@ -17,6 +18,12 @@ const OverviewTab: React.FC = () => {
   }>>([])
   const [isLoading, setIsLoading] = useState(true)
   const [clockingOut, setClockingOut] = useState<string | null>(null)
+  // Tagesbericht-Modal (per Klick auf die „Heutige Arbeitsstunden"-Kachel)
+  const [todaysEntries, setTodaysEntries] = useState<TimeEntry[]>([])
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([])
+  const [allProjects, setAllProjects] = useState<Project[]>([])
+  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
+  const [showDailyReport, setShowDailyReport] = useState(false)
 
   useEffect(() => {
     loadDashboardData()
@@ -32,11 +39,12 @@ const OverviewTab: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [currentTimeEntries, projects, todaysEntries, employees] = await Promise.all([
+      const [currentTimeEntries, projects, todaysEntries, employees, materials] = await Promise.all([
         DataService.getCurrentTimeEntries(),
         DataService.getAllProjects(),
         DataService.getTodaysTimeEntries(),
-        DataService.getAllEmployees()
+        DataService.getAllEmployees(),
+        DataService.getAllMaterialTypes()
       ])
 
       // Eingestempelte Mitarbeiter zählen
@@ -44,7 +52,7 @@ const OverviewTab: React.FC = () => {
       setActiveEmployeesCount(uniqueClockedInEmployees.size)
 
       // Aktive Projekte zählen
-      const activeProjects = projects.filter(project => 
+      const activeProjects = projects.filter(project =>
         project.status === 'active' || project.isActive === true
       )
       setActiveProjectsCount(activeProjects.length)
@@ -53,9 +61,15 @@ const OverviewTab: React.FC = () => {
       const totalHours = DataService.calculateTotalWorkHours(todaysEntries)
       setTodayHours(totalHours.toFixed(2))
 
+      // Daten für den Tagesbericht bereithalten
+      setTodaysEntries(todaysEntries)
+      setAllEmployees(employees)
+      setAllProjects(projects)
+      setMaterialTypes(materials)
+
       // Live-Aktivitäten laden
       loadLiveActivity(currentTimeEntries, employees, projects)
-      
+
       setIsLoading(false)
     } catch (error) {
       console.error('Fehler beim Laden der Dashboard-Daten:', error)
@@ -146,10 +160,16 @@ const OverviewTab: React.FC = () => {
           <p className="stat-value">{activeProjectsCount}</p>
         </div>
         
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-card-clickable"
+          onClick={() => setShowDailyReport(true)}
+          title="Tagesbericht öffnen"
+        >
           <h4>Heutige Arbeitsstunden</h4>
           <p className="stat-value">{todayHours}h</p>
-        </div>
+          <span className="stat-card-cta">Tagesbericht ansehen →</span>
+        </button>
       </div>
 
       <div className="live-activity-section">
@@ -232,6 +252,15 @@ const OverviewTab: React.FC = () => {
         )}
       </div>
 
+      {showDailyReport && (
+        <DailyReportModal
+          entries={todaysEntries}
+          employees={allEmployees}
+          projects={allProjects}
+          materialTypes={materialTypes}
+          onClose={() => setShowDailyReport(false)}
+        />
+      )}
     </div>
   )
 }
