@@ -62,18 +62,21 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
             <>
               {/* Kennzahlen oben */}
               <div className="daily-report-kpis">
-                <div className="daily-kpi">
+                <div className="daily-kpi kpi-hours">
+                  <span className="daily-kpi-icon" aria-hidden="true">🕒</span>
                   <span className="daily-kpi-label">Gearbeitete Stunden</span>
                   <span className="daily-kpi-value">{fmtHours(report.totalHours)}</span>
                 </div>
-                <div className="daily-kpi">
+                <div className="daily-kpi kpi-labor">
+                  <span className="daily-kpi-icon" aria-hidden="true">💶</span>
                   <span className="daily-kpi-label">Lohn-Hochrechnung</span>
                   <span className="daily-kpi-value">{fmtEur(report.totalLaborCost)}</span>
                 </div>
                 {hasMaterial && (
-                  <div className="daily-kpi">
-                    <span className="daily-kpi-label">Material (Verkauf)</span>
-                    <span className="daily-kpi-value">{fmtEur(report.materialSalesTotal)}</span>
+                  <div className="daily-kpi kpi-margin">
+                    <span className="daily-kpi-icon" aria-hidden="true">📈</span>
+                    <span className="daily-kpi-label">Material-Marge</span>
+                    <span className="daily-kpi-value">{fmtEur(report.materialMarginTotal)}</span>
                   </div>
                 )}
               </div>
@@ -86,7 +89,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
 
               {/* Mitarbeiter → Stunden je Projekt + Lohn */}
               <section className="daily-report-section">
-                <h3>Mitarbeiter &amp; Stunden</h3>
+                <h3 className="daily-section-title"><span aria-hidden="true">👷</span> Mitarbeiter &amp; Stunden</h3>
                 <div className="daily-table-wrap">
                   <table className="daily-table">
                     <thead>
@@ -141,7 +144,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
 
               {/* Material kumuliert */}
               <section className="daily-report-section">
-                <h3>Material (alle Mitarbeiter)</h3>
+                <h3 className="daily-section-title"><span aria-hidden="true">📦</span> Material (alle Mitarbeiter)</h3>
                 {!hasMaterial ? (
                   <p className="no-data">Heute wurde kein Material verbucht.</p>
                 ) : (
@@ -198,7 +201,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
 
               {/* Überblick / Marge */}
               <section className="daily-report-section daily-report-overview">
-                <h3>Überblick</h3>
+                <h3 className="daily-section-title"><span aria-hidden="true">🧮</span> Überblick</h3>
                 <div className="daily-overview-grid">
                   <div className="daily-overview-row">
                     <span>Lohn-Hochrechnung (Stunden × Satz)</span>

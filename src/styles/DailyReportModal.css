@@ -1,5 +1,9 @@
 .modal-content.daily-report-modal {
-  max-width: 760px;
+  max-width: 780px;
+}
+
+.daily-report-modal .modal-header {
+  align-items: flex-start;
 }
 
 .daily-report-subtitle {
@@ -12,56 +16,108 @@
 .daily-report-body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-xl);
+  background:
+    radial-gradient(120% 60% at 100% 0%, var(--primary-light) 0%, transparent 55%);
 }
 
-/* KPI-Reihe oben */
+/* ── KPI-Kacheln ── */
 .daily-report-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--spacing-sm);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--spacing-md);
 }
 
 .daily-kpi {
-  background: var(--surface-2, #f7f7f9);
-  border: 1px solid var(--border-light, #e5e7eb);
-  border-radius: 12px;
-  padding: 0.75rem 0.9rem;
+  position: relative;
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 0.95rem 1rem 0.9rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* farbiger Akzentbalken links */
+.daily-kpi::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--medium-gray);
+}
+
+.daily-kpi.kpi-hours::before { background: var(--primary-color); }
+.daily-kpi.kpi-labor::before { background: var(--accent-color); }
+.daily-kpi.kpi-margin::before { background: var(--success-color); }
+
+.daily-kpi-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  margin-bottom: 2px;
 }
 
 .daily-kpi-label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-secondary);
   font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .daily-kpi-value {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   color: var(--text-color);
 }
 
+.daily-kpi.kpi-hours .daily-kpi-value { color: var(--primary-color); }
+.daily-kpi.kpi-margin .daily-kpi-value { color: var(--success-color); }
+
 .daily-report-hint {
-  margin: 0;
+  margin: -0.5rem 0 0;
   font-size: 0.82rem;
-  color: var(--text-secondary);
-  background: rgba(234, 179, 8, 0.12);
-  border-radius: 8px;
-  padding: 0.5rem 0.7rem;
+  color: var(--text-color);
+  background: var(--warning-light);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.75rem;
 }
 
-.daily-report-section h3 {
-  margin: 0 0 var(--spacing-sm);
-  font-size: 1rem;
+/* ── Abschnitte ── */
+.daily-report-section {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.daily-section-title {
+  margin: 0 0 var(--spacing-md);
+  font-size: 0.98rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.daily-section-title span {
+  font-size: 1.05rem;
 }
 
 .daily-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
 }
 
 .daily-table {
@@ -70,20 +126,31 @@
   font-size: 0.9rem;
 }
 
-.daily-table th,
-.daily-table td {
+.daily-table thead th {
+  background: var(--light-color);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  font-weight: 700;
   text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border-light, #e5e7eb);
+  padding: 0.6rem 0.7rem;
+  position: sticky;
+  top: 0;
+}
+
+.daily-table tbody td {
+  padding: 0.6rem 0.7rem;
+  border-top: 1px solid var(--border-light);
   vertical-align: top;
 }
 
-.daily-table th {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-secondary);
-  font-weight: 600;
+.daily-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--light-color) 55%, transparent);
+}
+
+.daily-table tbody tr:hover td {
+  background: var(--primary-light);
 }
 
 .daily-table th.num,
@@ -94,24 +161,44 @@
 }
 
 .daily-table tfoot td {
-  border-top: 2px solid var(--border-color, #d8dade);
-  border-bottom: none;
+  padding: 0.7rem;
+  border-top: 2px solid var(--border-color);
+  background: var(--light-color);
+  font-variant-numeric: tabular-nums;
 }
 
+/* Projekt-Aufschlüsselung je Mitarbeiter */
 .daily-project-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .daily-project-list li {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
+}
+
+.daily-project-name {
+  position: relative;
+  padding-left: 0.85rem;
+}
+
+.daily-project-name::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  opacity: 0.65;
 }
 
 .daily-project-hours {
@@ -122,64 +209,94 @@
 
 .daily-open-badge {
   display: inline-block;
-  margin-left: 0.4rem;
-  font-size: 0.65rem;
+  margin-left: 0.45rem;
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(234, 179, 8, 0.18);
-  color: #a16207;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--warning-light);
+  color: var(--warning-color);
   vertical-align: middle;
 }
 
 .daily-margin-pos {
-  color: var(--success-color, #15803d);
-  font-weight: 600;
+  color: var(--success-color);
+  font-weight: 700;
 }
 
 .daily-margin-neg {
-  color: var(--danger-color, #b91c1c);
-  font-weight: 600;
+  color: var(--danger-color);
+  font-weight: 700;
 }
 
-/* Überblick */
+/* ── Überblick ── */
+.daily-report-overview {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--success-light) 40%, var(--card-background)) 0%, var(--card-background) 60%);
+}
+
 .daily-overview-grid {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  background: var(--surface-2, #f7f7f9);
-  border: 1px solid var(--border-light, #e5e7eb);
-  border-radius: 12px;
-  padding: 0.6rem 0.9rem;
 }
 
 .daily-overview-row {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 1rem;
-  padding: 0.35rem 0;
-  font-size: 0.9rem;
+  padding: 0.5rem 0;
+  font-size: 0.92rem;
+  border-bottom: 1px dashed var(--border-light);
+}
+
+.daily-overview-row:last-child {
+  border-bottom: none;
+}
+
+.daily-overview-row span {
+  color: var(--text-secondary);
 }
 
 .daily-overview-row strong {
   font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+  color: var(--text-color);
 }
 
 .daily-overview-row.daily-overview-margin {
-  border-top: 1px solid var(--border-color, #d8dade);
-  margin-top: 2px;
-  padding-top: 0.5rem;
-  color: var(--success-color, #15803d);
+  margin-top: 4px;
+  padding-top: 0.7rem;
+  border-top: 2px solid color-mix(in srgb, var(--success-color) 40%, transparent);
+  border-bottom: none;
+}
+
+.daily-overview-row.daily-overview-margin span {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.daily-overview-row.daily-overview-margin strong {
+  color: var(--success-color);
+  font-size: 1.25rem;
+  font-weight: 800;
 }
 
 .daily-report-note {
   margin: var(--spacing-sm) 0 0;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 .daily-report-actions {
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 560px) {
+  .daily-kpi-value {
+    font-size: 1.3rem;
+  }
 }
