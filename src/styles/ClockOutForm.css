@@ -124,6 +124,18 @@
   line-height: 1.45;
 }
 
+.material-clock-out-hint {
+  margin: var(--spacing-lg) 0;
+  padding: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--light-color);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--info-color, var(--primary-color));
+  border-radius: var(--radius-md);
+}
+
 /* Fahrzeugbuchungen */
 .current-vehicle-bookings {
   margin-bottom: var(--spacing-xl);
@@ -224,7 +236,7 @@
   transform: translateY(0);
 }
 
-/* Secondary Button - Einfach Ausstempeln */
+/* Secondary Button */
 .clock-out-buttons .btn.secondary-btn {
   background: var(--card-background);
   color: var(--text-color);

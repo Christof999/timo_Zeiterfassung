@@ -52,8 +52,8 @@ const slides: Slide[] = [
     ),
     bullets: [
       'Materialarten und Preise legt der Administrator unter „Material“ fest.',
-      'Wenn du heute kein Material verbucht hast: Häkchen bei „Kein Material“.',
-      '„Einfach Ausstempeln“ speichert Zeit und Material; „Mit Dokumentation“ erlaubt zusätzlich Fotos und Notizen.'
+      'Wenn du heute kein Material verbraucht hast: Häkchen bei „Kein Material“.',
+      'Material wird beim Ausstempeln erfasst; Fotos und Notizen sind dabei optional.'
     ]
   },
   {

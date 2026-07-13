@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
-import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
+import type { Employee, Project, TimeEntry } from '../types'
 import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
@@ -12,7 +12,6 @@ import NavigationMenu from './NavigationMenu'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
-import { formatReturnTravelCreditNote } from '../utils/returnTravel'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
@@ -140,10 +139,7 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleProjectSwitch = async (
-    newProjectId: string,
-    materialUsages: TimeEntryMaterialUsage[] | undefined
-  ) => {
+  const handleProjectSwitch = async (newProjectId: string) => {
     if (!currentTimeEntry || !currentUser?.id) return
 
     try {
@@ -152,8 +148,7 @@ const TimeTracking: React.FC = () => {
         currentUser.id,
         currentTimeEntry.id,
         newProjectId,
-        location,
-        materialUsages
+        location
       )
 
       const project = await DataService.getProjectById(newProjectId)
@@ -174,30 +169,6 @@ const TimeTracking: React.FC = () => {
       const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
       toast.error('Projektwechsel fehlgeschlagen: ' + msg)
       throw error
-    }
-  }
-
-  const handleSimpleClockOut = async (
-    pauseMinutes: number,
-    materialUsages: TimeEntryMaterialUsage[] | undefined
-  ) => {
-    if (!currentTimeEntry) return
-
-    try {
-      const location = await getCurrentLocation()
-      const pauseTotalTimeMs = pauseMinutes * 60 * 1000
-      await DataService.clockOutEmployee(
-        currentTimeEntry.id,
-        currentTimeEntry.notes || '',
-        location,
-        pauseTotalTimeMs,
-        materialUsages
-      )
-
-      resetClockOutState()
-      toast.success(`Sie wurden erfolgreich ausgestempelt!${formatReturnTravelCreditNote(location)}`)
-    } catch (error: any) {
-      toast.error('Fehler beim Ausstempeln: ' + error.message)
     }
   }
 
@@ -347,7 +318,6 @@ const TimeTracking: React.FC = () => {
             timeEntry={currentTimeEntry}
             project={currentProject}
             clockInTime={clockInTime}
-            onSimpleClockOut={handleSimpleClockOut}
             onExtendedClockOutSuccess={resetClockOutState}
             onProjectSwitch={handleProjectSwitch}
             onUpdate={() => {

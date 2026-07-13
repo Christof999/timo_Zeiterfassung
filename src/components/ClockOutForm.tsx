@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project, MaterialType, TimeEntryMaterialUsage } from '../types'
+import type { TimeEntry, Project } from '../types'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
 import ProjectSwitchModal from './ProjectSwitchModal'
-import MaterialUsageFields, {
-  buildMaterialUsagesFromRows,
-  createMaterialUsageRow,
-  type MaterialUsageRow
-} from './MaterialUsageFields'
 import { toast } from './ToastContainer'
 import '../styles/ClockOutForm.css'
 
@@ -16,20 +11,15 @@ interface ClockOutFormProps {
   timeEntry: TimeEntry
   project: Project | null
   clockInTime: Date | null
-  onSimpleClockOut: (pauseMinutes: number, materialUsages: TimeEntryMaterialUsage[] | undefined) => void
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
-  onProjectSwitch: (
-    newProjectId: string,
-    materialUsages: TimeEntryMaterialUsage[] | undefined
-  ) => Promise<void>
+  onProjectSwitch: (newProjectId: string) => Promise<void>
 }
 
 const ClockOutForm: React.FC<ClockOutFormProps> = ({
   timeEntry,
   project,
   clockInTime,
-  onSimpleClockOut,
   onExtendedClockOutSuccess,
   onUpdate,
   onProjectSwitch
@@ -39,17 +29,14 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
   const [showProjectSwitchModal, setShowProjectSwitchModal] = useState(false)
   /** Leer = noch nicht bestätigt; „0“ ist gültig */
   const [pauseMinutesInput, setPauseMinutesInput] = useState('')
-  /** Beim Öffnen „Mit Dokumentation“ festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
+  /** Beim Öffnen des Ausstempel-Modals festgehaltene Pausenzeit (ms), damit das Modal nicht durch nachträgliche Eingabe ungültig wird */
   const [pauseMsForExtendedModal, setPauseMsForExtendedModal] = useState<number | null>(null)
-  const [noMaterial, setNoMaterial] = useState(false)
-  const [materialRows, setMaterialRows] = useState<MaterialUsageRow[]>(() => [createMaterialUsageRow()])
-  const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
   /** Bereits auf diesem Projekt verbrauchtes Material (Name → Menge) */
   const [consumedByName, setConsumedByName] = useState<Map<string, number>>(new Map())
 
   const projectHasOffer = (project?.offerPositions || []).some((p) => p.kind === 'material')
 
-  // Projekt mit HERO-Angebot: Mitarbeiter wählt nur aus den Angebots-Materialien.
+  // Projekt mit HERO-Angebot: Mitarbeiter wählt beim Ausstempeln nur aus den Angebots-Materialien.
   // Vorbelegte Menge = Angebots-Soll minus bereits Verbrauchtes (Restmenge).
   const offerMaterials = (project?.offerPositions || [])
     .filter((p) => p.kind === 'material')
@@ -59,11 +46,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       return { name: p.name, unit: p.unit, unitPriceEur: p.unitPriceEur, defaultQuantity: remaining }
     })
 
-  useEffect(() => {
-    DataService.getActiveMaterialTypes().then(setMaterialTypes).catch(() => setMaterialTypes([]))
-  }, [])
-
-  // Bisherigen Materialverbrauch des Projekts laden (für die Restmengen-Anzeige)
+  // Bisherigen Materialverbrauch des Projekts laden (für die Restmengen-Anzeige im Ausstempel-Modal)
   useEffect(() => {
     if (!project?.id || !projectHasOffer) {
       setConsumedByName(new Map())
@@ -119,44 +102,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
     return n
   }
 
-  // Sammelt die erfassten Materialpositionen. enforceSelection erzwingt eine Auswahl
-  // (beim Ausstempeln), beim Projektwechsel genügt „nichts erfasst" = leer.
-  // Rückgabe null = Validierungsfehler (Toast wurde bereits angezeigt).
-  const collectMaterialUsages = (enforceSelection: boolean): TimeEntryMaterialUsage[] | null => {
-    if (noMaterial) return []
-    const typesById = new Map(materialTypes.map((t) => [t.id, t]))
-    const built = buildMaterialUsagesFromRows(materialRows, typesById)
-    if (built === null) {
-      toast.error('Bitte bei jeder gewählten Materialart eine gültige Menge größer 0 eintragen.')
-      return null
-    }
-    if (enforceSelection && built.length === 0) {
-      toast.error('Bitte mindestens eine Materialposition auswählen oder „kein Material“ ankreuzen.')
-      return null
-    }
-    return built
-  }
-
-  const handleSimpleClockOutClick = () => {
-    const minutes = parsePauseMinutes()
-    if (minutes === null) return
-
-    const materialUsages = collectMaterialUsages(true)
-    if (materialUsages === null) return
-
-    onSimpleClockOut(minutes, materialUsages)
-  }
-
-  // Beim Projektwechsel: erfasstes Material dem alten Projekt zuordnen und mit übergeben.
-  const handleProjectSwitchWithMaterial = async (newProjectId: string) => {
-    const materialUsages = collectMaterialUsages(false)
-    if (materialUsages === null) {
-      // Ungültige Materialangabe – Wechsel abbrechen (Modal bleibt offen).
-      throw new Error('Ungültige Materialangabe')
-    }
-    await onProjectSwitch(newProjectId, materialUsages)
-  }
-
   return (
     <div className="clock-out-form">
       <div className="active-project-info">
@@ -175,14 +120,6 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
       <p className="clock-in-info">
         Eingestempelt seit: {formatTime(clockInTime)}
       </p>
-
-      <MaterialUsageFields
-        noMaterial={noMaterial}
-        onNoMaterialChange={setNoMaterial}
-        rows={materialRows}
-        onRowsChange={setMaterialRows}
-        offerMaterials={offerMaterials}
-      />
 
       <div className="pause-input-section">
         <label htmlFor="clock-out-pause-minutes" className="pause-input-label">
@@ -206,6 +143,11 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         </p>
       </div>
 
+      <p className="material-clock-out-hint">
+        Materialverbrauch wird beim Ausstempeln erfasst – bitte verbrauchtes Material
+        angeben oder ankreuzen, dass keines verbraucht wurde.
+      </p>
+
       <div className="clock-out-buttons">
         <button
           type="button"
@@ -214,11 +156,8 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         >
           Projekt wechseln
         </button>
-        <button type="button" onClick={handleSimpleClockOutClick} className="btn secondary-btn">
-          Einfach Ausstempeln
-        </button>
-        <button 
-          onClick={() => setShowLiveDocModal(true)} 
+        <button
+          onClick={() => setShowLiveDocModal(true)}
           className="btn info-btn"
         >
           Dokumentation hinzufügen
@@ -233,7 +172,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           }}
           className="btn primary-btn"
         >
-          Mit Dokumentation Ausstempeln
+          Ausstempeln
         </button>
       </div>
 
@@ -269,7 +208,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
           currentProjectId={timeEntry.projectId}
           currentProjectName={project?.name}
           onClose={() => setShowProjectSwitchModal(false)}
-          onSwitch={handleProjectSwitchWithMaterial}
+          onSwitch={onProjectSwitch}
         />
       )}
     </div>
@@ -277,4 +216,3 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
 }
 
 export default ClockOutForm
-
