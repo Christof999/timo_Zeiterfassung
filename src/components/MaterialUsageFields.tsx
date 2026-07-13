@@ -14,6 +14,8 @@ export type MaterialUsageRow = {
   unit?: string
   /** Bei Angebots-Treffer übernommener Stückpreis (nur Admin/Nachkalkulation) */
   unitPriceEur?: number
+  /** true = bewusst gewählte Freitext-Position (sonst nur Auswahl aus dem Katalog/Angebot) */
+  freeText?: boolean
 }
 
 /** Angebots-Materialposition (kurze, projektbezogene Auswahl beim Einstempeln) */
@@ -163,6 +165,103 @@ const MaterialCombobox: React.FC<{
   )
 }
 
+/**
+ * Auswahl-basiertes Materialfeld: nur Katalog-/Angebotspositionen sind gültig.
+ * Freies Tippen dient nur dem Filtern und wird beim Verlassen verworfen – eine
+ * echte Freitext-Position gibt es nur über die gesonderte, ans Listenende
+ * gepinnte Option „Material freitext". Das hält die Nachkalkulation sauber.
+ */
+const MaterialSelect: React.FC<{
+  value: string
+  options: PickOption[]
+  onPick: (o: PickOption) => void
+  onPickFreeText: () => void
+  placeholder?: string
+}> = ({ value, options, onPick, onPickFreeText, placeholder }) => {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(value)
+
+  // Committete Auswahl von außen (z. B. Vorbelegung) in das Suchfeld spiegeln.
+  useEffect(() => {
+    setQuery(value)
+  }, [value])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const list = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
+    return list.slice(0, 60)
+  }, [options, query])
+
+  return (
+    <div className="material-combobox">
+      <input
+        type="text"
+        className="material-usage-select"
+        placeholder={placeholder || 'Material aus Liste wählen'}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        // Nicht bestätigte Eingabe verwerfen: zurück auf die committete Auswahl.
+        onBlur={() => setTimeout(() => { setOpen(false); setQuery(value) }, 150)}
+        aria-label="Material"
+      />
+      <button
+        type="button"
+        className="material-combobox-toggle"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          setOpen((o) => !o)
+        }}
+        aria-label="Liste öffnen"
+        tabIndex={-1}
+      >
+        ▾
+      </button>
+      {open && (
+        <ul className="material-combobox-list" role="listbox">
+          {filtered.map((o, i) => (
+            <li
+              key={`${o.id || o.name}-${i}`}
+              role="option"
+              aria-selected={o.name === value}
+              className="material-combobox-item"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onPick(o)
+                setOpen(false)
+              }}
+            >
+              <span className="mc-name">{o.name}</span>
+              {o.unit ? <span className="mc-unit">{o.unit}</span> : null}
+            </li>
+          ))}
+          {filtered.length === 0 && (
+            <li className="material-combobox-empty" role="presentation">
+              Kein Treffer in der Liste
+            </li>
+          )}
+          {/* Bewusste Freitext-Eingabe – immer ganz am Ende der Liste. */}
+          <li
+            role="option"
+            aria-selected={false}
+            className="material-combobox-item material-combobox-freetext"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              onPickFreeText()
+              setOpen(false)
+            }}
+          >
+            <span className="mc-name">✎ Material freitext</span>
+          </li>
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
   noMaterial,
   onNoMaterialChange,
@@ -217,12 +316,6 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     }))
   }, [hasOffer, offerMaterials, types])
 
-  const optionByName = useMemo(() => {
-    const map = new Map<string, PickOption>()
-    for (const o of options) map.set(o.name.trim().toLowerCase(), o)
-    return map
-  }, [options])
-
   const addRow = () => onRowsChange([...rows, newRow()])
   const removeRow = (key: string) => {
     const next = rows.filter((r) => r.key !== key)
@@ -239,7 +332,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
       label: o.name,
       materialTypeId: o.id || '',
       unit: o.id ? undefined : o.unit,
-      unitPriceEur: o.id ? undefined : o.unitPriceEur
+      unitPriceEur: o.id ? undefined : o.unitPriceEur,
+      freeText: false
     }
     // Angebots-(Rest-)Menge vorbelegen; Mitarbeiter kann sie überschreiben
     if (typeof o.defaultQuantity === 'number') {
@@ -248,16 +342,13 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
     patchRow(key, patch)
   }
 
-  const onText = (key: string, value: string) => {
-    const exact = optionByName.get(value.trim().toLowerCase())
-    if (exact) {
-      applyOption(key, exact)
-      patchRow(key, { label: value })
-      return
-    }
-    // Freitext (kein Treffer): gewählte Einheit beibehalten, nur Angebotspreis lösen
-    patchRow(key, { label: value, materialTypeId: '', unitPriceEur: undefined })
-  }
+  // Bewusst gewählte Freitext-Position: Feld leeren und in den Freitext-Modus schalten.
+  const enterFreeText = (key: string) =>
+    patchRow(key, { freeText: true, label: '', materialTypeId: '', unitPriceEur: undefined })
+
+  // Zurück zur Auswahl aus dem Katalog/Angebot.
+  const exitFreeText = (key: string) =>
+    patchRow(key, { freeText: false, label: '', materialTypeId: '', unit: undefined, unitPriceEur: undefined })
 
   const onUnitText = (key: string, value: string) => patchRow(key, { unit: value })
   const onUnitPick = (key: string, o: PickOption) => patchRow(key, { unit: o.name })
@@ -271,8 +362,8 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
       <p className="material-usage-intro">
         {intro ||
           (hasOffer
-            ? 'Material aus dem Angebot wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.'
-            : 'Material wählen (Liste öffnen oder tippen zum Filtern) – oder eigenen Text eingeben.')}
+            ? 'Material aus dem Angebot wählen (Liste öffnen oder tippen zum Filtern). Für nicht gelistetes Material: „Material freitext" am Ende der Liste.'
+            : 'Material aus der Liste wählen (Liste öffnen oder tippen zum Filtern). Für nicht gelistetes Material: „Material freitext" am Ende der Liste.')}
       </p>
 
       {!hideNoMaterialToggle && (
@@ -295,12 +386,34 @@ const MaterialUsageFieldsComponent: React.FC<MaterialUsageFieldsProps> = ({
               <div className="material-usage-rows">
                 {rows.map((row) => (
                   <div key={row.key} className="material-usage-row">
-                    <MaterialCombobox
-                      value={row.label}
-                      options={options}
-                      onText={(v) => onText(row.key, v)}
-                      onPick={(o) => applyOption(row.key, o)}
-                    />
+                    {row.freeText ? (
+                      <div className="material-freetext-field">
+                        <input
+                          type="text"
+                          className="material-usage-select"
+                          placeholder="Material (Freitext)"
+                          value={row.label}
+                          onChange={(e) => patchRow(row.key, { label: e.target.value })}
+                          aria-label="Material (Freitext)"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="material-freetext-back"
+                          onClick={() => exitFreeText(row.key)}
+                          title="Zurück zur Auswahl aus der Liste"
+                        >
+                          Aus Liste wählen
+                        </button>
+                      </div>
+                    ) : (
+                      <MaterialSelect
+                        value={row.label}
+                        options={options}
+                        onPick={(o) => applyOption(row.key, o)}
+                        onPickFreeText={() => enterFreeText(row.key)}
+                      />
+                    )}
                     <input
                       type="number"
                       inputMode="decimal"
