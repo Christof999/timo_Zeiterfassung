@@ -3,20 +3,16 @@ import { formatClockInLocationLabel, getClockInCoordinates } from '../../../util
 import { HERO_INTEGRATION_UI_ENABLED } from '../../../constants/heroIntegration'
 import type { DashboardContext, WidgetDef } from './types'
 
-/** Kleine Kennzahl-Kachel (optional klickbar). */
+/** Kleine Kennzahl (große Zahl + optionaler Verweis). Bewusst ohne Icon – clean. */
 const StatTile: React.FC<{
-  icon: string
-  label: string
   value: React.ReactNode
-  cta?: string
+  caption?: string
   onClick?: () => void
-}> = ({ icon, label, value, cta, onClick }) => {
+}> = ({ value, caption, onClick }) => {
   const content = (
     <>
-      <span className="dw-stat-icon" aria-hidden="true">{icon}</span>
-      <span className="dw-stat-label">{label}</span>
       <span className="dw-stat-value">{value}</span>
-      {cta && <span className="dw-stat-cta">{cta} →</span>}
+      {caption && <span className="dw-stat-cta">{caption}</span>}
     </>
   )
   if (onClick) {
@@ -97,11 +93,8 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Anzahl aktuell eingestempelter Mitarbeiter.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '🟢',
     defaultSize: 'small',
-    render: (ctx) => (
-      <StatTile icon="🟢" label="Eingestempelt" value={ctx.data.clockedInCount} />
-    )
+    render: (ctx) => <StatTile value={ctx.data.clockedInCount} />
   },
   {
     key: 'stat-active-projects',
@@ -109,16 +102,9 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Anzahl aktiver Projekte – öffnet die Projektliste.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '🏗️',
     defaultSize: 'small',
     render: (ctx) => (
-      <StatTile
-        icon="🏗️"
-        label="Aktive Projekte"
-        value={ctx.data.activeProjectsCount}
-        cta="Projekte"
-        onClick={() => ctx.navigate('projects')}
-      />
+      <StatTile value={ctx.data.activeProjectsCount} caption="Projekte" onClick={() => ctx.navigate('projects')} />
     )
   },
   {
@@ -127,16 +113,9 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Anzahl aller Mitarbeiter – öffnet die Mitarbeiterliste.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '👤',
     defaultSize: 'small',
     render: (ctx) => (
-      <StatTile
-        icon="👤"
-        label="Mitarbeiter"
-        value={ctx.data.totalEmployees}
-        cta="Mitarbeiter"
-        onClick={() => ctx.navigate('employees')}
-      />
+      <StatTile value={ctx.data.totalEmployees} caption="Mitarbeiter" onClick={() => ctx.navigate('employees')} />
     )
   },
   {
@@ -145,16 +124,9 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Summe der heute erfassten Stunden – öffnet den Tagesbericht.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '⏱️',
     defaultSize: 'small',
     render: (ctx) => (
-      <StatTile
-        icon="⏱️"
-        label="Heutige Stunden"
-        value={`${ctx.data.todayHours} h`}
-        cta="Tagesbericht"
-        onClick={() => ctx.openModal('dailyReport')}
-      />
+      <StatTile value={`${ctx.data.todayHours} h`} caption="Tagesbericht" onClick={() => ctx.openModal('dailyReport')} />
     )
   },
   {
@@ -163,16 +135,9 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Anzahl ausstehender Urlaubsanträge – öffnet die Urlaubsverwaltung.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '📝',
     defaultSize: 'small',
     render: (ctx) => (
-      <StatTile
-        icon="📝"
-        label="Offene Urlaubsanträge"
-        value={ctx.data.openVacationCount}
-        cta="Urlaub"
-        onClick={() => ctx.navigate('vacation')}
-      />
+      <StatTile value={ctx.data.openVacationCount} caption="Urlaub" onClick={() => ctx.navigate('vacation')} />
     )
   },
   {
@@ -181,7 +146,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Wer ist gerade eingestempelt – mit direktem Ausstempeln.',
     category: 'Kennzahlen',
     kind: 'insight',
-    icon: '📡',
     defaultSize: 'large',
     render: (ctx) => <LiveActivityWidget ctx={ctx} />
   },
@@ -193,7 +157,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Mitarbeiter anlegen.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '👷',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'employee' }
   },
@@ -203,7 +166,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Alle Mitarbeiter verwalten.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '📋',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'employees' }
   },
@@ -213,7 +175,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Kunde anlegen.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '🤝',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'customer' }
   },
@@ -223,7 +184,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Kundenliste verwalten.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '👥',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'customers' }
   },
@@ -233,7 +193,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Materialart mit Preisen anlegen.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '🧱',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'material' }
   },
@@ -243,7 +202,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Materialkatalog verwalten.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '🧰',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'material' }
   },
@@ -253,7 +211,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Fahrzeug anlegen.',
     category: 'Stammdaten',
     kind: 'launcher',
-    icon: '🚐',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'vehicle' }
   },
@@ -265,7 +222,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Projekt anlegen.',
     category: 'Projekte',
     kind: 'launcher',
-    icon: '➕',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'project' }
   },
@@ -275,7 +231,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Aktive Projekte verwalten.',
     category: 'Projekte',
     kind: 'launcher',
-    icon: '🗂️',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'projects' }
   },
@@ -285,7 +240,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Abgeschlossene/archivierte Projekte ansehen.',
     category: 'Projekte',
     kind: 'launcher',
-    icon: '📦',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'projectsArchived' }
   },
@@ -297,7 +251,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Heutige Stempelungen, Stunden und Material.',
     category: 'Berichte',
     kind: 'launcher',
-    icon: '📅',
     defaultSize: 'small',
     action: { type: 'modal', modal: 'dailyReport' }
   },
@@ -307,7 +260,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Zeitbericht je Mitarbeiter erstellen und drucken.',
     category: 'Berichte',
     kind: 'launcher',
-    icon: '🕒',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'reports' }
   },
@@ -317,7 +269,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Personal- und Materialkosten je Projekt auswerten.',
     category: 'Berichte',
     kind: 'launcher',
-    icon: '📊',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'costing' }
   },
@@ -327,7 +278,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Urlaubsanträge prüfen und verwalten.',
     category: 'Berichte',
     kind: 'launcher',
-    icon: '🌴',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'vacation' }
   },
@@ -339,7 +289,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     description: 'Push-Einstellungen für dieses Admin-Gerät.',
     category: 'System',
     kind: 'launcher',
-    icon: '🔔',
     defaultSize: 'small',
     action: { type: 'tab', tab: 'notifications' }
   },
@@ -351,7 +300,6 @@ const ALL_WIDGETS: WidgetDef[] = [
           description: 'HERO-Synchronisation und Diagnose.',
           category: 'System',
           kind: 'launcher',
-          icon: '🔗',
           defaultSize: 'small',
           action: { type: 'tab', tab: 'hero' }
         } as WidgetDef

@@ -275,7 +275,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
         }
       >
         <div className="dw-card-head">
-          <span className="dw-card-icon" aria-hidden="true">{def.icon}</span>
           <span className="dw-card-title">{def.title}</span>
           {editMode && (
             <div className="dw-card-tools" onClick={(e) => e.stopPropagation()}>

@@ -54,7 +54,6 @@ const AddWidgetModal: React.FC<AddWidgetModalProps> = ({ usedKeys, onAdd, onClos
               <div className="dw-add-grid">
                 {(grouped.get(category) || []).map((w) => (
                   <div key={w.key} className="dw-add-card">
-                    <span className="dw-add-icon" aria-hidden="true">{w.icon}</span>
                     <div className="dw-add-text">
                       <strong>{w.title}</strong>
                       <span>{w.description}</span>

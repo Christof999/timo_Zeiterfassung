@@ -1,4 +1,4 @@
-/* ============ Konfigurierbares Admin-Dashboard ============ */
+/* ============ Konfigurierbares Admin-Dashboard (clean/kompakt) ============ */
 
 .dashboard-tab {
   width: 100%;
@@ -8,37 +8,46 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-md, 12px);
+  gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: var(--spacing-md, 12px);
+  margin-bottom: 14px;
 }
 .dw-toolbar h3 {
   margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 .dw-toolbar-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
+.dw-toolbar-actions .btn {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  border-radius: 10px;
+}
 
 .dw-edit-hint {
-  margin: 0 0 var(--spacing-md, 12px) 0;
+  margin: 0 0 14px 0;
   padding: 10px 12px;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--text-secondary, #666);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary, #6b7280);
   background: var(--surface-muted, #f4f4f5);
-  border-radius: var(--radius-md, 8px);
+  border-radius: 10px;
 }
 
-/* Responsives Grid: am Handy 2 Spalten, auf breiten Screens 4. */
+/* Responsives Grid. minmax(0,1fr) verhindert, dass Inhalte die Spalten
+   auseinanderdrücken (kein horizontales Überlaufen mehr). */
 .dw-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--spacing-md, 12px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 @media (min-width: 700px) {
-  .dw-grid { grid-template-columns: repeat(4, 1fr); }
+  .dw-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 }
 
 /* Widget-Größen als Spalten-Span. */
@@ -46,68 +55,69 @@
 .dw-size-medium { grid-column: span 2; }
 .dw-size-large { grid-column: 1 / -1; }
 @media (max-width: 699px) {
-  /* Am Handy: klein = 1 Spalte, mittel/groß = volle Breite. */
   .dw-size-medium, .dw-size-large { grid-column: 1 / -1; }
 }
 
 .dw-card {
   display: flex;
   flex-direction: column;
-  min-height: 96px;
+  min-height: 84px;
   background: var(--card-background, #fff);
-  border: 1px solid var(--border-light, #e5e7eb);
-  border-radius: var(--radius-lg, 12px);
-  padding: var(--spacing-md, 12px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.15s, transform 0.05s;
+  border: 1px solid var(--border-light, #ececf0);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.18s ease, transform 0.08s ease;
 }
 .dw-card[role='button'] {
   cursor: pointer;
 }
 .dw-card[role='button']:hover {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09);
   transform: translateY(-1px);
+}
+.dw-card[role='button']:active {
+  transform: translateY(0);
 }
 .dw-card.dw-editing {
   border-style: dashed;
-  border-color: var(--primary-color, #2563eb);
+  border-color: var(--border-color, #cfcfd6);
+  background: var(--surface-muted, #fafafb);
 }
 .dw-card.dw-dragging {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .dw-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  margin-bottom: 8px;
-}
-.dw-card-icon {
-  font-size: 1.1rem;
-  line-height: 1;
+  margin-bottom: 6px;
 }
 .dw-card-title {
   font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text-color, #111);
+  font-size: 0.82rem;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary, #6b7280);
   flex: 1;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .dw-card-tools {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   flex: none;
 }
 .dw-tool {
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border-color, #d1d5db);
-  background: var(--surface, #fff);
-  border-radius: 6px;
-  font-size: 0.8rem;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color, #d6d6dc);
+  background: var(--card-background, #fff);
+  border-radius: 8px;
+  font-size: 0.78rem;
   line-height: 1;
   cursor: pointer;
   color: var(--text-color, #111);
@@ -116,31 +126,36 @@
   justify-content: center;
 }
 .dw-tool:hover { background: var(--surface-muted, #f0f0f0); }
-.dw-tool-remove { color: #dc2626; border-color: #fca5a5; }
+.dw-tool-remove { color: #d0021b; border-color: #f0b3ba; }
 
 .dw-card-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
-/* Im Bearbeiten-Modus stehen Sortieren/Größe/Entfernen im Vordergrund –
-   Inhalte (Kennzahl-Klicks, „Ausstempeln") werden nicht ausgelöst. */
+/* Im Bearbeiten-Modus stehen Sortieren/Größe/Entfernen im Vordergrund. */
 .dw-card.dw-editing .dw-card-body {
   pointer-events: none;
 }
 .dw-launcher-desc {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-secondary, #6b7280);
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Kennzahl-Kachel */
 .dw-stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
-  height: 100%;
   border: none;
   background: transparent;
   text-align: left;
@@ -148,21 +163,20 @@
   color: inherit;
 }
 .dw-stat-clickable { cursor: pointer; }
-.dw-stat-icon { font-size: 1.2rem; }
-.dw-stat-label {
-  font-size: 0.78rem;
-  color: var(--text-secondary, #6b7280);
-}
 .dw-stat-value {
-  font-size: 1.8rem;
+  font-size: 1.7rem;
   font-weight: 700;
-  color: var(--primary-color, #2563eb);
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-color, #1c1c1e);
+  line-height: 1.05;
 }
 .dw-stat-cta {
   font-size: 0.75rem;
+  font-weight: 500;
   color: var(--primary-color, #2563eb);
-  margin-top: 2px;
+}
+.dw-stat-cta::after {
+  content: ' \203A'; /* › */
 }
 
 /* Live-Aktivitäten */
@@ -176,9 +190,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
-  background: var(--surface-muted, #f8f9fb);
-  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px;
+  background: var(--surface-muted, #f6f6f8);
+  border-radius: 12px;
 }
 .dw-activity-info {
   display: flex;
@@ -186,10 +200,11 @@
   gap: 1px;
   min-width: 0;
 }
-.dw-activity-project { font-size: 0.85rem; color: var(--text-color, #111); }
-.dw-activity-meta { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
+.dw-activity-info strong { font-size: 0.9rem; letter-spacing: -0.01em; }
+.dw-activity-project { font-size: 0.82rem; color: var(--text-color, #1c1c1e); }
+.dw-activity-meta { font-size: 0.76rem; color: var(--text-secondary, #6b7280); }
 .dw-activity-loc {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--primary-color, #2563eb);
   text-decoration: none;
 }
@@ -204,7 +219,7 @@
   text-align: center;
   padding: 40px 16px;
   border: 1px dashed var(--border-color, #d1d5db);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: 16px;
   color: var(--text-secondary, #6b7280);
 }
 .dw-empty-board p { margin: 0 0 12px 0; }
@@ -221,15 +236,15 @@
   padding: 10px 12px;
   margin-bottom: 14px;
   border: 1px solid var(--border-color, #d1d5db);
-  border-radius: var(--radius-md, 8px);
+  border-radius: 10px;
   font-size: 0.95rem;
 }
 .dw-add-group { margin-bottom: 16px; }
 .dw-add-group-title {
   margin: 0 0 8px 0;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-secondary, #6b7280);
 }
 .dw-add-grid {
@@ -244,25 +259,23 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--border-light, #e5e7eb);
-  border-radius: var(--radius-md, 8px);
+  padding: 12px;
+  border: 1px solid var(--border-light, #ececf0);
+  border-radius: 12px;
   background: var(--card-background, #fff);
 }
-.dw-add-icon { font-size: 1.3rem; flex: none; }
 .dw-add-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
   flex: 1;
 }
-.dw-add-text strong { font-size: 0.9rem; }
+.dw-add-text strong { font-size: 0.9rem; letter-spacing: -0.01em; }
 .dw-add-text span { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
-.dw-add-btn { flex: none; padding: 6px 12px; font-size: 0.85rem; }
+.dw-add-btn { flex: none; padding: 7px 14px; font-size: 0.85rem; border-radius: 9px; }
 
 /* ================= Mobile-Optimierung ================= */
 @media (max-width: 699px) {
-  /* Toolbar: Titel oben, Aktionen als volle, gleich breite Reihe darunter. */
   .dw-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -276,7 +289,7 @@
   }
   .dw-toolbar-actions .btn {
     width: 100%;
-    min-height: 44px;
+    min-height: 42px;
   }
 
   /* Bearbeiten-Werkzeuge in eine eigene, gut tippbare Reihe unter den Titel. */
@@ -291,29 +304,16 @@
   }
   .dw-card.dw-editing .dw-tool {
     flex: 1;
-    height: 40px;
-    font-size: 0.95rem;
+    height: 38px;
+    font-size: 0.9rem;
   }
 
-  /* Kennzahl kompakter, damit sie in der 2-Spalten-Kachel nicht überläuft. */
   .dw-stat-value { font-size: 1.5rem; }
-  .dw-card { min-height: 104px; }
 
-  /* Widget-Katalog: Icon/Text oben, Button volle Breite darunter (kein Quetschen). */
-  .dw-add-card {
-    flex-wrap: wrap;
-  }
-  .dw-add-text { flex-basis: calc(100% - 44px); }
-  .dw-add-btn {
-    width: 100%;
-    min-height: 40px;
-  }
+  .dw-add-card { flex-wrap: wrap; }
+  .dw-add-text { flex-basis: 100%; }
+  .dw-add-btn { width: 100%; min-height: 40px; }
 
-  /* Live-Aktivitäten: „Ausstempeln" darf umbrechen, bleibt aber gut tippbar. */
-  .dw-activity-item {
-    flex-wrap: wrap;
-  }
-  .dw-activity-item .clock-out-btn {
-    min-height: 40px;
-  }
+  .dw-activity-item { flex-wrap: wrap; }
+  .dw-activity-item .clock-out-btn { min-height: 40px; }
 }

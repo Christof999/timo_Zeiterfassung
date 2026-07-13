@@ -62,8 +62,6 @@ export interface WidgetDef {
   description: string
   category: WidgetCategory
   kind: WidgetKind
-  /** Emoji-Icon für Kachel/Katalog. */
-  icon: string
   defaultSize: DashboardWidgetSize
   /** Launcher: was beim Klick passiert. */
   action?: { type: 'tab'; tab: DashboardTabKey } | { type: 'modal'; modal: DashboardModalKey }
