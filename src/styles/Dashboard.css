@@ -259,3 +259,61 @@
 .dw-add-text strong { font-size: 0.9rem; }
 .dw-add-text span { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
 .dw-add-btn { flex: none; padding: 6px 12px; font-size: 0.85rem; }
+
+/* ================= Mobile-Optimierung ================= */
+@media (max-width: 699px) {
+  /* Toolbar: Titel oben, Aktionen als volle, gleich breite Reihe darunter. */
+  .dw-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .dw-toolbar-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 8px;
+  }
+  .dw-toolbar-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* Bearbeiten-Werkzeuge in eine eigene, gut tippbare Reihe unter den Titel. */
+  .dw-card-head {
+    flex-wrap: wrap;
+  }
+  .dw-card.dw-editing .dw-card-tools {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 8px;
+    gap: 6px;
+  }
+  .dw-card.dw-editing .dw-tool {
+    flex: 1;
+    height: 40px;
+    font-size: 0.95rem;
+  }
+
+  /* Kennzahl kompakter, damit sie in der 2-Spalten-Kachel nicht überläuft. */
+  .dw-stat-value { font-size: 1.5rem; }
+  .dw-card { min-height: 104px; }
+
+  /* Widget-Katalog: Icon/Text oben, Button volle Breite darunter (kein Quetschen). */
+  .dw-add-card {
+    flex-wrap: wrap;
+  }
+  .dw-add-text { flex-basis: calc(100% - 44px); }
+  .dw-add-btn {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  /* Live-Aktivitäten: „Ausstempeln" darf umbrechen, bleibt aber gut tippbar. */
+  .dw-activity-item {
+    flex-wrap: wrap;
+  }
+  .dw-activity-item .clock-out-btn {
+    min-height: 40px;
+  }
+}
