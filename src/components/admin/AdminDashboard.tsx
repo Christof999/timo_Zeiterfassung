@@ -4,7 +4,7 @@ import { DataService } from '../../services/dataService'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
-import OverviewTab from './tabs/OverviewTab'
+import DashboardTab from './dashboard/DashboardTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
 import CustomersTab from './tabs/CustomersTab'
@@ -338,7 +338,12 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'overview' && !hasPushSubscription && renderPushSettings(false)}
           {currentTab === 'notifications' && renderPushSettings(true)}
 
-          {currentTab === 'overview' && <OverviewTab />}
+          {currentTab === 'overview' && (
+            <DashboardTab
+              admin={{ id: currentAdmin.id, username: currentAdmin.username, name: currentAdmin.name }}
+              onNavigate={(tab) => setCurrentTab(tab as TabType)}
+            />
+          )}
           {currentTab === 'employees' && <EmployeesTab />}
           {currentTab === 'projects' && <ProjectsTab variant="active" />}
           {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}

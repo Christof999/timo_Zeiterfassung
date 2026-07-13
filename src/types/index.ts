@@ -50,6 +50,18 @@ export interface Employee {
   overtimeBalanceMinutes?: number | null
 }
 
+/** Größe einer Dashboard-Kachel (Spaltenbreite im Grid). */
+export type DashboardWidgetSize = 'small' | 'medium' | 'large'
+
+/** Eine im Admin-Dashboard platzierte Widget-Instanz (Reihenfolge = Array-Index). */
+export interface DashboardWidgetInstance {
+  /** Eindeutige Instanz-ID (ein Widget kann mehrfach vorkommen). */
+  instanceId: string
+  /** Schlüssel aus der Widget-Registry (dem „Pool"). */
+  key: string
+  size: DashboardWidgetSize
+}
+
 export interface Project {
   id: string
   name?: string

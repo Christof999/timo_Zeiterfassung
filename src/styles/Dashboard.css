@@ -1,0 +1,261 @@
+/* ============ Konfigurierbares Admin-Dashboard ============ */
+
+.dashboard-tab {
+  width: 100%;
+}
+
+.dw-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md, 12px);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-md, 12px);
+}
+.dw-toolbar h3 {
+  margin: 0;
+}
+.dw-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dw-edit-hint {
+  margin: 0 0 var(--spacing-md, 12px) 0;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #666);
+  background: var(--surface-muted, #f4f4f5);
+  border-radius: var(--radius-md, 8px);
+}
+
+/* Responsives Grid: am Handy 2 Spalten, auf breiten Screens 4. */
+.dw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md, 12px);
+}
+@media (min-width: 700px) {
+  .dw-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Widget-Größen als Spalten-Span. */
+.dw-size-small { grid-column: span 1; }
+.dw-size-medium { grid-column: span 2; }
+.dw-size-large { grid-column: 1 / -1; }
+@media (max-width: 699px) {
+  /* Am Handy: klein = 1 Spalte, mittel/groß = volle Breite. */
+  .dw-size-medium, .dw-size-large { grid-column: 1 / -1; }
+}
+
+.dw-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
+  background: var(--card-background, #fff);
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--spacing-md, 12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.15s, transform 0.05s;
+}
+.dw-card[role='button'] {
+  cursor: pointer;
+}
+.dw-card[role='button']:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+.dw-card.dw-editing {
+  border-style: dashed;
+  border-color: var(--primary-color, #2563eb);
+}
+.dw-card.dw-dragging {
+  opacity: 0.5;
+}
+
+.dw-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dw-card-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.dw-card-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-color, #111);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dw-card-tools {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.dw-tool {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--surface, #fff);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-color, #111);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dw-tool:hover { background: var(--surface-muted, #f0f0f0); }
+.dw-tool-remove { color: #dc2626; border-color: #fca5a5; }
+
+.dw-card-body {
+  flex: 1;
+  min-width: 0;
+}
+/* Im Bearbeiten-Modus stehen Sortieren/Größe/Entfernen im Vordergrund –
+   Inhalte (Kennzahl-Klicks, „Ausstempeln") werden nicht ausgelöst. */
+.dw-card.dw-editing .dw-card-body {
+  pointer-events: none;
+}
+.dw-launcher-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.4;
+}
+
+/* Kennzahl-Kachel */
+.dw-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  color: inherit;
+}
+.dw-stat-clickable { cursor: pointer; }
+.dw-stat-icon { font-size: 1.2rem; }
+.dw-stat-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #6b7280);
+}
+.dw-stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--primary-color, #2563eb);
+  line-height: 1.1;
+}
+.dw-stat-cta {
+  font-size: 0.75rem;
+  color: var(--primary-color, #2563eb);
+  margin-top: 2px;
+}
+
+/* Live-Aktivitäten */
+.dw-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dw-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-muted, #f8f9fb);
+  border-radius: var(--radius-md, 8px);
+}
+.dw-activity-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.dw-activity-project { font-size: 0.85rem; color: var(--text-color, #111); }
+.dw-activity-meta { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
+.dw-activity-loc {
+  font-size: 0.78rem;
+  color: var(--primary-color, #2563eb);
+  text-decoration: none;
+}
+.dw-activity-loc:hover { text-decoration: underline; }
+
+.dw-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6b7280);
+}
+.dw-empty-board {
+  text-align: center;
+  padding: 40px 16px;
+  border: 1px dashed var(--border-color, #d1d5db);
+  border-radius: var(--radius-lg, 12px);
+  color: var(--text-secondary, #6b7280);
+}
+.dw-empty-board p { margin: 0 0 12px 0; }
+
+/* ---- Widget-Katalog (AddWidgetModal) ---- */
+.dw-add-modal { max-width: 720px; }
+.dw-add-intro {
+  margin: 0 0 10px 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6b7280);
+}
+.dw-add-search {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.95rem;
+}
+.dw-add-group { margin-bottom: 16px; }
+.dw-add-group-title {
+  margin: 0 0 8px 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #6b7280);
+}
+.dw-add-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+@media (min-width: 620px) {
+  .dw-add-grid { grid-template-columns: 1fr 1fr; }
+}
+.dw-add-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background: var(--card-background, #fff);
+}
+.dw-add-icon { font-size: 1.3rem; flex: none; }
+.dw-add-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.dw-add-text strong { font-size: 0.9rem; }
+.dw-add-text span { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
+.dw-add-btn { flex: none; padding: 6px 12px; font-size: 0.85rem; }

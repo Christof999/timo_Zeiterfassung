@@ -30,6 +30,7 @@ import * as projects from './data/projects'
 import * as leave from './data/leave'
 import * as settlements from './data/settlements'
 import * as hero from './data/hero'
+import * as dashboard from './data/dashboard'
 import type {
   Employee,
   Project,
@@ -44,7 +45,8 @@ import type {
   MaterialCredit,
   TimeReportSettlement,
   HeroIntegrationConfig,
-  HeroSyncLogEntry
+  HeroSyncLogEntry,
+  DashboardWidgetInstance
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 import { withTimeout } from '../utils/withTimeout'
@@ -2015,6 +2017,15 @@ class DataServiceClass {
 
   getAllLeaveRequests(): Promise<LeaveRequest[]> {
     return leave.getAllLeaveRequests()
+  }
+
+  // --- Admin-Dashboard (kontoweite Widget-Anordnung) ---
+  loadAdminDashboard(adminKey: string) {
+    return dashboard.loadAdminDashboard(adminKey)
+  }
+
+  saveAdminDashboard(adminKey: string, widgets: DashboardWidgetInstance[]) {
+    return dashboard.saveAdminDashboard(adminKey, widgets)
   }
 
   createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
