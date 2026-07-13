@@ -32,6 +32,9 @@ export interface Employee {
   lastName?: string
   hourlyWage?: number
   hourlyRate?: number
+  /** Interner Kostensatz (EUR/Std) – was der Mitarbeiter das Unternehmen kostet.
+   *  Gegenstück zum Material-Einkaufspreis; nur Admin/Nachkalkulation. */
+  hourlyCostRate?: number
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'

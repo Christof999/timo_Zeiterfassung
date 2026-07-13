@@ -38,6 +38,12 @@ export interface EmployeeSummary {
   totalHours: number
   hourlyRate: number
   totalCost: number
+  /** Interner Kostensatz (EUR/Std) – Einkauf-Gegenstück; 0 wenn nicht hinterlegt */
+  hourlyCostRate: number
+  /** Personalkosten intern = Stunden × Kostensatz (nur wenn Kostensatz hinterlegt) */
+  totalPurchaseCost: number
+  /** true, wenn ein interner Kostensatz hinterlegt ist (fließt in Einkauf/Marge ein) */
+  hasCostRate: boolean
 }
 
 export const convertToDate = (date: unknown): Date | null => {

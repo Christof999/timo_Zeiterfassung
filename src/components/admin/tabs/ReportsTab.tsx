@@ -658,11 +658,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       }
 
       // Nach Mitarbeiter gruppieren und summieren
-      const employeeMap = new Map<string, { hours: number; rate: number; name: string }>()
-      
+      const employeeMap = new Map<
+        string,
+        { hours: number; rate: number; costRate: number; hasCostRate: boolean; name: string }
+      >()
+
       timeEntries.forEach(entry => {
         if (!entry.clockOutTime) return // Nur abgeschlossene Einträge
-        
+
         const clockIn = convertToDate(entry.clockInTime)
         const clockOut = convertToDate(entry.clockOutTime)
         if (!clockIn || !clockOut) return
@@ -675,13 +678,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
         const employee = allEmployees.find(e => e.id === entry.employeeId)
         const hourlyRate = employee?.hourlyWage || employee?.hourlyRate || 0
+        const hasCostRate = typeof employee?.hourlyCostRate === 'number' && employee.hourlyCostRate > 0
+        const costRate = hasCostRate ? (employee!.hourlyCostRate as number) : 0
         const employeeName = employee?.name || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || entry.employeeId
-        
+
         const existing = employeeMap.get(entry.employeeId)
         if (existing) {
           existing.hours += hours
         } else {
-          employeeMap.set(entry.employeeId, { hours, rate: hourlyRate, name: employeeName })
+          employeeMap.set(entry.employeeId, { hours, rate: hourlyRate, costRate, hasCostRate, name: employeeName })
         }
       })
 
@@ -690,7 +695,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         employeeName: data.name,
         totalHours: Math.round(data.hours * 100) / 100,
         hourlyRate: data.rate,
-        totalCost: Math.round(data.hours * data.rate * 100) / 100
+        totalCost: Math.round(data.hours * data.rate * 100) / 100,
+        hourlyCostRate: data.costRate,
+        totalPurchaseCost: Math.round(data.hours * data.costRate * 100) / 100,
+        hasCostRate: data.hasCostRate
       }))
       empSummaries.sort((a, b) => b.totalCost - a.totalCost)
       setEmployeeSummaries(empSummaries)
@@ -738,6 +746,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const getEmployeeTotalCost = () => employeeSummaries.reduce((sum, e) => sum + e.totalCost, 0)
+
+  // Summe interner Personalkosten (Einkauf) – nur Mitarbeiter mit hinterlegtem Kostensatz
+  const getEmployeeTotalPurchaseCost = () =>
+    employeeSummaries.reduce((sum, e) => sum + (e.hasCostRate ? e.totalPurchaseCost : 0), 0)
+
+  // Summe Personalmarge = Verrechnung − interner Kostensatz (nur mit hinterlegtem Kostensatz)
+  const getEmployeeTotalMargin = () =>
+    employeeSummaries.reduce((sum, e) => sum + (e.hasCostRate ? e.totalCost - e.totalPurchaseCost : 0), 0)
+
+  // Mindestens ein Mitarbeiter mit hinterlegtem Kostensatz? (steuert Anzeige der Marge-Spalten)
+  const hasAnyEmployeeCostRate = () => employeeSummaries.some((e) => e.hasCostRate)
 
   // Einkaufspreis pro Einheit aus dem Materialkatalog auflösen (per ID, sonst Name).
   // Nur intern (Admin/Nachkalkulation) – auf dem gebuchten Material selbst ist er nicht gespeichert.
@@ -1384,32 +1403,65 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 {employeeSummaries.length === 0 ? (
                   <p className="no-data">Keine Zeiteinträge vorhanden</p>
                 ) : (
+                  <>
                   <table className="cost-table">
                     <thead>
                       <tr>
                         <th>Mitarbeiter</th>
                         <th className="number-cell">Stunden</th>
                         <th className="number-cell">Stundensatz</th>
-                        <th className="number-cell">Kosten</th>
+                        <th className="number-cell">Kosten (Verrechnung)</th>
+                        {hasAnyEmployeeCostRate() && (
+                          <>
+                            <th className="number-cell">Einkauf</th>
+                            <th className="number-cell">Marge</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {employeeSummaries.map(emp => (
+                      {employeeSummaries.map(emp => {
+                        const margin = emp.hasCostRate ? emp.totalCost - emp.totalPurchaseCost : null
+                        return (
                         <tr key={emp.employeeId}>
                           <td>{emp.employeeName}</td>
                           <td className="number-cell">{emp.totalHours.toFixed(2)} h</td>
                           <td className="number-cell">{formatCurrency(emp.hourlyRate)}</td>
                           <td className="number-cell">{formatCurrency(emp.totalCost)}</td>
+                          {hasAnyEmployeeCostRate() && (
+                            <>
+                              <td className="number-cell">
+                                {emp.hasCostRate ? formatCurrency(emp.totalPurchaseCost) : '—'}
+                              </td>
+                              <td className={`number-cell ${margin != null && margin < 0 ? 'margin-negative' : 'margin-positive'}`}>
+                                {margin != null ? formatCurrency(margin) : '—'}
+                              </td>
+                            </>
+                          )}
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="subtotal-row">
                         <td colSpan={3}><strong>Summe Personalkosten:</strong></td>
                         <td className="number-cell"><strong>{formatCurrency(getEmployeeTotalCost())}</strong></td>
+                        {hasAnyEmployeeCostRate() && (
+                          <>
+                            <td className="number-cell"><strong>{formatCurrency(getEmployeeTotalPurchaseCost())}</strong></td>
+                            <td className="number-cell"><strong>{formatCurrency(getEmployeeTotalMargin())}</strong></td>
+                          </>
+                        )}
                       </tr>
                     </tfoot>
                   </table>
+                  {hasAnyEmployeeCostRate() && (
+                    <p className="material-margin-note">
+                      Marge = Kosten (Verrechnung) − Einkauf (interner Kostensatz). Nur Mitarbeiter mit
+                      hinterlegtem Kostensatz fließen in Einkauf/Marge ein.
+                    </p>
+                  )}
+                  </>
                 )}
               </div>
 
@@ -1480,6 +1532,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   <div className="total-cost-box total-cost-box-margin">
                     <span className="total-label">Materialmarge (Verkauf − Einkauf):</span>
                     <span className="total-value">{formatCurrency(getMaterialTotalMargin())}</span>
+                  </div>
+                )}
+                {hasAnyEmployeeCostRate() && (
+                  <div className="total-cost-box total-cost-box-margin">
+                    <span className="total-label">Personalmarge (Verrechnung − Kostensatz):</span>
+                    <span className="total-value">{formatCurrency(getEmployeeTotalMargin())}</span>
+                  </div>
+                )}
+                {(hasAnyEmployeeCostRate() || getMaterialTotalPurchaseCost() > 0) && (
+                  <div className="total-cost-box total-cost-box-margin">
+                    <span className="total-label">Gesamtmarge (Personal + Material):</span>
+                    <span className="total-value">
+                      {formatCurrency(getEmployeeTotalMargin() + getMaterialTotalMargin())}
+                    </span>
                   </div>
                 )}
               </div>

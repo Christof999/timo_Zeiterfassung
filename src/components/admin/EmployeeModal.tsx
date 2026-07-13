@@ -20,6 +20,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     position: '',
     status: 'active' as 'active' | 'inactive',
     hourlyRate: 0,
+    hourlyCostRate: 0,
     overtimeBalanceHours: '' as string,
     heroEmployeeId: '',
     isAdmin: false
@@ -76,6 +77,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: employee.position || '',
         status: (employee.status as 'active' | 'inactive') || 'active',
         hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
+        hourlyCostRate: employee.hourlyCostRate || 0,
         overtimeBalanceHours,
         heroEmployeeId: employee.heroEmployeeId || '',
         isAdmin: (employee as any).isAdmin === true
@@ -91,6 +93,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: '',
         status: 'active',
         hourlyRate: 0,
+        hourlyCostRate: 0,
         overtimeBalanceHours: '',
         heroEmployeeId: '',
         isAdmin: false
@@ -111,6 +114,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         position: formData.position,
         status: formData.status,
         hourlyRate: formData.hourlyRate,
+        hourlyCostRate: formData.hourlyCostRate,
         heroEmployeeId: formData.heroEmployeeId.trim() || undefined,
         isAdmin: formData.isAdmin
       }
@@ -203,13 +207,26 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             />
           </div>
           <div className="form-group">
-            <label>Stundenlohn:</label>
+            <label>Stundensatz (Verrechnung, €/Std):</label>
             <input
               type="number"
               step="0.01"
               value={formData.hourlyRate}
               onChange={(e) => setFormData({ ...formData, hourlyRate: parseFloat(e.target.value) || 0 })}
             />
+          </div>
+          <div className="form-group">
+            <label>Kostensatz (was kostet mich der Mitarbeiter, €/Std):</label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.hourlyCostRate}
+              onChange={(e) => setFormData({ ...formData, hourlyCostRate: parseFloat(e.target.value) || 0 })}
+            />
+            <small className="form-hint">
+              Interner Kostensatz (analog Material-Einkaufspreis). Die Differenz zum
+              Stundensatz wird in der Nachkalkulation als Personalmarge ausgewiesen.
+            </small>
           </div>
           <div className="form-group">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
