@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { DataService } from '../services/dataService'
-import type { TimeEntry, Project } from '../types'
+import type { TimeEntry, Project, TimeEntryMaterialUsage } from '../types'
 import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
 import ProjectSwitchModal from './ProjectSwitchModal'
@@ -13,7 +13,10 @@ interface ClockOutFormProps {
   clockInTime: Date | null
   onExtendedClockOutSuccess: () => void
   onUpdate: () => void
-  onProjectSwitch: (newProjectId: string) => Promise<void>
+  onProjectSwitch: (
+    newProjectId: string,
+    materialUsages: TimeEntryMaterialUsage[]
+  ) => Promise<void>
 }
 
 const ClockOutForm: React.FC<ClockOutFormProps> = ({
@@ -207,6 +210,7 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
         <ProjectSwitchModal
           currentProjectId={timeEntry.projectId}
           currentProjectName={project?.name}
+          offerMaterials={offerMaterials}
           onClose={() => setShowProjectSwitchModal(false)}
           onSwitch={onProjectSwitch}
         />

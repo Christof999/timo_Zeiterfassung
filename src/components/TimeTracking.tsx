@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
-import type { Employee, Project, TimeEntry } from '../types'
+import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
 import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
@@ -139,7 +139,10 @@ const TimeTracking: React.FC = () => {
     }
   }
 
-  const handleProjectSwitch = async (newProjectId: string) => {
+  const handleProjectSwitch = async (
+    newProjectId: string,
+    materialUsages: TimeEntryMaterialUsage[]
+  ) => {
     if (!currentTimeEntry || !currentUser?.id) return
 
     try {
@@ -148,7 +151,8 @@ const TimeTracking: React.FC = () => {
         currentUser.id,
         currentTimeEntry.id,
         newProjectId,
-        location
+        location,
+        materialUsages
       )
 
       const project = await DataService.getProjectById(newProjectId)
