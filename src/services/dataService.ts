@@ -738,12 +738,12 @@ class DataServiceClass {
           updateData.clockOutLocation = location
           updateData.locationOut = location
 
-          // Halbe Rückfahrt (Baustelle ≈ Ausstempel-Ort → Firmenstandort) als
-          // Arbeitszeit gutschreiben.
+          // Fahrtzeit-Gutschrift nach Entfernungs-Staffel (Firmenstandort →
+          // Standort des Mitarbeiters beim Ausstempeln) als Arbeitszeit gutschreiben.
           const travel = estimateReturnTravel(location)
           if (travel) {
             updateData.returnTravelDistanceKm = Math.round(travel.distanceKm * 10) / 10
-            updateData.returnTravelMinutes = Math.round(travel.oneWayMinutes)
+            updateData.returnTravelMinutes = travel.creditMinutes
             updateData.returnTravelCreditMs = travel.creditMs
           }
         }

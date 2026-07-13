@@ -192,11 +192,11 @@ export interface TimeEntry {
   /** Beim Ausstempeln gutgeschriebenes (zu viel geliefertes) Material */
   materialCreditUsages?: TimeEntryMaterialUsage[]
   pauseTotalTime?: number
-  /** Geschätzte Straßenentfernung Baustelle → Firmenstandort beim Ausstempeln (km) */
+  /** Entfernung Firmenstandort → Standort des Mitarbeiters beim Ausstempeln (km, Luftlinie/Radius) */
   returnTravelDistanceKm?: number
-  /** Geschätzte einfache Fahrtzeit für den Rückweg beim Ausstempeln (Minuten) */
+  /** Gutgeschriebene Fahrtzeit laut Entfernungs-Staffel beim Ausstempeln (Minuten) */
   returnTravelMinutes?: number
-  /** Der gebuchten Arbeitszeit gutgeschriebene halbe Rückfahrt (Millisekunden) */
+  /** Der gebuchten Arbeitszeit gutgeschriebene Fahrtzeit (Millisekunden) */
   returnTravelCreditMs?: number
   pauseDetails?: Array<{
     start: any

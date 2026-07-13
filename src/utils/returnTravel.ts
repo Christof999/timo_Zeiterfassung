@@ -1,25 +1,43 @@
 import type { TimeEntry } from '../types'
 
 /**
- * Fester Heimat-/Firmenstandort für die Rückfahrt-Berechnung.
- * Adresse: Störzelbacher Str. 21, 91792 Ellingen.
+ * Fester Firmenstandort (Ausgangspunkt) für die Rückfahrt-Gutschrift.
+ * Das Geschäft liegt in Stopfenheim (Ortsteil von 91792 Ellingen).
  *
- * Die Koordinaten sind eine Näherung für 91792 Ellingen. Eine kleine Abweichung
- * wirkt sich auf die Schätzung nur minimal aus (ca. 0,6 Min. Gutschrift je 1 km),
- * sie können bei Bedarf aber exakt nachgetragen werden.
+ * Die Koordinaten sind eine Näherung für Stopfenheim. Weil die Gutschrift in
+ * groben Entfernungs-Stufen (siehe CREDIT_TIERS) vergeben wird, wirkt sich eine
+ * kleine Abweichung nur direkt an den Stufengrenzen aus. Bei Bedarf können die
+ * exakten Koordinaten hier nachgetragen werden.
  */
 export const RETURN_HOME_BASE = {
-  address: 'Störzelbacher Str. 21, 91792 Ellingen',
-  lat: 49.059,
-  lng: 10.963
+  address: 'Stopfenheim, 91792 Ellingen',
+  lat: 49.034,
+  lng: 10.905
 }
 
-/** Umrechnung Luftlinie → grobe Straßenentfernung (Umwegfaktor). */
-const ROAD_DISTANCE_FACTOR = 1.3
-/** Angenommene Durchschnittsgeschwindigkeit für den Rückweg (km/h). */
-const AVERAGE_SPEED_KMH = 50
-/** Anteil der Rückfahrt, der als Arbeitszeit gutgeschrieben wird (die Hälfte). */
-const CREDIT_SHARE = 0.5
+/**
+ * Entfernungs-Staffel (Radius Firma → Standort des Mitarbeiters, Luftlinie) für
+ * die anrechenbare Fahrtzeit-Gutschrift beim Ausstempeln. Feste Vorgabe:
+ *   - bis 20 km:   0 Min
+ *   - 20 bis 50 km: 10 Min
+ *   - 50 bis 70 km: 15 Min
+ *   - ab 70 km:    20 Min
+ * Die Stufen sind absteigend nach Mindest-Entfernung sortiert (erste passende gilt).
+ */
+const CREDIT_TIERS: Array<{ minKm: number; minutes: number }> = [
+  { minKm: 70, minutes: 20 },
+  { minKm: 50, minutes: 15 },
+  { minKm: 20, minutes: 10 },
+  { minKm: 0, minutes: 0 }
+]
+
+/** Gutschrift (Minuten) für eine gegebene Entfernung anhand der Staffel. */
+const creditMinutesForDistance = (distanceKm: number): number => {
+  for (const tier of CREDIT_TIERS) {
+    if (distanceKm >= tier.minKm) return tier.minutes
+  }
+  return 0
+}
 
 const EARTH_RADIUS_KM = 6371
 
@@ -44,19 +62,18 @@ const haversineKm = (
 }
 
 export interface ReturnTravelEstimate {
-  /** Geschätzte Straßenentfernung Baustelle → Firmenstandort (km) */
+  /** Entfernung Firmenstandort → Standort des Mitarbeiters (km, Luftlinie/Radius) */
   distanceKm: number
-  /** Geschätzte einfache Fahrtzeit für den Rückweg (Minuten) */
-  oneWayMinutes: number
-  /** Gutgeschriebene Zeit = halbe Rückfahrt (Minuten) */
+  /** Gutgeschriebene Fahrtzeit laut Entfernungs-Staffel (Minuten) */
   creditMinutes: number
   /** Gutgeschriebene Zeit in Millisekunden (für die gebuchte Arbeitszeit) */
   creditMs: number
 }
 
 /**
- * Schätzt aus den beim Ausstempeln erfassten GPS-Koordinaten (≈ Baustelle) die
- * Rückfahrt zum Firmenstandort und die anrechenbare halbe Fahrtzeit.
+ * Bestimmt aus den beim Ausstempeln erfassten GPS-Koordinaten (≈ Standort des
+ * Mitarbeiters) die Entfernung zum Firmenstandort und die daraus resultierende
+ * Fahrtzeit-Gutschrift gemäß fester Entfernungs-Staffel (CREDIT_TIERS).
  * Liefert null, wenn keine gültigen Koordinaten vorliegen.
  */
 export const estimateReturnTravel = (
@@ -66,19 +83,16 @@ export const estimateReturnTravel = (
     return null
   }
 
-  const distanceKm =
-    haversineKm({ lat: location.lat, lng: location.lng }, RETURN_HOME_BASE) *
-    ROAD_DISTANCE_FACTOR
-  const oneWayMinutes = (distanceKm / AVERAGE_SPEED_KMH) * 60
-  const creditMinutes = oneWayMinutes * CREDIT_SHARE
+  const distanceKm = haversineKm({ lat: location.lat, lng: location.lng }, RETURN_HOME_BASE)
+  const creditMinutes = creditMinutesForDistance(distanceKm)
   const creditMs = Math.round(creditMinutes * 60 * 1000)
 
-  return { distanceKm, oneWayMinutes, creditMinutes, creditMs }
+  return { distanceKm, creditMinutes, creditMs }
 }
 
 /**
  * Kurzer Hinweistext für die Ausstempel-Bestätigung (z. B. Toast).
- * Leerstring, wenn keine nennenswerte Gutschrift anfällt.
+ * Leerstring, wenn keine Gutschrift anfällt.
  */
 export const formatReturnTravelCreditNote = (
   location: { lat: number | null; lng: number | null } | null | undefined

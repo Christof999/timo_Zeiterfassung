@@ -193,7 +193,7 @@ export const calculateWorkHours = (
 
 export const msToMinutes = (ms: number): number => Math.round(ms / (1000 * 60))
 
-/** Beim Ausstempeln gutgeschriebene halbe Rückfahrt (in Minuten). */
+/** Beim Ausstempeln gutgeschriebene Fahrtzeit laut Entfernungs-Staffel (in Minuten). */
 export const entryCreditMinutes = (entry: TimeEntry): number =>
   msToMinutes(getReturnTravelCreditMs(entry))
 
