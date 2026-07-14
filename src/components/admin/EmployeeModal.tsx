@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Employee } from '../../types'
+import type { Employee, TimeEntry, Project } from '../../types'
 import { toast } from '../ToastContainer'
+import EmployeeTimeEntriesSection from './EmployeeTimeEntriesSection'
+import TimeEntryReportModal from './TimeEntryReportModal'
 import '../../styles/Modal.css'
 
 interface EmployeeModalProps {
@@ -27,6 +29,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isRecomputingOvertime, setIsRecomputingOvertime] = useState(false)
+  // Ausgewählter Stempelsatz für den Detail-Bericht (Modal über dem Mitarbeiter-Fenster)
+  const [reportEntry, setReportEntry] = useState<{ entry: TimeEntry; project: Project | null } | null>(null)
 
   const handleRecomputeOvertime = async () => {
     if (!employee?.id) return
@@ -155,6 +159,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
   }
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -287,9 +292,25 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               {isLoading ? 'Speichere...' : 'Speichern'}
             </button>
           </div>
+
+          {employee?.id && (
+            <EmployeeTimeEntriesSection
+              employeeId={employee.id}
+              onSelectEntry={(entry, project) => setReportEntry({ entry, project })}
+            />
+          )}
         </form>
       </div>
     </div>
+
+    {reportEntry && (
+      <TimeEntryReportModal
+        entry={reportEntry.entry}
+        project={reportEntry.project}
+        onClose={() => setReportEntry(null)}
+      />
+    )}
+    </>
   )
 }
 
