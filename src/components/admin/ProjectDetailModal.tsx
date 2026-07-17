@@ -70,6 +70,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     unitPriceEur: string
   }>({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
   const [isSavingPositions, setIsSavingPositions] = useState(false)
+  // Ausgewähltes Material aus dem Katalog im Positions-Editor ('' = Freitext)
+  const [posTypeId, setPosTypeId] = useState('')
   const modalContentRef = useRef<HTMLDivElement | null>(null)
   const detailInfoRef = useRef<HTMLDivElement | null>(null)
 
@@ -491,8 +493,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   }
 
   // --- Materialliste (Soll-Positionen) bearbeiten -------------------------
-  const resetPosDraft = () =>
+  const resetPosDraft = () => {
     setPosDraft({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
+    setPosTypeId('')
+  }
 
   const startAddPosition = () => {
     resetPosDraft()
@@ -508,12 +512,31 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
       quantity: p.quantity != null ? String(p.quantity) : '',
       unitPriceEur: p.unitPriceEur != null ? String(p.unitPriceEur) : ''
     })
+    // Bestehende Position: passenden Katalog-Eintrag vorauswählen (per Name), sonst Freitext.
+    const match = materialTypes.find(
+      (t) => (t.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase()
+    )
+    setPosTypeId(match?.id || '')
     setEditingPosIndex(index)
   }
 
   const cancelEditPosition = () => {
     setEditingPosIndex(null)
     resetPosDraft()
+  }
+
+  // Auswahl aus dem Material-Katalog: Bezeichnung, Einheit und Preis vorbefüllen.
+  const handlePosTypeChange = (id: string) => {
+    setPosTypeId(id)
+    const type = materialTypes.find((t) => t.id === id)
+    if (!type) return
+    setPosDraft((d) => ({
+      ...d,
+      kind: 'material',
+      name: type.name || '',
+      unit: type.unitLabel || d.unit,
+      unitPriceEur: type.unitPriceEur != null ? String(type.unitPriceEur) : d.unitPriceEur
+    }))
   }
 
   const buildMetaForPositions = (positions: OfferPosition[]): Project['offerMeta'] => {
@@ -915,11 +938,26 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               <div className="project-offer-editor">
                 <div className="project-offer-editor-grid">
                   <label className="project-offer-field project-offer-field-name">
+                    <span>Aus Material-Katalog</span>
+                    <select value={posTypeId} onChange={(e) => handlePosTypeChange(e.target.value)}>
+                      <option value="">Freitext / manuell eingeben \u2026</option>
+                      {materialTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                          {t.unitLabel ? ` (${t.unitLabel})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="project-offer-field project-offer-field-name">
                     <span>Bezeichnung</span>
                     <input
                       type="text"
                       value={posDraft.name}
-                      onChange={(e) => setPosDraft({ ...posDraft, name: e.target.value })}
+                      onChange={(e) => {
+                        setPosDraft({ ...posDraft, name: e.target.value })
+                        if (posTypeId) setPosTypeId('')
+                      }}
                       placeholder={'z. B. Fliesen 60\u00D760'}
                       autoFocus
                     />
