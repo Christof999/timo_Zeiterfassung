@@ -25,8 +25,10 @@ export type DashboardModalKey =
   | 'dailyReport'
 
 export interface LiveActivity {
-  employee: Employee
-  project: Project
+  /** Kann fehlen, wenn der Mitarbeiter (z. B. gelöscht) nicht mehr auflösbar ist. */
+  employee?: Employee
+  /** Kann fehlen, wenn das Projekt (z. B. gelöscht/archiviert) nicht mehr auflösbar ist. */
+  project?: Project
   timeEntry: TimeEntry
 }
 

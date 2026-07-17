@@ -45,8 +45,10 @@ const LiveActivityWidget: React.FC<{ ctx: DashboardContext }> = ({ ctx }) => {
         const duration = h > 0 ? `${h}h ${m}min` : `${m}min`
         const timeString = clockInTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
         const employeeName =
-          activity.employee.name ||
-          `${activity.employee.firstName || ''} ${activity.employee.lastName || ''}`.trim()
+          activity.employee?.name ||
+          `${activity.employee?.firstName || ''} ${activity.employee?.lastName || ''}`.trim() ||
+          'Unbekannter Mitarbeiter'
+        const projectName = activity.project?.name || 'Kein Projekt'
         const isClockingOut = clockingOutId === activity.timeEntry.id
         const locationLabel = formatClockInLocationLabel(activity.timeEntry)
         const coords = getClockInCoordinates(activity.timeEntry)
@@ -56,7 +58,7 @@ const LiveActivityWidget: React.FC<{ ctx: DashboardContext }> = ({ ctx }) => {
           <div key={activity.timeEntry.id} className="dw-activity-item">
             <div className="dw-activity-info">
               <strong>{employeeName}</strong>
-              <span className="dw-activity-project">{activity.project.name}</span>
+              <span className="dw-activity-project">{projectName}</span>
               <span className="dw-activity-meta">
                 seit {timeString} · {duration}
               </span>

@@ -90,15 +90,14 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
       setAllProjects(projects)
       setMaterialTypes(materials)
 
-      const activities = currentTimeEntries
-        .slice(0, 15)
-        .map((entry) => {
-          const employee = employees.find((e) => e.id === entry.employeeId)
-          const project = projects.find((p) => p.id === entry.projectId)
-          if (!employee || !project) return null
-          return { employee, project, timeEntry: entry }
-        })
-        .filter((a): a is LiveActivity => a !== null)
+      // Alle eingestempelten Einträge anzeigen – auch wenn Mitarbeiter oder
+      // Projekt (z. B. gelöscht/archiviert) nicht mehr auflösbar sind. So bleibt
+      // die Liste konsistent mit der Kennzahl „Eingestempelte Mitarbeiter".
+      const activities: LiveActivity[] = currentTimeEntries.map((entry) => {
+        const employee = employees.find((e) => e.id === entry.employeeId)
+        const project = projects.find((p) => p.id === entry.projectId)
+        return { employee, project, timeEntry: entry }
+      })
       setLiveActivities(activities)
     } catch (error) {
       console.error('Fehler beim Laden der Dashboard-Daten:', error)
