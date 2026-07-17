@@ -28,7 +28,7 @@ export type OfferMaterialOption = {
 }
 
 /** Vereinheitlichte Auswahl-Option (Angebot oder globaler Katalog) */
-type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string; defaultQuantity?: number }
+export type PickOption = { name: string; unit?: string; unitPriceEur?: number; id?: string; defaultQuantity?: number }
 
 /** Standard-Einheiten zur Auswahl (frei ergänzbar). */
 const STANDARD_UNITS = ['Stück', 'Sack', 'kg', 'g', 'qm', 'm²', 'lfm', 'l', 'Eimer', 'Rolle', 'Kartusche']
@@ -98,7 +98,7 @@ export function buildMaterialUsagesFromRows(
 }
 
 /** Eingabefeld mit aufklappbarer, durchsuchbarer Auswahlliste (mobil-tauglich). */
-const MaterialCombobox: React.FC<{
+export const MaterialCombobox: React.FC<{
   value: string
   options: PickOption[]
   onText: (v: string) => void

@@ -959,6 +959,10 @@
   gap: 8px;
   margin-top: 10px;
 }
+/* Durchsuchbare Material-Auswahl im Positions-Editor (kompakter Bereich) */
+.project-offer-combobox .material-combobox-list {
+  max-height: 200px;
+}
 
 /* Material-Übersicht (Projektdetails) */
 .material-credit-form {
