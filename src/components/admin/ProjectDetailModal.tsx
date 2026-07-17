@@ -857,67 +857,57 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             )}
 
             {offerPositions.length > 0 ? (
-              <table className="project-offer-table">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Art</th>
-                    <th className="num">Soll-Menge</th>
-                    <th className="num">\u20AC/Einheit</th>
-                    <th className="project-offer-actions-col">Aktion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offerPositions.map((p, i) => (
-                    <tr key={`${p.nr || p.name}-${i}`}>
-                      <td>
-                        {p.name}
+              <div className="project-material-list">
+                {offerPositions.map((p, i) => (
+                  <div className="project-material-item" key={`${p.nr || p.name}-${i}`}>
+                    <div className="project-material-main">
+                      <div className="project-material-name">
+                        <span className="project-material-title">{p.name}</span>
                         {p.source === 'manual' && (
-                          <span className="project-offer-manual-badge" title="Manuell im Projekt erg\u00E4nzt">
+                          <span className="project-offer-manual-badge" title={'Manuell im Projekt erg\u00E4nzt'}>
                             manuell
                           </span>
                         )}
-                      </td>
-                      <td>
+                      </div>
+                      <div className="project-material-meta">
                         <span className={`status-badge ${p.kind === 'material' ? 'active' : 'inactive'}`}>
                           {p.kind === 'material' ? 'Material' : 'Lohn'}
                         </span>
-                      </td>
-                      <td className="num">
-                        {(p.quantity ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-                        {p.unit ? ` ${p.unit}` : ''}
-                      </td>
-                      <td className="num">
-                        {typeof p.unitPriceEur === 'number' ? `${p.unitPriceEur.toFixed(2)} \u20AC` : '\u2014'}
-                      </td>
-                      <td className="project-offer-actions">
-                        <button
-                          type="button"
-                          className="project-offer-icon-btn"
-                          title="Position bearbeiten"
-                          onClick={() => startEditPosition(i)}
-                          disabled={isSavingPositions}
-                        >
-                          \u270F\uFE0F
-                        </button>
-                        <button
-                          type="button"
-                          className="project-offer-icon-btn danger"
-                          title="Position entfernen"
-                          onClick={() => handleDeletePosition(i)}
-                          disabled={isSavingPositions}
-                        >
-                          \uD83D\uDDD1\uFE0F
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <span className="project-material-qty">
+                          {(p.quantity ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                          {p.unit ? ` ${p.unit}` : ''}
+                        </span>
+                        <span className="project-material-price">
+                          {typeof p.unitPriceEur === 'number' ? `${p.unitPriceEur.toFixed(2)} \u20AC` : '\u2014'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="project-material-actions">
+                      <button
+                        type="button"
+                        className="btn secondary-btn btn-sm"
+                        onClick={() => startEditPosition(i)}
+                        disabled={isSavingPositions}
+                      >
+                        Bearbeiten
+                      </button>
+                      <button
+                        type="button"
+                        className="btn danger-btn btn-sm"
+                        onClick={() => handleDeletePosition(i)}
+                        disabled={isSavingPositions}
+                      >
+                        Entfernen
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
               <p className="project-offer-empty">
-                Noch kein Material hinterlegt.
-                {project.heroProjectId ? ' \u201EAngebot von HERO laden\u201C oder eine Position manuell hinzuf\u00FCgen.' : ' Position manuell hinzuf\u00FCgen.'}
+                {project.heroProjectId
+                  ? 'Noch kein Material hinterlegt. \u201EAngebot von HERO laden\u201C oder eine Position manuell hinzuf\u00FCgen.'
+                  : 'Noch kein Material hinterlegt. Position manuell hinzuf\u00FCgen.'}
               </p>
             )}
 
@@ -930,7 +920,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       type="text"
                       value={posDraft.name}
                       onChange={(e) => setPosDraft({ ...posDraft, name: e.target.value })}
-                      placeholder="z. B. Fliesen 60\u00D760"
+                      placeholder={'z. B. Fliesen 60\u00D760'}
                       autoFocus
                     />
                   </label>
@@ -950,7 +940,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       type="text"
                       value={posDraft.unit}
                       onChange={(e) => setPosDraft({ ...posDraft, unit: e.target.value })}
-                      placeholder="z. B. m\u00B2, St\u00FCck"
+                      placeholder={'z. B. m\u00B2, St\u00FCck'}
                     />
                   </label>
                   <label className="project-offer-field">
@@ -964,7 +954,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                     />
                   </label>
                   <label className="project-offer-field">
-                    <span>\u20AC/Einheit</span>
+                    <span>{'\u20AC/Einheit'}</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -1000,7 +990,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                 onClick={startAddPosition}
                 disabled={isSavingPositions}
               >
-                + Position hinzuf\u00FCgen
+                {'+ Position hinzuf\u00FCgen'}
               </button>
             )}
           </div>

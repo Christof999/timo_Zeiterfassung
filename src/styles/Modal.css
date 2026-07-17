@@ -855,32 +855,57 @@
   padding: 4px 10px;
   font-size: 12px;
 }
-.project-offer-table th.project-offer-actions-col,
-.project-offer-table td.project-offer-actions {
-  text-align: right;
-  white-space: nowrap;
-  width: 1%;
-}
-.project-offer-actions {
+/* Materialliste als responsive Karten (mobilfreundlich statt Tabelle) */
+.project-material-list {
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 8px;
 }
-.project-offer-icon-btn {
+.project-material-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
   border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 12px;
   background: var(--surface-1, #fff);
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 13px;
-  line-height: 1.2;
-  cursor: pointer;
 }
-.project-offer-icon-btn:hover:not(:disabled) {
-  background: var(--surface-2, #f2f2f4);
+.project-material-main {
+  flex: 1 1 190px;
+  min-width: 0;
 }
-.project-offer-icon-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+.project-material-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.project-material-title {
+  overflow-wrap: anywhere;
+}
+.project-material-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #555);
+}
+.project-material-price {
+  font-variant-numeric: tabular-nums;
+}
+.project-material-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.project-material-actions .btn {
+  white-space: nowrap;
 }
 .project-offer-manual-badge {
   display: inline-block;
