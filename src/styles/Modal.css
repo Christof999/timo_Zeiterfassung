@@ -855,6 +855,85 @@
   padding: 4px 10px;
   font-size: 12px;
 }
+.project-offer-table th.project-offer-actions-col,
+.project-offer-table td.project-offer-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+.project-offer-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.project-offer-icon-btn {
+  border: 1px solid var(--border-color, #e0e0e0);
+  background: var(--surface-1, #fff);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.project-offer-icon-btn:hover:not(:disabled) {
+  background: var(--surface-2, #f2f2f4);
+}
+.project-offer-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.project-offer-manual-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c5b00;
+  background: #fff2cc;
+  vertical-align: middle;
+}
+.project-offer-add-btn {
+  margin-top: 8px;
+}
+.project-offer-editor {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 10px;
+  background: var(--surface-2, #f7f7f9);
+}
+.project-offer-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.project-offer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.project-offer-field.project-offer-field-name {
+  grid-column: 1 / -1;
+}
+.project-offer-field > span {
+  color: var(--text-secondary, #555);
+  font-weight: 600;
+}
+.project-offer-field input,
+.project-offer-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-color, #d0d0d5);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--surface-1, #fff);
+}
+.project-offer-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
 
 /* Material-Übersicht (Projektdetails) */
 .material-credit-form {

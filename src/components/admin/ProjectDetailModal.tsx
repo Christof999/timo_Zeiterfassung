@@ -60,6 +60,16 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [offerPositions, setOfferPositions] = useState<OfferPosition[]>(project.offerPositions || [])
   const [offerMeta, setOfferMeta] = useState<Project['offerMeta'] | null>(project.offerMeta || null)
   const [isImportingOffer, setIsImportingOffer] = useState(false)
+  // Editor für die Materialliste (Soll-Positionen): null = geschlossen, -1 = neue Position, sonst Index.
+  const [editingPosIndex, setEditingPosIndex] = useState<number | null>(null)
+  const [posDraft, setPosDraft] = useState<{
+    name: string
+    kind: 'material' | 'labor'
+    unit: string
+    quantity: string
+    unitPriceEur: string
+  }>({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
+  const [isSavingPositions, setIsSavingPositions] = useState(false)
   const modalContentRef = useRef<HTMLDivElement | null>(null)
   const detailInfoRef = useRef<HTMLDivElement | null>(null)
 
@@ -480,6 +490,103 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
   }
 
+  // --- Materialliste (Soll-Positionen) bearbeiten -------------------------
+  const resetPosDraft = () =>
+    setPosDraft({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
+
+  const startAddPosition = () => {
+    resetPosDraft()
+    setEditingPosIndex(-1)
+  }
+
+  const startEditPosition = (index: number) => {
+    const p = offerPositions[index]
+    setPosDraft({
+      name: p.name || '',
+      kind: p.kind === 'labor' ? 'labor' : 'material',
+      unit: p.unit || '',
+      quantity: p.quantity != null ? String(p.quantity) : '',
+      unitPriceEur: p.unitPriceEur != null ? String(p.unitPriceEur) : ''
+    })
+    setEditingPosIndex(index)
+  }
+
+  const cancelEditPosition = () => {
+    setEditingPosIndex(null)
+    resetPosDraft()
+  }
+
+  const buildMetaForPositions = (positions: OfferPosition[]): Project['offerMeta'] => {
+    const materialCount = positions.filter((p) => p.kind === 'material').length
+    return { ...(offerMeta || {}), positionCount: positions.length, materialCount }
+  }
+
+  const persistPositions = async (positions: OfferPosition[]) => {
+    if (!project.id) return
+    setIsSavingPositions(true)
+    try {
+      const meta = buildMetaForPositions(positions)
+      await DataService.updateProject(project.id, { offerPositions: positions, offerMeta: meta })
+      setOfferPositions(positions)
+      setOfferMeta(meta || null)
+    } finally {
+      setIsSavingPositions(false)
+    }
+  }
+
+  const handleSavePosition = async () => {
+    const name = posDraft.name.trim()
+    if (!name) {
+      toast.error('Bitte eine Bezeichnung für die Position angeben.')
+      return
+    }
+    const parseNum = (v: string): number | undefined => {
+      const trimmed = v.trim()
+      if (!trimmed) return undefined
+      const n = Number.parseFloat(trimmed.replace(',', '.'))
+      return Number.isFinite(n) ? n : undefined
+    }
+    const quantity = parseNum(posDraft.quantity)
+    const unitPriceEur = parseNum(posDraft.unitPriceEur)
+    const unit = posDraft.unit.trim()
+
+    // Firestore verträgt keine undefined-Felder in Array-Objekten → leere weglassen.
+    // Manuell gepflegte Positionen als 'manual' markieren, damit sie den HERO-Sync überleben.
+    const next: OfferPosition = { name, kind: posDraft.kind, source: 'manual' }
+    if (unit) next.unit = unit
+    if (quantity !== undefined) next.quantity = quantity
+    if (unitPriceEur !== undefined) next.unitPriceEur = unitPriceEur
+
+    const isNew = editingPosIndex === -1 || editingPosIndex === null
+    const positions = [...offerPositions]
+    if (isNew) {
+      positions.push(next)
+    } else {
+      positions[editingPosIndex] = next
+    }
+
+    try {
+      await persistPositions(positions)
+      toast.success(isNew ? 'Position hinzugefügt.' : 'Position aktualisiert.')
+      cancelEditPosition()
+    } catch (e: any) {
+      toast.error('Materialliste konnte nicht gespeichert werden: ' + (e?.message || 'Fehler'))
+    }
+  }
+
+  const handleDeletePosition = async (index: number) => {
+    const p = offerPositions[index]
+    if (!confirm(`Position „${p.name}“ wirklich aus der Materialliste entfernen?`)) return
+    const positions = offerPositions.filter((_, i) => i !== index)
+    try {
+      await persistPositions(positions)
+      toast.success('Position entfernt.')
+      if (editingPosIndex === index) cancelEditPosition()
+    } catch (e: any) {
+      toast.error('Position konnte nicht entfernt werden: ' + (e?.message || 'Fehler'))
+    }
+  }
+
   const renderTimeEntryLocationModal = () => {
     if (!timeEntryDetail) return null
 
@@ -721,10 +828,10 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
             </div>
           )}
 
-          {project.heroProjectId && (
-            <div className="project-offer-section">
-              <div className="project-offer-head">
-                <strong>HERO-Angebot (Soll):</strong>
+          <div className="project-offer-section">
+            <div className="project-offer-head">
+              <strong>Materialliste (Soll):</strong>
+              {project.heroProjectId && (
                 <button
                   type="button"
                   className="btn secondary-btn btn-sm"
@@ -737,50 +844,166 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                       ? 'Angebot aktualisieren'
                       : 'Angebot von HERO laden'}
                 </button>
-              </div>
-              {offerMeta ? (
-                <>
-                  <p className="project-offer-meta">
-                    {offerMeta.nr ? `${offerMeta.nr} \u00B7 ` : ''}
-                    {offerMeta.date || ''} \u00B7 {offerMeta.materialCount ?? 0} Material / {(offerMeta.positionCount ?? 0) - (offerMeta.materialCount ?? 0)} Lohn
-                  </p>
-                  <table className="project-offer-table">
-                    <thead>
-                      <tr>
-                        <th>Position</th>
-                        <th>Art</th>
-                        <th className="num">Soll-Menge</th>
-                        <th className="num">\u20AC/Einheit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {offerPositions.map((p, i) => (
-                        <tr key={`${p.nr || p.name}-${i}`}>
-                          <td>{p.name}</td>
-                          <td>
-                            <span className={`status-badge ${p.kind === 'material' ? 'active' : 'inactive'}`}>
-                              {p.kind === 'material' ? 'Material' : 'Lohn'}
-                            </span>
-                          </td>
-                          <td className="num">
-                            {(p.quantity ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-                            {p.unit ? ` ${p.unit}` : ''}
-                          </td>
-                          <td className="num">
-                            {typeof p.unitPriceEur === 'number' ? `${p.unitPriceEur.toFixed(2)} \u20AC` : '\u2014'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              ) : (
-                <p className="project-offer-empty">
-                  Noch kein Angebot \u00FCbernommen. \u201EAngebot von HERO laden\u201C holt das aktuellste Angebot.
-                </p>
               )}
             </div>
-          )}
+
+            {offerMeta && (offerMeta.nr || offerMeta.date) && (
+              <p className="project-offer-meta">
+                {offerMeta.nr ? `${offerMeta.nr} \u00B7 ` : ''}
+                {offerMeta.date || ''}
+                {' \u00B7 '}
+                {offerMeta.materialCount ?? 0} Material / {(offerMeta.positionCount ?? 0) - (offerMeta.materialCount ?? 0)} Lohn
+              </p>
+            )}
+
+            {offerPositions.length > 0 ? (
+              <table className="project-offer-table">
+                <thead>
+                  <tr>
+                    <th>Position</th>
+                    <th>Art</th>
+                    <th className="num">Soll-Menge</th>
+                    <th className="num">\u20AC/Einheit</th>
+                    <th className="project-offer-actions-col">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {offerPositions.map((p, i) => (
+                    <tr key={`${p.nr || p.name}-${i}`}>
+                      <td>
+                        {p.name}
+                        {p.source === 'manual' && (
+                          <span className="project-offer-manual-badge" title="Manuell im Projekt erg\u00E4nzt">
+                            manuell
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`status-badge ${p.kind === 'material' ? 'active' : 'inactive'}`}>
+                          {p.kind === 'material' ? 'Material' : 'Lohn'}
+                        </span>
+                      </td>
+                      <td className="num">
+                        {(p.quantity ?? 0).toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                        {p.unit ? ` ${p.unit}` : ''}
+                      </td>
+                      <td className="num">
+                        {typeof p.unitPriceEur === 'number' ? `${p.unitPriceEur.toFixed(2)} \u20AC` : '\u2014'}
+                      </td>
+                      <td className="project-offer-actions">
+                        <button
+                          type="button"
+                          className="project-offer-icon-btn"
+                          title="Position bearbeiten"
+                          onClick={() => startEditPosition(i)}
+                          disabled={isSavingPositions}
+                        >
+                          \u270F\uFE0F
+                        </button>
+                        <button
+                          type="button"
+                          className="project-offer-icon-btn danger"
+                          title="Position entfernen"
+                          onClick={() => handleDeletePosition(i)}
+                          disabled={isSavingPositions}
+                        >
+                          \uD83D\uDDD1\uFE0F
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="project-offer-empty">
+                Noch kein Material hinterlegt.
+                {project.heroProjectId ? ' \u201EAngebot von HERO laden\u201C oder eine Position manuell hinzuf\u00FCgen.' : ' Position manuell hinzuf\u00FCgen.'}
+              </p>
+            )}
+
+            {editingPosIndex !== null ? (
+              <div className="project-offer-editor">
+                <div className="project-offer-editor-grid">
+                  <label className="project-offer-field project-offer-field-name">
+                    <span>Bezeichnung</span>
+                    <input
+                      type="text"
+                      value={posDraft.name}
+                      onChange={(e) => setPosDraft({ ...posDraft, name: e.target.value })}
+                      placeholder="z. B. Fliesen 60\u00D760"
+                      autoFocus
+                    />
+                  </label>
+                  <label className="project-offer-field">
+                    <span>Art</span>
+                    <select
+                      value={posDraft.kind}
+                      onChange={(e) => setPosDraft({ ...posDraft, kind: e.target.value as 'material' | 'labor' })}
+                    >
+                      <option value="material">Material</option>
+                      <option value="labor">Lohn</option>
+                    </select>
+                  </label>
+                  <label className="project-offer-field">
+                    <span>Einheit</span>
+                    <input
+                      type="text"
+                      value={posDraft.unit}
+                      onChange={(e) => setPosDraft({ ...posDraft, unit: e.target.value })}
+                      placeholder="z. B. m\u00B2, St\u00FCck"
+                    />
+                  </label>
+                  <label className="project-offer-field">
+                    <span>Soll-Menge</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={posDraft.quantity}
+                      onChange={(e) => setPosDraft({ ...posDraft, quantity: e.target.value })}
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="project-offer-field">
+                    <span>\u20AC/Einheit</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={posDraft.unitPriceEur}
+                      onChange={(e) => setPosDraft({ ...posDraft, unitPriceEur: e.target.value })}
+                      placeholder="optional"
+                    />
+                  </label>
+                </div>
+                <div className="project-offer-editor-actions">
+                  <button
+                    type="button"
+                    className="btn primary-btn btn-sm"
+                    onClick={handleSavePosition}
+                    disabled={isSavingPositions}
+                  >
+                    {isSavingPositions ? 'Speichern\u2026' : editingPosIndex === -1 ? 'Hinzuf\u00FCgen' : '\u00DCbernehmen'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary-btn btn-sm"
+                    onClick={cancelEditPosition}
+                    disabled={isSavingPositions}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn secondary-btn btn-sm project-offer-add-btn"
+                onClick={startAddPosition}
+                disabled={isSavingPositions}
+              >
+                + Position hinzuf\u00FCgen
+              </button>
+            )}
+          </div>
         </div>
 
         <div

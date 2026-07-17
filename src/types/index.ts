@@ -110,6 +110,12 @@ export interface OfferPosition {
   vatPercent?: number
   /** 'material' = für Mitarbeiter sichtbar; 'labor' = nur Admin (Lohn) */
   kind: 'material' | 'labor'
+  /**
+   * Herkunft der Position. 'manual' = im Projekt manuell ergänzt/angepasst;
+   * bleibt beim HERO-Sync erhalten (gewinnt bei Namensgleichheit gegen HERO).
+   * Sonst aus dem HERO-Angebot übernommen.
+   */
+  source?: 'hero' | 'manual'
 }
 
 /** Kunde – manuell angelegt oder aus HERO synchronisiert */
