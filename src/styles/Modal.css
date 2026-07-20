@@ -356,6 +356,21 @@
   color: var(--text-secondary);
 }
 
+.modal-form .clock-in-mode-toggle {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.modal-form .clock-in-mode-toggle .btn {
+  flex: 1;
+}
+
+.modal-form .no-data {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .duration-preview {
   display: flex;
   justify-content: space-between;

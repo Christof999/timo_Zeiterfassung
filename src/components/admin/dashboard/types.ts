@@ -23,6 +23,7 @@ export type DashboardModalKey =
   | 'material'
   | 'vehicle'
   | 'dailyReport'
+  | 'adminClockIn'
 
 export interface LiveActivity {
   /** Kann fehlen, wenn der Mitarbeiter (z. B. gelöscht) nicht mehr auflösbar ist. */

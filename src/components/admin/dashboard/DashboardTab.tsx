@@ -15,6 +15,7 @@ import CustomerModal from '../CustomerModal'
 import MaterialTypeModal from '../MaterialTypeModal'
 import VehicleModal from '../VehicleModal'
 import DailyReportModal from '../DailyReportModal'
+import AdminClockInModal from '../AdminClockInModal'
 import AddWidgetModal from './AddWidgetModal'
 import { getWidgetDef, DEFAULT_WIDGET_KEYS } from './widgetRegistry'
 import type { DashboardContext, DashboardModalKey, DashboardTabKey, LiveActivity } from './types'
@@ -392,6 +393,12 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
           projects={allProjects}
           materialTypes={materialTypes}
           onClose={() => setOpenModalKey(null)}
+        />
+      )}
+      {openModalKey === 'adminClockIn' && (
+        <AdminClockInModal
+          onClose={() => setOpenModalKey(null)}
+          onSaved={() => { setOpenModalKey(null); loadDashboardData() }}
         />
       )}
     </div>

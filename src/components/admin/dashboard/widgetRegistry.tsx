@@ -151,6 +151,15 @@ const ALL_WIDGETS: WidgetDef[] = [
     defaultSize: 'large',
     render: (ctx) => <LiveActivityWidget ctx={ctx} />
   },
+  {
+    key: 'admin-clock-in',
+    title: 'Mitarbeiter einstempeln',
+    description: 'Einen Mitarbeiter direkt auf ein Projekt oder einen Kunden einstempeln.',
+    category: 'Kennzahlen',
+    kind: 'launcher',
+    defaultSize: 'small',
+    action: { type: 'modal', modal: 'adminClockIn' }
+  },
 
   // --- Stammdaten (Launcher) ---
   {
@@ -322,5 +331,6 @@ export const DEFAULT_WIDGET_KEYS: string[] = [
   'stat-active-projects',
   'stat-today-hours',
   'stat-open-vacation',
+  'admin-clock-in',
   'live-activity'
 ]
