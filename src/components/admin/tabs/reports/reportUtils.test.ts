@@ -8,8 +8,13 @@ import {
   getWeekStart,
   getWeekEnd,
   enumerateDays,
-  convertToDate
+  convertToDate,
+  buildDateFromTimeInput,
+  getReportRowChanges,
+  type ReportEntry
 } from './reportUtils'
+import { roundTimeToStep } from '../../../../utils/timeRounding'
+import type { TimeEntry } from '../../../../types'
 
 describe('convertToDate – liest alle clockInTime-Formate', () => {
   // Regression: Die Zeitraumfilterung der Berichte läuft clientseitig über
@@ -101,5 +106,107 @@ describe('Wochen-Helfer', () => {
   it('enumerateDays zählt beide Grenzen mit', () => {
     const days = enumerateDays(new Date(2026, 6, 6), new Date(2026, 6, 12))
     expect(days).toHaveLength(7)
+  })
+})
+
+describe('buildDateFromTimeInput – Uhrzeit auf den Tag des Stempelsatzes legen', () => {
+  const base = new Date(2026, 6, 8, 6, 17, 43, 500)
+
+  it('setzt Stunde/Minute und nullt Sekunden', () => {
+    const result = buildDateFromTimeInput(base, '07:45')
+    expect(result?.getFullYear()).toBe(2026)
+    expect(result?.getMonth()).toBe(6)
+    expect(result?.getDate()).toBe(8)
+    expect(result?.getHours()).toBe(7)
+    expect(result?.getMinutes()).toBe(45)
+    expect(result?.getSeconds()).toBe(0)
+    expect(result?.getMilliseconds()).toBe(0)
+  })
+
+  it('lässt das Ausgangsdatum unverändert', () => {
+    const before = base.getTime()
+    buildDateFromTimeInput(base, '07:45')
+    expect(base.getTime()).toBe(before)
+  })
+
+  it('gibt null bei leerer oder unsinniger Eingabe', () => {
+    expect(buildDateFromTimeInput(base, '')).toBeNull()
+    expect(buildDateFromTimeInput(base, 'abc')).toBeNull()
+    expect(buildDateFromTimeInput(base, '25:00')).toBeNull()
+    expect(buildDateFromTimeInput(base, '07:99')).toBeNull()
+  })
+})
+
+describe('getReportRowChanges – nur echte Abweichungen speichern', () => {
+  // Die Direkt-Speicherung im Zeiterfassungsbericht darf ausschließlich
+  // Felder schreiben, die der Admin wirklich verändert hat. Sonst würden die
+  // ungeglätteten Rohzeiten still auf das 15-Minuten-Raster überschrieben.
+  const original: TimeEntry = {
+    id: 'e1',
+    employeeId: 'mitarbeiter-1',
+    projectId: 'projekt-a',
+    // 07:07 wird in der Anzeige auf 07:00 geglättet
+    clockInTime: new Date(2026, 6, 8, 7, 7),
+    // 16:05 wird in der Anzeige auf 16:00 geglättet
+    clockOutTime: new Date(2026, 6, 8, 16, 5),
+    pauseTotalTime: 30 * 60 * 1000
+  }
+
+  const row = (overrides: Partial<ReportEntry> = {}): ReportEntry => ({
+    id: 'e1',
+    originalEntry: original,
+    source: 'time-entry',
+    date: 'Mi., 08.07.2026',
+    dateRaw: new Date(2026, 6, 8),
+    dateKey: '2026-07-08',
+    projectId: 'projekt-a',
+    projectName: 'Projekt A',
+    clockIn: '07:00',
+    clockOut: '16:00',
+    pauseMinutes: 30,
+    pauseMs: 30 * 60 * 1000,
+    workHours: '8:30',
+    notes: '',
+    originalNotes: '',
+    isEdited: false,
+    ...overrides
+  })
+
+  it('meldet keine Änderung für die unveränderte (geglättete) Zeile', () => {
+    const changes = getReportRowChanges(row(), roundTimeToStep)
+    expect(changes.any).toBe(false)
+    expect(changes.originalClockIn).toBe('07:00')
+    expect(changes.originalClockOut).toBe('16:00')
+  })
+
+  it('erkennt eine geänderte Kommen-Zeit isoliert', () => {
+    const changes = getReportRowChanges(row({ clockIn: '08:00' }), roundTimeToStep)
+    expect(changes).toMatchObject({ clockIn: true, clockOut: false, pause: false, project: false })
+    expect(changes.any).toBe(true)
+  })
+
+  it('erkennt eine geänderte Pause isoliert', () => {
+    const changes = getReportRowChanges(row({ pauseMinutes: 45 }), roundTimeToStep)
+    expect(changes).toMatchObject({ clockIn: false, clockOut: false, pause: true, project: false })
+  })
+
+  it('erkennt einen Projektwechsel', () => {
+    const changes = getReportRowChanges(row({ projectId: 'projekt-b' }), roundTimeToStep)
+    expect(changes).toMatchObject({ project: true, clockIn: false, clockOut: false, pause: false })
+  })
+
+  it('wertet ein leeres Projektfeld nicht als Projektwechsel', () => {
+    const changes = getReportRowChanges(row({ projectId: '' }), roundTimeToStep)
+    expect(changes.project).toBe(false)
+  })
+
+  it('erkennt das Nachtragen einer Gehen-Zeit bei laufendem Stempelsatz', () => {
+    const running: TimeEntry = { ...original, clockOutTime: null }
+    const changes = getReportRowChanges(
+      row({ originalEntry: running, clockOut: '16:00' }),
+      roundTimeToStep
+    )
+    expect(changes.originalClockOut).toBe('')
+    expect(changes.clockOut).toBe(true)
   })
 })

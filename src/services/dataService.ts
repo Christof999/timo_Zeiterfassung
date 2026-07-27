@@ -1020,6 +1020,125 @@ class DataServiceClass {
   }
 
   /**
+   * Admin-Korrektur eines Stempelsatzes direkt aus dem Zeiterfassungsbericht.
+   *
+   * Schreibt die geänderten Felder unmittelbar in die Datenbank:
+   *  - Projektwechsel wird über {@link moveTimeEntryToProject} abgewickelt, damit
+   *    Fotos, Dokumente und Fahrzeugbuchungen mit umziehen. Für noch laufende
+   *    (nicht ausgestempelte) Sätze ist ein Umzug technisch nicht möglich – dort
+   *    wird nur die projectId umgesetzt.
+   *  - Kommen/Gehen/Pause werden als echte Werte gespeichert (kein reiner
+   *    Druck-Override) und die Überstunden des Tages neu berechnet.
+   *
+   * Nur die tatsächlich übergebenen Felder werden angefasst; nicht übergebene
+   * Felder (z. B. Rohzeiten ohne Sekunden-Rundung) bleiben unverändert.
+   */
+  async applyAdminTimeEntryCorrection(params: {
+    timeEntryId: string
+    projectId?: string
+    clockInTime?: Date
+    clockOutTime?: Date | null
+    pauseTotalTimeMs?: number
+    notes?: string
+    correctedBy?: { id?: string; name?: string }
+  }): Promise<TimeEntry | null> {
+    await this.authReadyPromise
+    if (!params.timeEntryId?.trim()) {
+      throw new Error('Kein Stempelsatz angegeben')
+    }
+
+    const entry = await this.getTimeEntryById(params.timeEntryId)
+    if (!entry) {
+      throw new Error('Stempelsatz nicht gefunden')
+    }
+
+    // Zielzeiten bestimmen (übergebene Werte haben Vorrang vor dem Bestand).
+    const nextClockIn =
+      params.clockInTime instanceof Date ? params.clockInTime : this.convertToDate(entry.clockInTime)
+    const nextClockOut =
+      params.clockOutTime === undefined
+        ? entry.clockOutTime
+          ? this.convertToDate(entry.clockOutTime)
+          : null
+        : params.clockOutTime
+
+    if (nextClockIn && nextClockOut && nextClockOut.getTime() <= nextClockIn.getTime()) {
+      throw new Error('Die Gehen-Zeit muss nach der Kommen-Zeit liegen')
+    }
+    if (params.pauseTotalTimeMs !== undefined && params.pauseTotalTimeMs < 0) {
+      throw new Error('Die Pause darf nicht negativ sein')
+    }
+
+    // 1) Projektwechsel (Umzug inkl. Dateien/Fahrzeuge)
+    const targetProjectId = params.projectId?.trim()
+    if (targetProjectId && targetProjectId !== entry.projectId) {
+      const canMoveWithAttachments = entry.clockOutTime != null && !!entry.projectId
+      if (canMoveWithAttachments) {
+        const [sourceProject, targetProject] = await Promise.all([
+          this.getProjectById(entry.projectId),
+          this.getProjectById(targetProjectId)
+        ])
+        await this.moveTimeEntryToProject(params.timeEntryId, targetProjectId, {
+          sourceProjectName: sourceProject?.name,
+          targetProjectName: targetProject?.name
+        })
+      } else {
+        // Laufender Satz oder Kleinauftrag ohne Projekt: nur die Zuordnung setzen.
+        await this.updateTimeEntry(params.timeEntryId, { projectId: targetProjectId })
+      }
+    }
+
+    // 2) Zeiten/Pause/Notiz + Audit-Trail
+    const update: Record<string, unknown> = {}
+    if (params.clockInTime instanceof Date) {
+      update.clockInTime = Timestamp.fromDate(params.clockInTime)
+    }
+    if (params.clockOutTime !== undefined) {
+      update.clockOutTime =
+        params.clockOutTime === null ? null : Timestamp.fromDate(params.clockOutTime)
+    }
+    if (params.pauseTotalTimeMs !== undefined) {
+      update.pauseTotalTime = params.pauseTotalTimeMs
+    }
+    if (params.notes !== undefined) {
+      update.notes = params.notes
+    }
+
+    if (Object.keys(update).length > 0 || targetProjectId) {
+      update.adminCorrectedAt = new Date()
+      if (params.correctedBy?.id) update.adminCorrectedBy = params.correctedBy.id
+      if (params.correctedBy?.name) update.adminCorrectedByName = params.correctedBy.name
+      await this.updateTimeEntry(params.timeEntryId, update as Partial<TimeEntry>)
+    }
+
+    // 3) Wurde ein laufender Satz per Korrektur beendet, darf der Mitarbeiter
+    // nicht weiter als "eingestempelt" gelten.
+    const wasRunning = entry.clockOutTime == null
+    const nowClosed = update.clockOutTime != null && update.clockOutTime !== undefined
+    if (wasRunning && nowClosed && entry.employeeId) {
+      try {
+        const employeeRef = doc(db, 'employees', entry.employeeId)
+        const employeeSnap = await getDoc(employeeRef)
+        if (
+          employeeSnap.exists() &&
+          (employeeSnap.data() as { activeTimeEntryId?: string }).activeTimeEntryId ===
+            params.timeEntryId
+        ) {
+          await updateDoc(employeeRef, {
+            activeTimeEntryId: null,
+            activeClockInAt: null,
+            updatedAt: new Date()
+          })
+        }
+      } catch (error) {
+        console.warn('Aktiver Stempelsatz konnte nach der Korrektur nicht gelöst werden:', error)
+      }
+    }
+
+    return this.getTimeEntryById(params.timeEntryId)
+  }
+
+  /**
    * Wechselt das Projekt eines eingestempelten Mitarbeiters, ohne dass dieser sich ausstempeln
    * muss: Der aktuelle Stempelsatz wird ohne Pause beendet und sofort ein neuer Stempelsatz auf
    * dem neuen Projekt gestartet. Pausen werden erst beim regulären Ausstempeln am Tagesende erfasst.

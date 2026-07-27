@@ -243,6 +243,63 @@ export const formatNotesForPrintHtml = (notes: string): string => {
   return escapeHtml(notes).replace(/\n/g, '<br />')
 }
 
+/**
+ * Legt eine Uhrzeit aus einem `<input type="time">` ("HH:MM") auf den Tag eines
+ * Stempelsatzes. Gibt null zurück, wenn die Eingabe unbrauchbar ist.
+ */
+export const buildDateFromTimeInput = (baseDate: Date, value: string): Date | null => {
+  if (!baseDate || !value) return null
+  const [hours, minutes] = value.split(':').map(Number)
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+  const date = new Date(baseDate)
+  date.setHours(hours, minutes, 0, 0)
+  return date
+}
+
+export interface ReportRowChanges {
+  clockIn: boolean
+  clockOut: boolean
+  pause: boolean
+  project: boolean
+  /** Kommen-Zeit des gespeicherten Satzes (geglättet, "HH:MM" oder "") */
+  originalClockIn: string
+  /** Gehen-Zeit des gespeicherten Satzes (geglättet, "HH:MM" oder "") */
+  originalClockOut: string
+  /** true, wenn irgendein Feld gegenüber der Datenbank abweicht */
+  any: boolean
+}
+
+/**
+ * Vergleicht eine (ggf. bearbeitete) Berichtszeile mit dem gespeicherten
+ * Stempelsatz. Grundlage der Direkt-Speicherung: nur wirklich geänderte Felder
+ * werden geschrieben, damit ungeglättete Rohzeiten sonst unangetastet bleiben.
+ */
+export const getReportRowChanges = (
+  entry: ReportEntry,
+  roundTime: (date: Date | null) => Date | null
+): ReportRowChanges => {
+  const original = entry.originalEntry
+  const originalClockIn = formatTimeForInput(roundTime(convertToDate(original.clockInTime)))
+  const originalClockOut = formatTimeForInput(roundTime(convertToDate(original.clockOutTime)))
+  const originalPauseMinutes = msToMinutes(original.pauseTotalTime || 0)
+
+  const clockIn = entry.clockIn !== originalClockIn
+  const clockOut = entry.clockOut !== originalClockOut
+  const pause = entry.pauseMinutes !== originalPauseMinutes
+  const project = !!entry.projectId && entry.projectId !== original.projectId
+
+  return {
+    clockIn,
+    clockOut,
+    pause,
+    project,
+    originalClockIn,
+    originalClockOut,
+    any: clockIn || clockOut || pause || project
+  }
+}
+
 export const workMinutesFromReportEntry = (entry: ReportEntry): number => {
   if (entry.workHours && entry.workHours !== '-') {
     const [h, m] = entry.workHours.split(':').map(Number)

@@ -248,6 +248,10 @@ export interface TimeEntry {
   manualTimeEntryAddedByEmployeeId?: string
   manualTimeEntryAddedByDisplayName?: string
   manualTimeEntryCreatedAt?: any
+  /** Admin-Korrektur aus dem Zeiterfassungsbericht (Audit-Trail) */
+  adminCorrectedAt?: Date | any
+  adminCorrectedBy?: string
+  adminCorrectedByName?: string
   /** Warteschlange für HERO-Zeit-Export (noch nicht implementiert) */
   heroSyncStatus?: HeroSyncStatus
   heroSyncedAt?: Date | any

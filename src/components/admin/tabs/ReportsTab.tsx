@@ -25,12 +25,22 @@ import {
   workMinutesFromParts,
   minutesToHoursLabel,
   workMinutesFromOriginalEntry,
-  formatCurrency
+  formatCurrency,
+  buildDateFromTimeInput,
+  getReportRowChanges
 } from './reports/reportUtils'
 import { buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
+import ReportAddEntryModal from '../ReportAddEntryModal'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/ReportPrint.css'
+
+/**
+ * Merker, ob Zeilenänderungen im Zeiterfassungsbericht sofort in die Datenbank
+ * geschrieben werden (Kundenwunsch) oder – wie früher – nur temporär für den
+ * Druck bzw. die Abrechnung „Restliche Stunden" gelten.
+ */
+const DIRECT_SAVE_STORAGE_KEY = 'lauffer_report_direct_save'
 
 interface ReportsTabProps {
   defaultReportType?: ReportType
@@ -71,6 +81,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [employeeSettlement, setEmployeeSettlement] = useState<TimeReportSettlement | null>(null)
   const [employeeReportView, setEmployeeReportView] = useState<'full' | 'remainder'>('full')
   const [isSavingSettlement, setIsSavingSettlement] = useState(false)
+  // Direktes Speichern der Zeilen-Korrekturen in die Datenbank (Kundenwunsch)
+  const [directSave, setDirectSave] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(DIRECT_SAVE_STORAGE_KEY) !== 'off'
+    } catch {
+      return true
+    }
+  })
+  const [savingEntryIds, setSavingEntryIds] = useState<Set<string>>(new Set())
+  const [savedEntryIds, setSavedEntryIds] = useState<Set<string>>(new Set())
+  const [showAddEntryModal, setShowAddEntryModal] = useState(false)
+  const savedFlashTimeoutsRef = useRef<Map<string, number>>(new Map())
+  /** Läuft bereits ein Speichervorgang für diese Zeile? (verhindert Doppel-Schreiben) */
+  const savingGuardRef = useRef<Set<string>>(new Set())
 
   // Projekt-Bericht States
   const [selectedProjectId, setSelectedProjectId] = useState('')
@@ -340,6 +364,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       else if (field === 'clockOut') entry.clockOut = value as string
       else if (field === 'pauseMinutes') entry.pauseMinutes = Number(value) || 0
       else if (field === 'projectName') entry.projectName = value as string
+      else if (field === 'projectId') {
+        entry.projectId = value as string
+        entry.projectName = getProjectName(value as string)
+      }
       entry.workHours = calculateWorkHours(
         entry.clockIn,
         entry.clockOut,
@@ -350,6 +378,209 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       updated[index] = entry
       return updated
     })
+  }
+
+  // ---------- Direkt-Speicherung der Zeilen in die Datenbank ----------
+
+  const updateDirectSave = (enabled: boolean) => {
+    setDirectSave(enabled)
+    try {
+      localStorage.setItem(DIRECT_SAVE_STORAGE_KEY, enabled ? 'on' : 'off')
+    } catch {
+      /* localStorage ist optional */
+    }
+  }
+
+  useEffect(() => {
+    const timeouts = savedFlashTimeoutsRef.current
+    return () => {
+      timeouts.forEach(id => window.clearTimeout(id))
+      timeouts.clear()
+    }
+  }, [])
+
+  const markEntrySaved = (entryId: string) => {
+    setSavedEntryIds(prev => new Set(prev).add(entryId))
+    const timeouts = savedFlashTimeoutsRef.current
+    const existing = timeouts.get(entryId)
+    if (existing) window.clearTimeout(existing)
+    timeouts.set(
+      entryId,
+      window.setTimeout(() => {
+        timeouts.delete(entryId)
+        setSavedEntryIds(prev => {
+          const next = new Set(prev)
+          next.delete(entryId)
+          return next
+        })
+      }, 2500)
+    )
+  }
+
+  const setEntrySaving = (entryId: string, saving: boolean) => {
+    if (saving) savingGuardRef.current.add(entryId)
+    else savingGuardRef.current.delete(entryId)
+    setSavingEntryIds(prev => {
+      const next = new Set(prev)
+      if (saving) next.add(entryId)
+      else next.delete(entryId)
+      return next
+    })
+  }
+
+  /** Welche Felder der Zeile weichen vom gespeicherten Stempelsatz ab? */
+  const getRowChanges = (entry: ReportEntry) => getReportRowChanges(entry, roundTimeToStep)
+
+  const rowHasPersistableChange = (entry: ReportEntry): boolean => {
+    if (entry.isReadOnly || entry.source !== 'time-entry') return false
+    return getRowChanges(entry).any
+  }
+
+  /**
+   * Schreibt die Änderungen einer Berichtszeile direkt in die Datenbank
+   * (Projektwechsel inkl. Umzug von Fotos/Fahrzeugen, Kommen/Gehen/Pause).
+   */
+  const persistRow = async (entry: ReportEntry, options?: { silent?: boolean }): Promise<boolean> => {
+    if (!entry) return false
+    if (savingGuardRef.current.has(entry.id)) return false
+    if (entry.isReadOnly || entry.source !== 'time-entry') {
+      if (!options?.silent) toast.error('Urlaubstage können hier nicht gespeichert werden.')
+      return false
+    }
+    if (!rowHasPersistableChange(entry)) return false
+
+    const changes = getRowChanges(entry)
+    const baseDate = entry.dateRaw || convertToDate(entry.originalEntry.clockInTime)
+    if (!baseDate) {
+      if (!options?.silent) toast.error('Der Tag des Stempelsatzes konnte nicht ermittelt werden.')
+      return false
+    }
+
+    if (changes.clockIn && !entry.clockIn) {
+      if (!options?.silent) toast.error('Die Kommen-Zeit darf nicht leer sein.')
+      return false
+    }
+    if (changes.clockOut && !entry.clockOut && changes.originalClockOut) {
+      if (!options?.silent) {
+        toast.error('Die Gehen-Zeit darf nicht geleert werden. Bitte Zeile löschen, wenn der Satz weg soll.')
+      }
+      return false
+    }
+
+    const clockInDate = changes.clockIn ? buildDateFromTimeInput(baseDate, entry.clockIn) : undefined
+    let clockOutDate: Date | null | undefined
+    if (changes.clockOut && entry.clockOut) {
+      clockOutDate = buildDateFromTimeInput(baseDate, entry.clockOut)
+      const reference = clockInDate || convertToDate(entry.originalEntry.clockInTime)
+      // Über Mitternacht gearbeitet: Gehen liegt am Folgetag.
+      if (clockOutDate && reference && clockOutDate.getTime() <= reference.getTime()) {
+        clockOutDate.setDate(clockOutDate.getDate() + 1)
+      }
+    }
+
+    setEntrySaving(entry.id, true)
+    try {
+      const admin = await DataService.getCurrentAdmin()
+      const saved = await DataService.applyAdminTimeEntryCorrection({
+        timeEntryId: entry.id,
+        ...(changes.project ? { projectId: entry.projectId } : {}),
+        ...(clockInDate ? { clockInTime: clockInDate } : {}),
+        ...(clockOutDate !== undefined ? { clockOutTime: clockOutDate } : {}),
+        ...(changes.pause ? { pauseTotalTimeMs: Math.max(0, entry.pauseMinutes) * 60 * 1000 } : {}),
+        correctedBy: { id: admin?.id, name: admin?.name }
+      })
+
+      if (saved) {
+        // Zeile auf den frisch gespeicherten Stand ziehen, damit Rohzeit und
+        // korrigierte Zeit wieder übereinstimmen.
+        setReportEntries(prev =>
+          prev.map(row => {
+            if (row.id !== entry.id) return row
+            const newClockIn = formatTimeForInput(roundTimeToStep(convertToDate(saved.clockInTime)))
+            const newClockOut = formatTimeForInput(roundTimeToStep(convertToDate(saved.clockOutTime)))
+            const pauseMs = saved.pauseTotalTime || 0
+            const pauseMinutes = msToMinutes(pauseMs)
+            return {
+              ...row,
+              originalEntry: saved,
+              projectId: saved.projectId,
+              projectName:
+                saved.customerId && !saved.projectId
+                  ? `Kleinauftrag: ${saved.customerName || 'Kunde'}`
+                  : getProjectName(saved.projectId),
+              clockIn: newClockIn,
+              clockOut: newClockOut,
+              pauseMinutes,
+              pauseMs,
+              workHours: calculateWorkHours(
+                newClockIn,
+                newClockOut,
+                pauseMinutes,
+                entryCreditMinutes(saved)
+              ),
+              isEdited: false
+            }
+          })
+        )
+      }
+      markEntrySaved(entry.id)
+      if (!options?.silent) toast.success('Stempelsatz gespeichert.')
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || 'Speichern fehlgeschlagen.')
+      return false
+    } finally {
+      setEntrySaving(entry.id, false)
+    }
+  }
+
+  /** Alle geänderten Zeilen nacheinander in die Datenbank schreiben. */
+  const handleSaveAllRows = async () => {
+    const pending = reportEntries.filter(rowHasPersistableChange)
+    if (pending.length === 0) {
+      toast.error('Keine Zeilenänderungen zum Speichern.')
+      return
+    }
+    let ok = 0
+    for (const row of pending) {
+      // Sequenziell, damit Projekt-Umzüge (Dateien/Fahrzeuge) nicht kollidieren.
+      // eslint-disable-next-line no-await-in-loop
+      if (await persistRow(row, { silent: true })) ok += 1
+    }
+    if (ok > 0) {
+      toast.success(
+        ok === 1 ? '1 Stempelsatz gespeichert.' : `${ok} Stempelsätze gespeichert.`
+      )
+    }
+  }
+
+  /** Stempelsatz endgültig aus der Datenbank löschen. */
+  const handleDeleteRow = async (entryId: string) => {
+    const entry = reportEntries.find(e => e.id === entryId)
+    if (!entry || entry.source !== 'time-entry') return
+    const confirmed = window.confirm(
+      `Stempelsatz vom ${entry.date} (${entry.projectName}) wirklich löschen?\n\n` +
+        'Der Eintrag wird endgültig aus der Datenbank entfernt.'
+    )
+    if (!confirmed) return
+
+    setEntrySaving(entry.id, true)
+    try {
+      await DataService.deleteTimeEntry(entry.id)
+      setReportEntries(prev => prev.filter(row => row.id !== entry.id))
+      toast.success('Stempelsatz gelöscht.')
+    } catch (error: any) {
+      toast.error(error?.message || 'Löschen fehlgeschlagen.')
+    } finally {
+      setEntrySaving(entry.id, false)
+    }
+  }
+
+  /** Nach dem Verlassen eines Feldes direkt speichern (wenn Direktmodus aktiv). */
+  const handleRowBlur = (entry: ReportEntry) => {
+    if (!directSave) return
+    if (!entry.isEdited || !rowHasPersistableChange(entry)) return
+    void persistRow(entry, { silent: true })
   }
 
   const handleResetEntry = (index: number) => {
@@ -364,7 +595,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const pauseMinutes = msToMinutes(pauseMs)
       updated[index] = {
         ...updated[index],
-        projectName: getProjectName(original.projectId),
+        projectId: original.projectId,
+        projectName:
+          original.customerId && !original.projectId
+            ? `Kleinauftrag: ${original.customerName || 'Kunde'}`
+            : getProjectName(original.projectId),
         clockIn, clockOut, pauseMinutes, pauseMs,
         notes: updated[index].originalNotes,
         workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes, entryCreditMinutes(original)),
@@ -978,6 +1213,25 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   const hasEdits = reportEntries.some(e => e.isEdited)
+  const unsavedRowCount = reportEntries.filter(rowHasPersistableChange).length
+
+  /** Projekte für die Auswahl in den Berichtszeilen (aktive zuerst). */
+  const projectOptionsForRows = [...projects]
+    .filter(p => p.id)
+    .sort((a, b) => {
+      const aArchived = a.status === 'archived' || a.isActive === false
+      const bArchived = b.status === 'archived' || b.isActive === false
+      if (aArchived !== bArchived) return aArchived ? 1 : -1
+      return (a.name || '').localeCompare(b.name || '', 'de')
+    })
+    .map(p => ({
+      id: p.id,
+      label:
+        p.status === 'archived' || p.isActive === false
+          ? `${p.name || p.id} (archiviert)`
+          : p.name || p.id
+    }))
+
   const settlementLinesPreview =
     reportType === 'employee' && reportEntries.length > 0 ? buildSettlementLinesFromEntries() : []
   const remainderHasTimeChange = settlementLinesPreview.some(l => l.rawMinutes !== l.correctedMinutes)
@@ -1056,7 +1310,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               <div className="report-actions no-print">
                 <div className="actions-left">
                   <h4>Bericht für {selectedEmployeeName} <span className="date-range">({formatPeriod()})</span></h4>
-                  {hasEdits && <span className="edit-hint">Es gibt temporäre Änderungen (nur für Druck)</span>}
+                  {hasEdits && !directSave && (
+                    <span className="edit-hint">Es gibt temporäre Änderungen (nur für Druck)</span>
+                  )}
+                  {hasEdits && directSave && (
+                    <span className="edit-hint">
+                      Noch nicht gespeicherte Zeilen – Feld verlassen oder „Speichern“ in der Zeile antippen
+                    </span>
+                  )}
                   <div className="settlement-inline-hint">
                     {employeeSettlement && (
                       <p>
@@ -1080,6 +1341,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </div>
                 </div>
                 <div className="actions-right">
+                  <button
+                    type="button"
+                    className="btn secondary-btn"
+                    onClick={() => setShowAddEntryModal(true)}
+                    disabled={!selectedEmployeeId}
+                  >
+                    + Stempelsatz
+                  </button>
+                  {unsavedRowCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn primary-btn"
+                      onClick={handleSaveAllRows}
+                      disabled={savingEntryIds.size > 0}
+                    >
+                      {savingEntryIds.size > 0
+                        ? 'Speichert…'
+                        : `${unsavedRowCount} Zeile${unsavedRowCount === 1 ? '' : 'n'} speichern`}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`btn secondary-btn ${employeeReportView === 'remainder' ? 'active-toggle' : ''}`}
@@ -1109,11 +1390,31 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               </div>
 
               <div className="edit-notice no-print">
-                <p>
-                  <strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck, bis Sie sie mit „Korrektur
-                  abrechnen & speichern“ festhalten. „Restliche Stunden“ zeigt die pro Tag gekürzte Zeit (Rohzeit minus
-                  korrigierte Zeit).
-                </p>
+                <label className="direct-save-toggle">
+                  <input
+                    type="checkbox"
+                    checked={directSave}
+                    onChange={e => updateDirectSave(e.target.checked)}
+                  />
+                  <span>Änderungen direkt in die Datenbank speichern</span>
+                </label>
+                {directSave ? (
+                  <p>
+                    <strong>Direktmodus aktiv:</strong> Projekt, Kommen, Gehen und Pause werden beim Verlassen des
+                    Feldes sofort gespeichert – ein Projektwechsel zieht Fotos, Dokumente und Fahrzeugbuchungen mit um.
+                    Über <strong>Löschen</strong> entfernen Sie einen Stempelsatz endgültig, über
+                    <strong> + Stempelsatz</strong> tragen Sie einen fehlenden Satz nach. Weil die Rohzeit dabei
+                    mitwandert, bleiben „Restliche Stunden“ leer – für eine Auszahlungs-Differenz den Direktmodus
+                    ausschalten.
+                  </p>
+                ) : (
+                  <p>
+                    <strong>Hinweis:</strong> Änderungen sind nur temporär für den Druck, bis Sie sie mit „Korrektur
+                    abrechnen &amp; speichern“ festhalten. „Restliche Stunden“ zeigt die pro Tag gekürzte Zeit (Rohzeit
+                    minus korrigierte Zeit). Mit „Speichern“ in der Zeile schreiben Sie eine Korrektur trotzdem direkt
+                    in die Datenbank.
+                  </p>
+                )}
               </div>
 
               {reportEntries.length === 0 ? (
@@ -1124,7 +1425,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     <div className="no-data remainder-empty-hint">
                       {!remainderHasTimeChange && hasEdits ? (
                         <p>
-                          Sie haben nur den <strong>Projektnamen</strong> angepasst — die Stempelzeiten sind unverändert.
+                          Sie haben nur das <strong>Projekt</strong> angepasst — die Stempelzeiten sind unverändert.
                           „Restliche Stunden“ erscheinen nur, wenn Sie <strong>Kommen, Gehen oder Pause</strong> so ändern,
                           dass die berechnete Arbeitszeit <strong>kürzer</strong> wird als die gespeicherte Rohzeit.
                         </p>
@@ -1193,11 +1494,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {reportEntries.map((entry, index) => (
+                      {reportEntries.map((entry, index) => {
+                        const isSavingRow = savingEntryIds.has(entry.id)
+                        const isSavedRow = savedEntryIds.has(entry.id)
+                        const canPersist = rowHasPersistableChange(entry)
+                        const isEditable = !entry.isReadOnly && entry.source === 'time-entry'
+                        return (
                         <tr
                           key={entry.id}
                           className={[
                             entry.isEdited ? 'edited-row' : '',
+                            isSavedRow ? 'saved-row' : '',
                             entry.source === 'leave-request' ? 'vacation-report-row' : '',
                             entry.holidayName ? 'holiday-report-row' : ''
                           ].filter(Boolean).join(' ')}
@@ -1209,19 +1516,48 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                             )}
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              value={entry.projectName}
-                              onChange={e => handleFieldChange(index, 'projectName', e.target.value)}
-                              className="inline-edit"
-                              disabled={entry.isReadOnly}
-                            />
+                            {isEditable ? (
+                              <select
+                                value={projectOptionsForRows.some(o => o.id === entry.projectId) ? entry.projectId : ''}
+                                onChange={e => {
+                                  const nextProjectId = e.target.value
+                                  handleFieldChange(index, 'projectId', nextProjectId)
+                                  if (directSave && nextProjectId) {
+                                    // Projektwechsel sofort umziehen (Fotos/Fahrzeuge inklusive)
+                                    void persistRow(
+                                      {
+                                        ...entry,
+                                        projectId: nextProjectId,
+                                        projectName: getProjectName(nextProjectId),
+                                        isEdited: true
+                                      },
+                                      { silent: true }
+                                    )
+                                  }
+                                }}
+                                className="inline-edit project-select"
+                                disabled={isSavingRow}
+                                title={entry.projectName}
+                              >
+                                <option value="">
+                                  {entry.projectId ? entry.projectName : '— kein Projekt —'}
+                                </option>
+                                {projectOptionsForRows.map(option => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="project-static">{entry.projectName}</span>
+                            )}
                           </td>
                           <td>
                             <input
                               type="time"
                               value={entry.clockIn}
                               onChange={e => handleFieldChange(index, 'clockIn', e.target.value)}
+                              onBlur={() => handleRowBlur(entry)}
                               className="inline-edit time-input"
                               disabled={entry.isReadOnly}
                             />
@@ -1231,6 +1567,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               type="time"
                               value={entry.clockOut}
                               onChange={e => handleFieldChange(index, 'clockOut', e.target.value)}
+                              onBlur={() => handleRowBlur(entry)}
                               className="inline-edit time-input"
                               disabled={entry.isReadOnly}
                             />
@@ -1241,21 +1578,56 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               min="0"
                               value={entry.pauseMinutes}
                               onChange={e => handleFieldChange(index, 'pauseMinutes', e.target.value)}
+                              onBlur={() => handleRowBlur(entry)}
                               className="inline-edit pause-input"
                               disabled={entry.isReadOnly}
                             />
                           </td>
                           <td className="comment-cell">{entry.notes || '—'}</td>
                           <td className="hours-cell">{entry.workHours}</td>
-                          <td className="no-print actions-cell">
-                            {entry.isEdited && (
-                              <button type="button" onClick={() => handleResetEntry(index)} className="reset-btn">
-                                Zurück
-                              </button>
+                          <td className="no-print actions-cell row-actions-cell">
+                            {isSavingRow ? (
+                              <span className="row-status saving">Speichert…</span>
+                            ) : (
+                              <>
+                                {canPersist && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void persistRow(entry)}
+                                    className="row-save-btn"
+                                    title="Diese Zeile in die Datenbank speichern"
+                                  >
+                                    Speichern
+                                  </button>
+                                )}
+                                {entry.isEdited && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetEntry(index)}
+                                    className="reset-btn"
+                                  >
+                                    Zurück
+                                  </button>
+                                )}
+                                {isEditable && !entry.isEdited && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeleteRow(entry.id)}
+                                    className="row-delete-btn"
+                                    title="Stempelsatz endgültig löschen"
+                                  >
+                                    Löschen
+                                  </button>
+                                )}
+                                {isSavedRow && !entry.isEdited && (
+                                  <span className="row-status saved">Gespeichert</span>
+                                )}
+                              </>
                             )}
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="total-row">
@@ -1279,6 +1651,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {showAddEntryModal && selectedEmployeeId && (
+            <ReportAddEntryModal
+              employeeId={selectedEmployeeId}
+              employeeName={selectedEmployeeName}
+              projects={projects}
+              defaultDate={startDate}
+              onClose={() => setShowAddEntryModal(false)}
+              onSaved={handleEmployeeSearch}
+            />
           )}
         </>
       )}

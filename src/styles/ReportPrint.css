@@ -352,6 +352,98 @@
   text-align: center;
 }
 
+/* Zeilen-Aktionen im Zeiterfassungsbericht (Speichern/Zurück/Löschen) */
+.row-actions-cell {
+  width: auto;
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+.row-actions-cell > * {
+  margin: 2px;
+}
+
+.row-save-btn,
+.row-delete-btn {
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  min-height: 30px;
+  border: 1px solid transparent;
+}
+
+.row-save-btn {
+  background: var(--primary-color, #34c759);
+  border-color: var(--primary-color, #34c759);
+  color: #fff;
+}
+
+.row-save-btn:hover {
+  filter: brightness(0.94);
+}
+
+.row-delete-btn {
+  background: transparent;
+  border-color: var(--border-color);
+  color: #c0392b;
+}
+
+.row-delete-btn:hover {
+  background: rgba(192, 57, 43, 0.1);
+  border-color: #c0392b;
+}
+
+.row-status {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.row-status.saving {
+  color: var(--text-secondary);
+}
+
+.row-status.saved {
+  color: #1e8e3e;
+}
+
+.report-table tbody tr.saved-row {
+  background: rgba(52, 199, 89, 0.12);
+}
+
+.report-table tbody tr.saved-row:hover {
+  background: rgba(52, 199, 89, 0.18);
+}
+
+.project-select {
+  min-width: 150px;
+  max-width: 240px;
+}
+
+.project-static {
+  font-weight: 500;
+}
+
+.direct-save-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+  cursor: pointer;
+}
+
+.direct-save-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  cursor: pointer;
+}
+
 .reset-btn {
   background: var(--light-color);
   border: 1px solid var(--border-color);
