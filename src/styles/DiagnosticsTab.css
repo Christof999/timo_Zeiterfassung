@@ -1,0 +1,219 @@
+/* TEMPORÄRE DIAGNOSE-SEITE – kann mit dem Tab zusammen wieder entfernt werden. */
+
+.diagnostics-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.diag-banner {
+  background: rgba(255, 149, 0, 0.12);
+  border: 1px solid rgba(255, 149, 0, 0.4);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+}
+
+.diag-filters {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+}
+
+.diag-filters label {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.diag-filter-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.diag-filter-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.diag-filter-row .btn {
+  flex: 0 0 auto;
+}
+
+.diag-hint {
+  display: block;
+  margin-top: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.diag-section {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+}
+
+.diag-section h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-lg);
+}
+
+.diag-verdict ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.diag-verdict li {
+  margin-bottom: var(--spacing-xs);
+  line-height: 1.45;
+}
+
+.diag-totals {
+  margin: var(--spacing-md) 0 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.diag-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  background: var(--background-color);
+}
+
+.diag-card h4 {
+  margin: 0 0 var(--spacing-sm) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  word-break: break-word;
+}
+
+.diag-flag {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(192, 57, 43, 0.15);
+  color: #c0392b;
+}
+
+.diag-flag-warn {
+  background: rgba(255, 149, 0, 0.18);
+  color: #b26a00;
+}
+
+.diag-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-xs) var(--spacing-md);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.diag-meta > div {
+  display: flex;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  min-width: 0;
+}
+
+.diag-meta dt {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.diag-meta dt::after {
+  content: ':';
+}
+
+.diag-meta dd {
+  margin: 0;
+  font-weight: 500;
+  word-break: break-all;
+  min-width: 0;
+}
+
+.diag-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.diag-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.diag-table th,
+.diag-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.diag-table th {
+  background: var(--light-color);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.diag-table tbody tr.diag-running {
+  background: rgba(52, 199, 89, 0.1);
+}
+
+.diag-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.diag-mono {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.92em;
+  word-break: break-all;
+}
+
+.diag-empty {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.diag-report-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-md);
+}
+
+.diag-report {
+  width: 100%;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  background: var(--background-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+@media (max-width: 768px) {
+  .diag-filter-row .btn {
+    width: 100%;
+  }
+
+  .diag-report {
+    font-size: 0.68rem;
+  }
+}

@@ -12,6 +12,9 @@ import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
 import HeroIntegrationTab from './tabs/HeroIntegrationTab'
+// TEMPORÄR: Diagnose-Seite (Projekt-/Buchungszuordnung). Zum Entfernen diesen
+// Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
+import DiagnosticsTab from './tabs/DiagnosticsTab'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
@@ -30,6 +33,7 @@ type TabType =
   | 'hero'
   | 'reports'
   | 'vacation'
+  | 'diagnostics'
 
 const AdminDashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('overview')
@@ -187,7 +191,8 @@ const AdminDashboard: React.FC = () => {
       ? [{ id: 'hero' as TabType, label: 'HERO' }]
       : []),
     { id: 'vacation' as TabType, label: 'Urlaub' },
-    { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' }
+    { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
+    { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)' }
   ]
 
   const renderPushSettings = (renderAsPage = false) => (
@@ -353,6 +358,7 @@ const AdminDashboard: React.FC = () => {
           {currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
           {currentTab === 'vacation' && <VacationTab />}
           {currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
+          {currentTab === 'diagnostics' && <DiagnosticsTab />}
         </div>
       </main>
 

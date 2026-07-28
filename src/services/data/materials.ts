@@ -129,6 +129,28 @@ export async function getMaterialCreditsByProject(projectId: string): Promise<Ma
   }
 }
 
+/**
+ * Alle Material-Buchungen (projektübergreifend). Wird für die Diagnose
+ * gebraucht, um Buchungen zu finden, deren projectId auf kein Projekt zeigt.
+ */
+export async function getAllMaterialCredits(): Promise<MaterialCredit[]> {
+  await authReady
+  try {
+    const snapshot = await getDocs(collection(db, 'materialCredits'))
+    return snapshot.docs.map((d) => {
+      const data = d.data()
+      const createdAt =
+        data.createdAt instanceof Timestamp
+          ? data.createdAt.toDate()
+          : data.createdAt?.toDate?.() || data.createdAt || new Date()
+      return { id: d.id, ...data, createdAt } as MaterialCredit
+    })
+  } catch (error) {
+    console.error('Fehler beim Abrufen aller Material-Buchungen:', error)
+    return []
+  }
+}
+
 /** Eine Material-Gutschrift erfassen. */
 export async function addMaterialCredit(data: Partial<MaterialCredit>): Promise<MaterialCredit> {
   await authReady

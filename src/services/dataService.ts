@@ -1993,6 +1993,10 @@ class DataServiceClass {
     return materials.getMaterialCreditsByProject(projectId)
   }
 
+  getAllMaterialCredits(): Promise<MaterialCredit[]> {
+    return materials.getAllMaterialCredits()
+  }
+
   addMaterialCredit(data: Partial<MaterialCredit>): Promise<MaterialCredit> {
     return materials.addMaterialCredit(data)
   }
