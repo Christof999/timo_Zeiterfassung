@@ -252,6 +252,9 @@ export interface TimeEntry {
   adminCorrectedAt?: Date | any
   adminCorrectedBy?: string
   adminCorrectedByName?: string
+  /** Herkunft, wenn ein Kleinauftrag nachträglich auf ein Projekt umgebucht wurde */
+  movedFromCustomerId?: string | null
+  movedFromCustomerName?: string | null
   /** Warteschlange für HERO-Zeit-Export (noch nicht implementiert) */
   heroSyncStatus?: HeroSyncStatus
   heroSyncedAt?: Date | any

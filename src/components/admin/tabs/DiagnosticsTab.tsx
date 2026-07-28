@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { DataService } from '../../../services/dataService'
+import type { Project } from '../../../types'
 import { toast } from '../../ToastContainer'
+import SearchableSelect, { type SearchableOption } from '../../SearchableSelect'
 import {
   buildProjectDiagnostics,
   buildDiagnosticsReportText,
@@ -9,6 +11,15 @@ import {
 } from './diagnostics/projectDiagnostics'
 import '../../../styles/AdminTabs.css'
 import '../../../styles/DiagnosticsTab.css'
+
+interface MoveSource {
+  type: 'customer' | 'project'
+  id: string
+  label: string
+  entryCount: number
+  totalHours: number
+  materialPositions: number
+}
 
 /**
  * TEMPORÄRE DIAGNOSE-SEITE.
@@ -25,6 +36,31 @@ const DiagnosticsTab: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<ProjectDiagnosticsResult | null>(null)
   const [reportText, setReportText] = useState('')
+  const [projects, setProjects] = useState<Project[]>([])
+  // Zielprojekt je Quelle (Kunde/Projekt), damit mehrere Blöcke unabhängig sind
+  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
+  const [movingKey, setMovingKey] = useState<string | null>(null)
+  const [moveProgress, setMoveProgress] = useState<{ done: number; total: number } | null>(null)
+
+  const projectOptions: SearchableOption[] = useMemo(
+    () =>
+      [...projects]
+        .filter((p) => p.id)
+        .sort((a, b) => {
+          const aArchived = a.status === 'archived' || a.isActive === false
+          const bArchived = b.status === 'archived' || b.isActive === false
+          if (aArchived !== bArchived) return aArchived ? 1 : -1
+          return (a.name || '').localeCompare(b.name || '', 'de')
+        })
+        .map((p) => ({
+          value: p.id,
+          label:
+            (p.name || p.id) +
+            (p.client ? ` (${p.client})` : '') +
+            (p.status === 'archived' || p.isActive === false ? ' — archiviert' : '')
+        })),
+    [projects]
+  )
 
   const handleRun = async () => {
     if (!search.trim()) {
@@ -51,6 +87,7 @@ const DiagnosticsTab: React.FC = () => {
         materialCredits
       })
 
+      setProjects(projects)
       setResult(diagnostics)
       setReportText(buildDiagnosticsReportText(diagnostics))
       toast.success('Diagnose fertig.')
@@ -60,6 +97,108 @@ const DiagnosticsTab: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  /**
+   * Alles einer Quelle (Kunde/Projekt) auf ein Zielprojekt umbuchen:
+   * Stempelsätze inkl. Material, Fotos, Dokumente und Fahrzeugbuchungen.
+   */
+  const handleMove = async (source: MoveSource) => {
+    const key = `${source.type}:${source.id}`
+    const targetProjectId = moveTargets[key]
+    if (!targetProjectId) {
+      toast.error('Bitte zuerst ein Zielprojekt wählen.')
+      return
+    }
+    if (source.type === 'project' && targetProjectId === source.id) {
+      toast.error('Quelle und Ziel sind dasselbe Projekt.')
+      return
+    }
+
+    const targetName =
+      projects.find((p) => p.id === targetProjectId)?.name || targetProjectId
+
+    const confirmed = window.confirm(
+      `${source.entryCount} Stempelsätze (${source.totalHours.toFixed(2)} Std, ` +
+        `${source.materialPositions} Material-Positionen)\n` +
+        `von „${source.label}"\n` +
+        `auf das Projekt „${targetName}" umbuchen?\n\n` +
+        'Fotos, Dokumente und Fahrzeugbuchungen werden mitgenommen.\n' +
+        'Diese Aktion lässt sich nicht automatisch rückgängig machen.'
+    )
+    if (!confirmed) return
+
+    setMovingKey(key)
+    setMoveProgress({ done: 0, total: source.entryCount })
+    try {
+      const admin = await DataService.getCurrentAdmin()
+      const moveResult = await DataService.moveBookingsToProject({
+        source: { type: source.type, id: source.id },
+        targetProjectId,
+        correctedBy: { id: admin?.id, name: admin?.name },
+        onProgress: (done, total) => setMoveProgress({ done, total })
+      })
+
+      const moved = moveResult.movedEntries + moveResult.movedRunningEntries
+      if (moveResult.failed.length === 0) {
+        toast.success(
+          `${moved} von ${moveResult.total} Stempelsätzen auf „${targetName}" umgebucht.`
+        )
+      } else {
+        toast.error(
+          `${moved} umgebucht, ${moveResult.failed.length} fehlgeschlagen. Details siehe Browser-Konsole.`
+        )
+        console.error('Nicht umgebuchte Stempelsätze:', moveResult.failed)
+      }
+
+      // Diagnose neu laden, damit das Ergebnis sofort sichtbar ist
+      await handleRun()
+    } catch (error: any) {
+      console.error('Umbuchen fehlgeschlagen:', error)
+      toast.error(error?.message || 'Umbuchen fehlgeschlagen.')
+    } finally {
+      setMovingKey(null)
+      setMoveProgress(null)
+    }
+  }
+
+  const renderMovePanel = (source: MoveSource) => {
+    const key = `${source.type}:${source.id}`
+    const isMoving = movingKey === key
+    const isBlocked = movingKey !== null && !isMoving
+    return (
+      <div className="diag-move">
+        <h5>Alles auf ein Projekt umbuchen</h5>
+        <p className="diag-move-summary">
+          {source.entryCount} Stempelsätze · {source.totalHours.toFixed(2)} Std ·{' '}
+          {source.materialPositions} Material-Positionen · inkl. Fotos, Dokumente und
+          Fahrzeugbuchungen
+        </p>
+        <div className="diag-move-row">
+          <SearchableSelect
+            id={`diag-move-${key}`}
+            options={projectOptions.filter(
+              (option) => !(source.type === 'project' && option.value === source.id)
+            )}
+            value={moveTargets[key] || ''}
+            onChange={(value) => setMoveTargets((prev) => ({ ...prev, [key]: value }))}
+            placeholder="Zielprojekt wählen"
+            searchPlaceholder="Projekt suchen…"
+            emptyText="Kein Projekt gefunden"
+          />
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={() => void handleMove(source)}
+            disabled={isMoving || isBlocked || !moveTargets[key] || source.entryCount === 0}
+          >
+            {isMoving
+              ? `Bucht um… ${moveProgress?.done ?? 0}/${moveProgress?.total ?? source.entryCount}`
+              : 'Jetzt umbuchen'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const handleCopy = async () => {
@@ -210,6 +349,15 @@ const DiagnosticsTab: React.FC = () => {
                   project.entries,
                   'Auf diesem Projektdokument liegt kein einziger Stempelsatz – genau deshalb bleibt die Nachkalkulation leer.'
                 )}
+                {project.entryCount > 0 &&
+                  renderMovePanel({
+                    type: 'project',
+                    id: project.id,
+                    label: project.name,
+                    entryCount: project.entryCount,
+                    totalHours: project.totalHours,
+                    materialPositions: project.materialPositions
+                  })}
               </div>
             ))}
           </section>
@@ -238,6 +386,15 @@ const DiagnosticsTab: React.FC = () => {
                   customer.entries,
                   'Keine Kleinauftrags-Buchungen auf diesem Kunden.'
                 )}
+                {customer.entryCount > 0 &&
+                  renderMovePanel({
+                    type: 'customer',
+                    id: customer.id,
+                    label: customer.name,
+                    entryCount: customer.entryCount,
+                    totalHours: customer.totalHours,
+                    materialPositions: customer.materialPositions
+                  })}
               </div>
             ))}
           </section>

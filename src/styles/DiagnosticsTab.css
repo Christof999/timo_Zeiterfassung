@@ -186,6 +186,52 @@
   margin: 0;
 }
 
+/* Sammel-Umbuchung auf ein Zielprojekt */
+.diag-move {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--primary-color, #34c759);
+  border-radius: var(--radius-md);
+  background: rgba(52, 199, 89, 0.08);
+}
+
+.diag-move h5 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.diag-move-summary {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.diag-move-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.diag-move-row > *:first-child {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.diag-move-row .btn {
+  flex: 0 0 auto;
+  min-height: var(--btn-height);
+}
+
+@media (max-width: 768px) {
+  .diag-move-row > *:first-child,
+  .diag-move-row .btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
 .diag-report-actions {
   display: flex;
   gap: var(--spacing-sm);

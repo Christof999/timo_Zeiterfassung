@@ -1306,7 +1306,8 @@ class DataServiceClass {
       throw new Error('Zeiteintrag nicht gefunden')
     }
 
-    const sourceProjectId = entry.projectId
+    // Normalisiert, damit fehlende und leere projectId (Kleinauftrag) gleich behandelt werden
+    const sourceProjectId = entry.projectId || ''
     if (sourceProjectId === targetProjectId) {
       throw new Error('Der Eintrag liegt bereits in diesem Projekt')
     }
@@ -1343,6 +1344,11 @@ class DataServiceClass {
     }
 
     const mergeFileUploadsForEntry = async (): Promise<void> => {
+      // WICHTIG: Nur mit echtem Quellprojekt. getFileUploads('') liefert ALLE
+      // Uploads – die Tages-Heuristik unten würde dann Fotos des Mitarbeiters
+      // aus fremden Projekten mitreißen. Bei Kleinaufträgen (leere projectId)
+      // zählen deshalb ausschließlich die am Stempelsatz verlinkten Dateien.
+      if (!sourceProjectId) return
       const uploads = await this.getFileUploads(sourceProjectId)
       for (const u of uploads) {
         if (!u.id || u.employeeId !== entry.employeeId) continue
@@ -1447,14 +1453,14 @@ class DataServiceClass {
 
     const linkedUsages = await this.getVehicleUsagesByTimeEntryId(timeEntryId)
     for (const usage of linkedUsages) {
-      if (usage.id && usage.projectId === sourceProjectId) {
+      if (usage.id && (usage.projectId || '') === sourceProjectId) {
         usageIdsToMoveSet.add(usage.id)
       }
     }
 
     const employeeUsages = await this.getVehicleUsagesByEmployeeId(entry.employeeId)
     for (const usage of employeeUsages) {
-      if (!usage.id || usage.projectId !== sourceProjectId) continue
+      if (!usage.id || (usage.projectId || '') !== sourceProjectId) continue
       if (usage.timeEntryId && usage.timeEntryId !== timeEntryId) continue
       if (usageDayKey(usage.date) === workDayKey) {
         usageIdsToMoveSet.add(usage.id)
@@ -1469,6 +1475,140 @@ class DataServiceClass {
       }
       await batch.commit()
     }
+  }
+
+  /**
+   * Alle Buchungen einer Quelle auf ein Zielprojekt umhängen (Admin-Sammelkorrektur).
+   *
+   * Quelle ist entweder ein Kunde (Kleinaufträge ohne Projekt – der häufigste
+   * Fall: es wurde auf den Kunden statt auf das Projekt eingestempelt) oder ein
+   * anderes Projekt (z. B. eine Dublette). Mitgenommen werden pro Stempelsatz
+   * über {@link moveTimeEntryToProject} auch Fotos, Dokumente und
+   * Fahrzeugbuchungen; das am Satz erfasste Material hängt ohnehin am Satz.
+   * Bei Projekt-Quellen werden zusätzlich die Material-Buchungen
+   * (materialCredits) des Quellprojekts umgehängt.
+   *
+   * Läuft bewusst sequenziell und liefert einen Bericht über jeden Satz zurück,
+   * damit ein Teilfehler nicht den ganzen Vorgang unbrauchbar macht.
+   */
+  async moveBookingsToProject(params: {
+    source: { type: 'customer'; id: string } | { type: 'project'; id: string }
+    targetProjectId: string
+    correctedBy?: { id?: string; name?: string }
+    onProgress?: (done: number, total: number) => void
+  }): Promise<{
+    total: number
+    movedEntries: number
+    movedRunningEntries: number
+    movedMaterialCredits: number
+    failed: Array<{ timeEntryId: string; error: string }>
+  }> {
+    await this.authReadyPromise
+
+    const targetProjectId = params.targetProjectId?.trim()
+    if (!targetProjectId) {
+      throw new Error('Bitte ein Zielprojekt wählen')
+    }
+    if (!params.source?.id) {
+      throw new Error('Keine Quelle angegeben')
+    }
+    if (params.source.type === 'project' && params.source.id === targetProjectId) {
+      throw new Error('Quell- und Zielprojekt sind identisch')
+    }
+
+    const targetProject = await this.getProjectById(targetProjectId)
+    if (!targetProject) {
+      throw new Error('Zielprojekt nicht gefunden')
+    }
+    const targetProjectName = targetProject.name || targetProjectId
+
+    // Betroffene Stempelsätze einsammeln
+    let entries: TimeEntry[]
+    if (params.source.type === 'customer') {
+      const all = await this.getAllTimeEntries()
+      entries = all.filter((entry) => !entry.projectId && entry.customerId === params.source.id)
+    } else {
+      entries = await this.getTimeEntriesByProject(params.source.id)
+    }
+
+    const result = {
+      total: entries.length,
+      movedEntries: 0,
+      movedRunningEntries: 0,
+      movedMaterialCredits: 0,
+      failed: [] as Array<{ timeEntryId: string; error: string }>
+    }
+
+    const sourceLabel =
+      params.source.type === 'customer'
+        ? `Kunde ${entries[0]?.customerName || params.source.id}`
+        : `Projekt ${(await this.getProjectById(params.source.id))?.name || params.source.id}`
+
+    let done = 0
+    for (const entry of entries) {
+      try {
+        if (entry.clockOutTime != null) {
+          // Vollständiger Umzug inkl. Dateien und Fahrzeugbuchungen
+          // eslint-disable-next-line no-await-in-loop
+          await this.moveTimeEntryToProject(entry.id, targetProjectId, {
+            sourceProjectName: sourceLabel,
+            targetProjectName: targetProjectName
+          })
+          result.movedEntries += 1
+        } else {
+          // Laufender Satz: Dateien sind noch nicht abgeschlossen, nur umhängen
+          // eslint-disable-next-line no-await-in-loop
+          await this.updateTimeEntry(entry.id, { projectId: targetProjectId })
+          result.movedRunningEntries += 1
+        }
+
+        // Kleinauftrags-Kennzeichen lösen, damit der Satz eindeutig zum Projekt
+        // gehört (der Kunde hängt weiterhin am Projekt selbst).
+        const followUp: Record<string, unknown> = {
+          adminCorrectedAt: new Date()
+        }
+        if (params.correctedBy?.id) followUp.adminCorrectedBy = params.correctedBy.id
+        if (params.correctedBy?.name) followUp.adminCorrectedByName = params.correctedBy.name
+        if (entry.customerId) {
+          followUp.customerId = null
+          followUp.customerName = null
+          followUp.movedFromCustomerId = entry.customerId
+          followUp.movedFromCustomerName = entry.customerName || null
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await this.updateTimeEntry(entry.id, followUp as Partial<TimeEntry>)
+      } catch (error: any) {
+        result.failed.push({
+          timeEntryId: entry.id,
+          error: error?.message || 'Unbekannter Fehler'
+        })
+      } finally {
+        done += 1
+        params.onProgress?.(done, entries.length)
+      }
+    }
+
+    // Material-Buchungen des Quellprojekts mitnehmen (nur Projekt → Projekt;
+    // Kleinaufträge haben keine projektbezogenen materialCredits).
+    if (params.source.type === 'project') {
+      try {
+        const credits = await this.getMaterialCreditsByProject(params.source.id)
+        const maxBatch = 400
+        for (let i = 0; i < credits.length; i += maxBatch) {
+          const batch = writeBatch(db)
+          for (const credit of credits.slice(i, i + maxBatch)) {
+            if (!credit.id) continue
+            batch.update(doc(db, 'materialCredits', credit.id), { projectId: targetProjectId })
+          }
+          await batch.commit()
+        }
+        result.movedMaterialCredits = credits.filter((c) => !!c.id).length
+      } catch (error) {
+        console.warn('Material-Buchungen konnten nicht umgehängt werden:', error)
+      }
+    }
+
+    return result
   }
 
   async deleteTimeEntry(timeEntryId: string): Promise<void> {
