@@ -1,7 +1,8 @@
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { db } from '../firebaseConfig'
-import type { Employee } from '../../types'
+import type { AdminRole, Employee } from '../../types'
 import { authReady, postWithIdToken } from './shared'
+import { resolveAdminRole } from '../../utils/adminRole'
 
 // Mitarbeiter- und Admin-Session (localStorage) sowie Login-Prüfung.
 //
@@ -14,6 +15,8 @@ export interface AdminSession {
   username: string
   name: string
   isAdmin: true
+  /** Umfang der Rechte; ohne Angabe gilt der volle Zugriff. */
+  adminRole?: AdminRole
 }
 
 export function getCurrentUser(): Employee | null {
@@ -120,7 +123,8 @@ export async function authenticateAdmin(
           id: employee.id,
           username: employee.username || username,
           name: employee.name || `${employee.firstName} ${employee.lastName}`,
-          isAdmin: true
+          isAdmin: true,
+          adminRole: resolveAdminRole(employee)
         }
         setCurrentAdmin(admin)
         return admin

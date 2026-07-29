@@ -15,6 +15,7 @@ import HeroIntegrationTab from './tabs/HeroIntegrationTab'
 // TEMPORÄR: Diagnose-Seite (Projekt-/Buchungszuordnung). Zum Entfernen diesen
 // Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
 import DiagnosticsTab from './tabs/DiagnosticsTab'
+import { allowedAdminTabs, isTabAllowedForRole, resolveAdminRole } from '../../utils/adminRole'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
 import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
@@ -63,7 +64,26 @@ const AdminDashboard: React.FC = () => {
         navigate('/admin/login')
         return
       }
-      setCurrentAdmin(admin)
+      // Die Rolle frisch aus den Stammdaten holen: die Session im
+      // localStorage kann veraltet sein, eine Rechteänderung soll spätestens
+      // beim nächsten Laden greifen und nicht erst nach erneutem Login.
+      let effectiveAdmin = admin
+      if (admin.id) {
+        try {
+          const record = await DataService.getEmployeeById(admin.id)
+          if (record) effectiveAdmin = { ...admin, adminRole: resolveAdminRole(record) }
+        } catch (error) {
+          console.warn('Admin-Rolle konnte nicht aktualisiert werden:', error)
+        }
+      }
+
+      setCurrentAdmin(effectiveAdmin)
+      // Eingeschränkte Rollen starten auf ihrem ersten erlaubten Tab, die
+      // Übersicht ist für sie gar nicht erreichbar.
+      const role = resolveAdminRole(effectiveAdmin)
+      if (!isTabAllowedForRole(role, 'overview')) {
+        setCurrentTab((allowedAdminTabs(role)[0] as TabType) || 'reports')
+      }
       await refreshPushStatus()
       setIsLoading(false)
 
@@ -176,7 +196,9 @@ const AdminDashboard: React.FC = () => {
     return null
   }
 
-  const tabs = [
+  // Eingeschränkte Rollen (z. B. Lohnabrechnung) sehen nur ihre eigenen Tabs.
+  const adminRole = resolveAdminRole(currentAdmin)
+  const allTabs = [
     { id: 'overview' as TabType, label: 'Übersicht' },
     ...(hasPushSubscription || currentTab === 'notifications'
       ? [{ id: 'notifications' as TabType, label: 'Benachrichtigungen' }]
@@ -194,6 +216,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
     { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)' }
   ]
+  const tabs = allTabs.filter(tab => isTabAllowedForRole(adminRole, tab.id))
 
   const renderPushSettings = (renderAsPage = false) => (
     <section className={`admin-push-card ${renderAsPage ? 'admin-push-card-page' : ''}`}>
@@ -340,29 +363,34 @@ const AdminDashboard: React.FC = () => {
         </nav>
 
         <div className="dashboard-content">
-          {currentTab === 'overview' && !hasPushSubscription && renderPushSettings(false)}
-          {currentTab === 'notifications' && renderPushSettings(true)}
+          {!isTabAllowedForRole(adminRole, currentTab) && (
+            <p className="no-data">Für diesen Bereich fehlen die Berechtigungen.</p>
+          )}
+          {isTabAllowedForRole(adminRole, 'overview') && currentTab === 'overview' && !hasPushSubscription && renderPushSettings(false)}
+          {isTabAllowedForRole(adminRole, 'notifications') && currentTab === 'notifications' && renderPushSettings(true)}
 
-          {currentTab === 'overview' && (
+          {isTabAllowedForRole(adminRole, 'overview') && currentTab === 'overview' && (
             <DashboardTab
               admin={{ id: currentAdmin.id, username: currentAdmin.username, name: currentAdmin.name }}
               onNavigate={(tab) => setCurrentTab(tab as TabType)}
             />
           )}
-          {currentTab === 'employees' && <EmployeesTab />}
-          {currentTab === 'projects' && <ProjectsTab variant="active" />}
-          {currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
-          {currentTab === 'customers' && <CustomersTab />}
-          {currentTab === 'material' && <MaterialTypesTab />}
-          {currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
-          {currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
-          {currentTab === 'vacation' && <VacationTab />}
-          {currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
-          {currentTab === 'diagnostics' && <DiagnosticsTab />}
+          {isTabAllowedForRole(adminRole, 'employees') && currentTab === 'employees' && <EmployeesTab />}
+          {isTabAllowedForRole(adminRole, 'projects') && currentTab === 'projects' && <ProjectsTab variant="active" />}
+          {isTabAllowedForRole(adminRole, 'projectsArchived') && currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
+          {isTabAllowedForRole(adminRole, 'customers') && currentTab === 'customers' && <CustomersTab />}
+          {isTabAllowedForRole(adminRole, 'material') && currentTab === 'material' && <MaterialTypesTab />}
+          {isTabAllowedForRole(adminRole, 'costing') && currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
+          {isTabAllowedForRole(adminRole, 'hero') && currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
+          {isTabAllowedForRole(adminRole, 'vacation') && currentTab === 'vacation' && <VacationTab />}
+          {isTabAllowedForRole(adminRole, 'reports') && currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
+          {isTabAllowedForRole(adminRole, 'diagnostics') && currentTab === 'diagnostics' && <DiagnosticsTab />}
         </div>
       </main>
 
-      <MoergelChat admin={{ id: currentAdmin.id, name: currentAdmin.name }} />
+      {adminRole === 'full' && (
+        <MoergelChat admin={{ id: currentAdmin.id, name: currentAdmin.name }} />
+      )}
     </div>
   )
 }

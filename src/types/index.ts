@@ -48,7 +48,16 @@ export interface Employee {
   }
   /** Optional: Überstunden-Saldo in Minuten (wird bei Zeiterfassungs-Abrechnung reduziert, falls gesetzt). */
   overtimeBalanceMinutes?: number | null
+  /**
+   * Umfang der Admin-Rechte. 'full' = kompletter Admin-Bereich,
+   * 'payroll' = nur Zeiterfassungsbericht und Mitarbeiter (für die
+   * Lohnabrechnung). Ohne Angabe gilt 'full'.
+   */
+  adminRole?: AdminRole
 }
+
+/** Rollen im Admin-Bereich. */
+export type AdminRole = 'full' | 'payroll'
 
 /** Größe einer Dashboard-Kachel (Spaltenbreite im Grid). */
 export type DashboardWidgetSize = 'small' | 'medium' | 'large'

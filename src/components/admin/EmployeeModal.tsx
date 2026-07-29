@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
-import type { Employee, TimeEntry, Project } from '../../types'
+import type { AdminRole, Employee, TimeEntry, Project } from '../../types'
+import { ADMIN_ROLE_LABELS, resolveAdminRole } from '../../utils/adminRole'
 import { toast } from '../ToastContainer'
 import EmployeeTimeEntriesSection from './EmployeeTimeEntriesSection'
 import TimeEntryReportModal from './TimeEntryReportModal'
@@ -25,7 +26,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     hourlyCostRate: 0,
     overtimeBalanceHours: '' as string,
     heroEmployeeId: '',
-    isAdmin: false
+    isAdmin: false,
+    adminRole: 'full' as AdminRole
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isRecomputingOvertime, setIsRecomputingOvertime] = useState(false)
@@ -84,7 +86,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyCostRate: employee.hourlyCostRate || 0,
         overtimeBalanceHours,
         heroEmployeeId: employee.heroEmployeeId || '',
-        isAdmin: (employee as any).isAdmin === true
+        isAdmin: (employee as any).isAdmin === true,
+        adminRole: resolveAdminRole(employee)
       })
     } else {
       // Reset form when no employee (new employee)
@@ -100,7 +103,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyCostRate: 0,
         overtimeBalanceHours: '',
         heroEmployeeId: '',
-        isAdmin: false
+        isAdmin: false,
+        adminRole: 'full'
       })
     }
   }, [employee])
@@ -120,7 +124,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: formData.hourlyRate,
         hourlyCostRate: formData.hourlyCostRate,
         heroEmployeeId: formData.heroEmployeeId.trim() || undefined,
-        isAdmin: formData.isAdmin
+        isAdmin: formData.isAdmin,
+        adminRole: formData.adminRole
       }
 
       const trimmedOt = formData.overtimeBalanceHours.trim()
@@ -244,6 +249,27 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               Administrator (darf sich im Admin-Bereich anmelden)
             </label>
           </div>
+          {formData.isAdmin && (
+            <div className="form-group">
+              <label>Umfang der Admin-Rechte:</label>
+              <select
+                value={formData.adminRole}
+                onChange={(e) =>
+                  setFormData({ ...formData, adminRole: e.target.value as AdminRole })
+                }
+              >
+                {(Object.keys(ADMIN_ROLE_LABELS) as AdminRole[]).map((role) => (
+                  <option key={role} value={role}>
+                    {ADMIN_ROLE_LABELS[role]}
+                  </option>
+                ))}
+              </select>
+              <small className="form-hint">
+                „Nur Lohnabrechnung“ blendet Übersicht, Projekte, Kunden, Material und
+                Nachkalkulation aus – es bleiben Zeiterfassungsbericht und Mitarbeiter.
+              </small>
+            </div>
+          )}
           <div className="form-group">
             <label>Überstunden-Saldo (Stunden, optional):</label>
             <input
