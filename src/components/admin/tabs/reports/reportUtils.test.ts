@@ -11,6 +11,7 @@ import {
   convertToDate,
   buildDateFromTimeInput,
   getReportRowChanges,
+  buildAdjustedReport,
   type ReportEntry
 } from './reportUtils'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
@@ -208,5 +209,71 @@ describe('getReportRowChanges – nur echte Abweichungen speichern', () => {
     )
     expect(changes.originalClockOut).toBe('')
     expect(changes.clockOut).toBe(true)
+  })
+})
+
+describe('buildAdjustedReport – Korrektur bleibt außerhalb der Datenbank', () => {
+  const original: TimeEntry = {
+    id: 'e1',
+    employeeId: 'mitarbeiter-1',
+    projectId: 'projekt-a',
+    clockInTime: new Date(2026, 6, 8, 7, 0),
+    clockOutTime: new Date(2026, 6, 8, 16, 0),
+    // Der Klassiker: 0 Minuten Pause gestempelt.
+    pauseTotalTime: 0
+  }
+
+  const row = (overrides: Partial<ReportEntry> = {}): ReportEntry => ({
+    id: 'e1',
+    originalEntry: original,
+    source: 'time-entry',
+    date: 'Mi., 08.07.2026',
+    dateRaw: new Date(2026, 6, 8),
+    dateKey: '2026-07-08',
+    projectId: 'projekt-a',
+    projectName: 'Projekt A',
+    clockIn: '07:00',
+    clockOut: '16:00',
+    pauseMinutes: 0,
+    pauseMs: 0,
+    workHours: '9:00',
+    notes: '',
+    originalNotes: '',
+    isEdited: false,
+    ...overrides
+  })
+
+  it('weist die gesetzliche Pause aus, ohne die Zeile zu verändern', () => {
+    const entries = [row()]
+    const report = buildAdjustedReport(entries)
+    const adjusted = report.entries[0]
+
+    expect(adjusted.effectivePauseMinutes).toBe(45)
+    expect(adjusted.effectiveWorkHours).toBe('8:15')
+    // Die Originalfelder – und nur die werden gespeichert – bleiben unberührt.
+    expect(adjusted.pauseMinutes).toBe(0)
+    expect(adjusted.clockOut).toBe('16:00')
+    expect(entries[0].pauseMinutes).toBe(0)
+  })
+
+  it('löst durch die Automatik keinen Speicher-Zustand aus', () => {
+    // Kernzusage an den Kunden: die automatische Korrektur darf niemals als
+    // zu speichernde Änderung gelten, sonst landet sie in Firestore.
+    const report = buildAdjustedReport([row()], {
+      regularDayMinutes: 510,
+      requestedPayoutMinutes: 60
+    })
+    const adjusted = report.entries[0]
+
+    expect(adjusted.effectiveWorkHours).not.toBe(adjusted.workHours)
+    const changes = getReportRowChanges(adjusted, roundTimeToStep)
+    expect(changes.any).toBe(false)
+  })
+
+  it('lässt eine echte Admin-Änderung weiterhin als speicherbar durch', () => {
+    const report = buildAdjustedReport([row({ pauseMinutes: 60, isEdited: true })])
+    const changes = getReportRowChanges(report.entries[0], roundTimeToStep)
+    expect(changes.pause).toBe(true)
+    expect(changes.any).toBe(true)
   })
 })

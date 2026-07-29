@@ -2,7 +2,7 @@ import type { TimeEntry } from '../../../../types'
 import { getBavariaHolidayName } from '../../../../utils/bavariaHolidays'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
 import {
-  type ReportEntry,
+  type AdjustedReportEntry,
   calculateWorkHours,
   convertToDate,
   enumerateDays,
@@ -16,8 +16,7 @@ import {
   isWeekendDate,
   minutesToHoursLabel,
   msToMinutes,
-  parseDateInputAsLocalDate,
-  workMinutesFromReportEntry
+  parseDateInputAsLocalDate
 } from './reportUtils'
 
 // HTML-Erzeugung für die Druckansichten (Arbeitszeitnachweis, Mitarbeiter-Auszug).
@@ -51,7 +50,7 @@ const buildPrintDateCellHtml = (row: EmployeePrintRow): string => {
 }
 
 export const buildEmployeePrintRows = (
-  reportEntries: ReportEntry[],
+  reportEntries: AdjustedReportEntry[],
   startDate: string,
   endDate: string
 ): EmployeePrintRow[] => {
@@ -67,7 +66,7 @@ export const buildEmployeePrintRows = (
 
   const weekStart = getWeekStart(firstDate)
   const weekEnd = getWeekEnd(lastDate)
-  const entriesByDate = new Map<string, ReportEntry[]>()
+  const entriesByDate = new Map<string, AdjustedReportEntry[]>()
   for (const entry of reportEntries) {
     if (!entry.dateRaw) continue
     const dateKey = entry.dateKey || getDateKey(entry.dateRaw)
@@ -94,6 +93,9 @@ export const buildEmployeePrintRows = (
           .map((value) => value.trim())
           .filter(Boolean)
           .join('\n')
+        // Ausgewiesen wird die gesetzlich korrigierte Sicht: Pause auf dem
+        // Mindestmaß, Gehen-Zeit passend zur gedeckelten bzw. um ausbezahlte
+        // Überstunden ergänzten Arbeitszeit.
         rows.push({
           id: `${entry.id}-${index}`,
           date,
@@ -101,11 +103,11 @@ export const buildEmployeePrintRows = (
           dateLabel,
           projectName: entry.projectName,
           clockIn: entry.clockIn || '—',
-          clockOut: entry.clockOut || '—',
-          pauseMinutes: entry.pauseMinutes,
+          clockOut: entry.effectiveClockOut || '—',
+          pauseMinutes: entry.effectivePauseMinutes,
           notes,
-          workHours: entry.workHours || '0:00',
-          workMinutes: workMinutesFromReportEntry(entry),
+          workHours: entry.effectiveWorkHours || '0:00',
+          workMinutes: entry.effectiveWorkMinutes,
           holidayName,
           isWeekend,
           isVacation: entry.source === 'leave-request',
@@ -147,13 +149,53 @@ export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): stri
 
 /** Arbeitszeitnachweis eines Mitarbeiters als eigenständiges Druck-HTML. */
 export const buildEmployeePrintHtml = (params: {
-  reportEntries: ReportEntry[]
+  reportEntries: AdjustedReportEntry[]
   startDate: string
   endDate: string
   employeeName: string
   periodLabel: string
+  /** gesetzt, wenn nur die Regelarbeitszeit ausgewiesen wird */
+  regularDayMinutes?: number | null
+  /** ausbezahlte und damit in den Zeilen enthaltene Überstunden */
+  payoutMinutes?: number
+  /** Überstundenkonto nach Abzug der Auszahlung */
+  remainingOvertimeMinutes?: number | null
+  /** true, wenn im Bericht Pausen ergänzt oder auf 10 Std gedeckelt wurde */
+  hasLegalCorrection?: boolean
 }): string => {
   const printRows = buildEmployeePrintRows(params.reportEntries, params.startDate, params.endDate)
+
+  const metaExtras: string[] = []
+  if (typeof params.regularDayMinutes === 'number') {
+    metaExtras.push(
+      `<div><strong>Regelarbeitszeit:</strong> ${escapeHtml(minutesToHoursLabel(params.regularDayMinutes))} Std/Tag</div>`
+    )
+  }
+  if (params.payoutMinutes) {
+    metaExtras.push(
+      `<div><strong>Ausbezahlte Überstunden:</strong> ${escapeHtml(minutesToHoursLabel(params.payoutMinutes))} Std (in den Zeiten enthalten)</div>`
+    )
+  }
+  if (typeof params.remainingOvertimeMinutes === 'number') {
+    metaExtras.push(
+      `<div><strong>Überstunden-Guthaben:</strong> ${escapeHtml(minutesToHoursLabel(params.remainingOvertimeMinutes))} Std</div>`
+    )
+  }
+
+  const footnotes: string[] = []
+  if (params.hasLegalCorrection) {
+    footnotes.push(
+      'Pausen sind nach §4 ArbZG angesetzt (ab 6 Std 30 Min, ab 9 Std 45 Min); die tägliche Arbeitszeit ist auf 10 Std begrenzt.'
+    )
+  }
+  if (typeof params.regularDayMinutes === 'number') {
+    footnotes.push(
+      'Über die Regelarbeitszeit hinaus geleistete Zeit ist nicht ausgewiesen, sondern dem Überstundenkonto gutgeschrieben.'
+    )
+  }
+  const footnoteHtml = footnotes.length
+    ? `<p class="footnote">${footnotes.map((note) => escapeHtml(note)).join('<br />')}</p>`
+    : ''
   const rowsHtml = printRows
     .map((row) => {
       const classes = [
@@ -227,6 +269,12 @@ export const buildEmployeePrintHtml = (params: {
     .right {
       text-align: right;
     }
+    .footnote {
+      margin-top: 14px;
+      color: #555;
+      font-size: 11px;
+      line-height: 1.5;
+    }
     .day-subnote {
       display: inline-block;
       margin-top: 2px;
@@ -256,6 +304,7 @@ export const buildEmployeePrintHtml = (params: {
   <div class="meta">
     <div><strong>Mitarbeiter:</strong> ${escapeHtml(params.employeeName || '-')}</div>
     <div><strong>Zeitraum:</strong> ${escapeHtml(params.periodLabel)}</div>
+    ${metaExtras.join('\n    ')}
   </div>
 
   <table>
@@ -280,6 +329,7 @@ export const buildEmployeePrintHtml = (params: {
       </tr>
     </tfoot>
   </table>
+  ${footnoteHtml}
 </body>
 </html>`
 }

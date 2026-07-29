@@ -1,6 +1,13 @@
 import type { LeaveRequest, TimeEntry } from '../../../../types'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
+import {
+  allocateOvertimePayout,
+  applyWorkTimeRules,
+  type WorkTimeAdjustment,
+  type WorkTimeDaySummary,
+  type WorkTimeRowInput
+} from './workTimeRules'
 
 // Reine Berechnungs- und Formatierungslogik der Berichte/Nachkalkulation.
 // Bewusst ohne React-/Komponenten-Abhängigkeiten, damit sie testbar bleibt.
@@ -306,4 +313,124 @@ export const workMinutesFromReportEntry = (entry: ReportEntry): number => {
     if (Number.isFinite(h) && Number.isFinite(m)) return h * 60 + m
   }
   return 0
+}
+
+// ---------------------------------------------------------------------------
+// Gesetzliche Korrektur + Überstunden-Ausweisung (reine Anzeige)
+// ---------------------------------------------------------------------------
+
+/**
+ * Berichtszeile inklusive der im Bericht ausgewiesenen Werte.
+ *
+ * Die `effective*`-Felder sind bewusst von `pauseMinutes`/`clockOut` getrennt:
+ * gespeichert wird ausschließlich aus den Originalfeldern (siehe
+ * `getReportRowChanges`), die Korrektur bleibt damit garantiert außerhalb der
+ * Datenbank.
+ */
+export interface AdjustedReportEntry extends ReportEntry {
+  effectivePauseMinutes: number
+  effectiveClockOut: string
+  effectiveWorkMinutes: number
+  effectiveWorkHours: string
+  workTimeAdjustments: WorkTimeAdjustment[]
+}
+
+export interface AdjustedReport {
+  entries: AdjustedReportEntry[]
+  days: WorkTimeDaySummary[]
+  /** Summe wie gestempelt */
+  stampedTotalMinutes: number
+  /** Summe nach gesetzlicher Pausen-/10-Std-Korrektur */
+  legalTotalMinutes: number
+  /** Summe, die Tabelle und Ausdruck zeigen */
+  shownTotalMinutes: number
+  /** im Zeitraum über der Regelarbeitszeit angefallen */
+  overtimeAvailableMinutes: number
+  /** tatsächlich auf die Zeilen verteilte Auszahlung */
+  payoutMinutes: number
+  /** davon über die gestempelte Zeit hinaus verteilt */
+  payoutBeyondActualMinutes: number
+  /** angefordert, aber nicht unterzubringen */
+  payoutUnallocatedMinutes: number
+}
+
+const isFixedReportEntry = (entry: ReportEntry): boolean =>
+  entry.source === 'leave-request' || !!entry.isReadOnly
+
+/**
+ * Legt die gesetzlichen Regeln (und optional Regelarbeitszeit-Deckelung samt
+ * Überstunden-Auszahlung) über die Berichtszeilen. Ergebnis ist eine reine
+ * Anzeige-Sicht — die übergebenen Zeilen bleiben unverändert.
+ */
+export const buildAdjustedReport = (
+  entries: ReportEntry[],
+  options: { regularDayMinutes?: number | null; requestedPayoutMinutes?: number } = {}
+): AdjustedReport => {
+  const { regularDayMinutes = null, requestedPayoutMinutes = 0 } = options
+
+  const orderByDate = new Map<string, number>()
+  const rowInputs: WorkTimeRowInput[] = entries.map((entry) => {
+    const order = orderByDate.get(entry.dateKey) || 0
+    orderByDate.set(entry.dateKey, order + 1)
+    return {
+      id: entry.id,
+      dateKey: entry.dateKey,
+      order,
+      clockIn: entry.clockIn,
+      clockOut: entry.clockOut,
+      pauseMinutes: entry.pauseMinutes,
+      creditMinutes: entryCreditMinutes(entry.originalEntry),
+      isFixed: isFixedReportEntry(entry)
+    }
+  })
+
+  // Erst ohne Auszahlung rechnen, um den verfügbaren Überhang je Tag zu kennen.
+  const base = applyWorkTimeRules(rowInputs, { regularDayMinutes })
+  const allocation = allocateOvertimePayout(base.days, requestedPayoutMinutes)
+  const final =
+    allocation.allocatedMinutes > 0
+      ? applyWorkTimeRules(rowInputs, { regularDayMinutes, payoutByDate: allocation.byDate })
+      : base
+
+  const adjusted: AdjustedReportEntry[] = entries.map((entry) => {
+    const result = final.rows.get(entry.id)
+    if (!result || isFixedReportEntry(entry)) {
+      // Urlaubstage & Co. behalten ihre feste Ausweisung (z. B. 8:00).
+      const minutes = workMinutesFromReportEntry(entry)
+      return {
+        ...entry,
+        effectivePauseMinutes: entry.pauseMinutes,
+        effectiveClockOut: entry.clockOut,
+        effectiveWorkMinutes: minutes,
+        effectiveWorkHours: entry.workHours,
+        workTimeAdjustments: []
+      }
+    }
+    return {
+      ...entry,
+      effectivePauseMinutes: result.pauseMinutes,
+      effectiveClockOut: result.clockOut,
+      effectiveWorkMinutes: result.workMinutes,
+      effectiveWorkHours:
+        entry.clockIn && entry.clockOut ? minutesToHoursLabel(result.workMinutes) : entry.workHours,
+      workTimeAdjustments: result.adjustments
+    }
+  })
+
+  const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
+  // Urlaubstage & Co. laufen nicht durch das Regelwerk, ihre feste Ausweisung
+  // (z. B. 8:00) muss aber in jeder Summe stecken.
+  const fixedMinutes = sum(entries.filter(isFixedReportEntry).map(workMinutesFromReportEntry))
+
+  return {
+    entries: adjusted,
+    days: base.days,
+    stampedTotalMinutes: sum(base.days.map((day) => day.stampedWorkMinutes)) + fixedMinutes,
+    legalTotalMinutes: sum(base.days.map((day) => day.legalWorkMinutes)) + fixedMinutes,
+    shownTotalMinutes: sum(adjusted.map((entry) => entry.effectiveWorkMinutes)),
+    overtimeAvailableMinutes: sum(base.days.map((day) => day.overtimeMinutes)),
+    payoutMinutes: allocation.allocatedMinutes,
+    payoutBeyondActualMinutes: allocation.beyondActualMinutes,
+    payoutUnallocatedMinutes: allocation.unallocatedMinutes
+  }
 }

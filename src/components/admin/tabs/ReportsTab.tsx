@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, MaterialCredit, MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
@@ -27,8 +27,12 @@ import {
   workMinutesFromOriginalEntry,
   formatCurrency,
   buildDateFromTimeInput,
-  getReportRowChanges
+  getReportRowChanges,
+  buildAdjustedReport,
+  type AdjustedReportEntry
 } from './reports/reportUtils'
+import { parseHoursMinutesInput } from './reports/workTimeRules'
+import { REGULAR_DAY_MINUTES } from '../../../services/data/shared'
 import { buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
 import ReportAddEntryModal from '../ReportAddEntryModal'
@@ -92,6 +96,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [savingEntryIds, setSavingEntryIds] = useState<Set<string>>(new Set())
   const [savedEntryIds, setSavedEntryIds] = useState<Set<string>>(new Set())
   const [showAddEntryModal, setShowAddEntryModal] = useState(false)
+  // Überstunden-Modus: weist im Bericht nur die Regelarbeitszeit aus und
+  // verteilt einen bewusst eingegebenen Auszahlungsbetrag auf die Zeilen.
+  const [overtimeMode, setOvertimeMode] = useState(false)
+  const [regularDayInput, setRegularDayInput] = useState(() =>
+    minutesToHoursLabel(REGULAR_DAY_MINUTES)
+  )
+  const [payoutInput, setPayoutInput] = useState('0:00')
+  /** Übernommener Auszahlungsbetrag – erst ein Klick auf „In Zeilen übernehmen" setzt ihn. */
+  const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
   const savedFlashTimeoutsRef = useRef<Map<string, number>>(new Map())
   /** Läuft bereits ein Speichervorgang für diese Zeile? (verhindert Doppel-Schreiben) */
   const savingGuardRef = useRef<Set<string>>(new Set())
@@ -609,18 +622,83 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     })
   }
 
-  const calculateTotalHours = (): string => {
-    let totalMinutes = 0
-    reportEntries.forEach(entry => {
-      if (entry.workHours && entry.workHours !== '-') {
-        const [h, m] = entry.workHours.split(':').map(Number)
-        totalMinutes += h * 60 + m
-      }
-    })
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    return `${hours}:${minutes.toString().padStart(2, '0')}`
+  // ---------- Gesetzliche Korrektur & Überstunden (reine Anzeige) ----------
+
+  /** Regelarbeitszeit aus dem Eingabefeld; ungültige Eingabe fällt auf den Systemwert zurück. */
+  const regularDayMinutes = parseHoursMinutesInput(regularDayInput) ?? REGULAR_DAY_MINUTES
+
+  /**
+   * Abgeleitete Sicht auf die Berichtszeilen: gesetzliche Pausen, 10-Std-Grenze
+   * und – falls aktiv – Regelarbeitszeit samt ausbezahlter Überstunden.
+   * Bewusst abgeleitet statt im State gehalten, damit sie bei jeder manuellen
+   * Zeilenänderung automatisch neu greift und nie in die Speicherlogik gerät.
+   */
+  const adjustedReport = useMemo(
+    () =>
+      buildAdjustedReport(reportEntries, {
+        regularDayMinutes: overtimeMode ? regularDayMinutes : null,
+        requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0
+      }),
+    [reportEntries, overtimeMode, regularDayMinutes, appliedPayoutMinutes]
+  )
+
+  const adjustedEntries = adjustedReport.entries
+
+  /** Klartext für Tooltip/Hinweis, warum eine Zeile im Bericht abweicht. */
+  const describeAdjustments = (entry: AdjustedReportEntry): string => {
+    const reasons: string[] = []
+    if (entry.workTimeAdjustments.includes('break')) {
+      reasons.push(`Pause auf gesetzliche ${entry.effectivePauseMinutes} Min angehoben`)
+    }
+    if (entry.workTimeAdjustments.includes('max-hours')) {
+      reasons.push('auf 10 Std Tageshöchstarbeitszeit gedeckelt')
+    }
+    if (entry.workTimeAdjustments.includes('regular-cap')) {
+      reasons.push('auf die Regelarbeitszeit gedeckelt, Rest bleibt im Überstundenkonto')
+    }
+    if (entry.workTimeAdjustments.includes('overtime-payout')) {
+      reasons.push('ausbezahlte Überstunden aufgeschlagen')
+    }
+    if (reasons.length === 0) return ''
+    return `Nur im Bericht: ${reasons.join(' · ')}. Der Stempelsatz bleibt unverändert.`
   }
+  /** Vom Bericht automatisch abgezogene Minuten (Pause + 10-Std-Grenze). */
+  const legalCorrectionMinutes =
+    adjustedReport.stampedTotalMinutes - adjustedReport.legalTotalMinutes
+
+  const selectedEmployee = employees.find(e => e.id === selectedEmployeeId)
+  const overtimeBalanceMinutes =
+    typeof selectedEmployee?.overtimeBalanceMinutes === 'number'
+      ? selectedEmployee.overtimeBalanceMinutes
+      : null
+
+  const handleApplyPayout = () => {
+    const requested = parseHoursMinutesInput(payoutInput)
+    if (requested == null) {
+      toast.error('Bitte die Überstunden als Stunden:Minuten angeben, z. B. 2:30')
+      return
+    }
+    setAppliedPayoutMinutes(requested)
+    if (requested === 0) {
+      toast.info('Auszahlung zurückgesetzt – der Bericht zeigt wieder die Regelarbeitszeit.')
+      return
+    }
+    const preview = buildAdjustedReport(reportEntries, {
+      regularDayMinutes,
+      requestedPayoutMinutes: requested
+    })
+    if (preview.payoutUnallocatedMinutes > 0) {
+      toast.error(
+        `Nur ${minutesToHoursLabel(preview.payoutMinutes)} konnten verteilt werden – ` +
+          `${minutesToHoursLabel(preview.payoutUnallocatedMinutes)} passen nicht mehr in den Zeitraum ` +
+          '(10-Std-Grenze je Tag).'
+      )
+      return
+    }
+    toast.success(`${minutesToHoursLabel(preview.payoutMinutes)} auf die Zeilen verteilt.`)
+  }
+
+  const calculateTotalHours = (): string => minutesToHoursLabel(adjustedReport.shownTotalMinutes)
 
   const buildSettlementLinesFromEntries = () =>
     reportEntries.map(re => {
@@ -654,10 +732,38 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       toast.error('Keine Einträge zum Speichern')
       return
     }
-    const lines = buildSettlementLinesFromEntries()
-    const rawTotalMinutes = lines.reduce((s, l) => s + l.rawMinutes, 0)
-    const correctedTotalMinutes = lines.reduce((s, l) => s + l.correctedMinutes, 0)
-    const paidOutMinutes = lines.reduce((s, l) => s + l.paidOutMinutes, 0)
+    // Im Überstunden-Modus wird nicht die Kürzung abgerechnet, sondern genau
+    // der Betrag, den der Admin zur Auszahlung eingetragen hat. Die
+    // gesetzliche Pausen-/10-Std-Korrektur bleibt bewusst außen vor — sonst
+    // würden die Mitarbeiter genau die Stunden verlieren, die ihnen erhalten
+    // bleiben sollen.
+    const withoutPayout = overtimeMode
+      ? buildAdjustedReport(reportEntries, { regularDayMinutes, requestedPayoutMinutes: 0 })
+      : null
+
+    const lines = overtimeMode
+      ? adjustedEntries.map((entry, index) => ({
+          timeEntryId: entry.id,
+          dateLabel: entry.date,
+          rawMinutes: workMinutesFromOriginalEntry(entry.originalEntry),
+          correctedMinutes: entry.effectiveWorkMinutes,
+          paidOutMinutes: Math.max(
+            0,
+            entry.effectiveWorkMinutes -
+              (withoutPayout?.entries[index]?.effectiveWorkMinutes ?? entry.effectiveWorkMinutes)
+          )
+        }))
+      : buildSettlementLinesFromEntries()
+
+    const rawTotalMinutes = overtimeMode
+      ? adjustedReport.legalTotalMinutes
+      : lines.reduce((s, l) => s + l.rawMinutes, 0)
+    const correctedTotalMinutes = overtimeMode
+      ? adjustedReport.shownTotalMinutes
+      : lines.reduce((s, l) => s + l.correctedMinutes, 0)
+    const paidOutMinutes = overtimeMode
+      ? adjustedReport.payoutMinutes
+      : lines.reduce((s, l) => s + l.paidOutMinutes, 0)
 
     setIsSavingSettlement(true)
     try {
@@ -671,9 +777,13 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         lines
       })
       toast.success(
-        paidOutMinutes > 0
-          ? 'Abrechnung gespeichert. Differenz wurde als ausbezahlte/gekürzte Zeit erfasst.'
-          : 'Abrechnung gespeichert (keine positive Differenz zur Rohzeit).'
+        overtimeMode
+          ? paidOutMinutes > 0
+            ? `Abrechnung gespeichert. ${minutesToHoursLabel(paidOutMinutes)} Überstunden wurden vom Konto abgezogen.`
+            : 'Abrechnung gespeichert (keine Überstunden zur Auszahlung eingetragen).'
+          : paidOutMinutes > 0
+            ? 'Abrechnung gespeichert. Differenz wurde als ausbezahlte/gekürzte Zeit erfasst.'
+            : 'Abrechnung gespeichert (keine positive Differenz zur Rohzeit).'
       )
       const settlement = await DataService.getTimeReportSettlement(
         selectedEmployeeId,
@@ -1189,11 +1299,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       printWindow.document.open()
       printWindow.document.write(
         buildEmployeePrintHtml({
-          reportEntries,
+          reportEntries: adjustedEntries,
           startDate,
           endDate,
           employeeName: selectedEmployeeName,
-          periodLabel: formatPeriod()
+          periodLabel: formatPeriod(),
+          regularDayMinutes: overtimeMode ? regularDayMinutes : null,
+          payoutMinutes: adjustedReport.payoutMinutes,
+          remainingOvertimeMinutes:
+            overtimeMode && overtimeBalanceMinutes != null
+              ? Math.max(0, overtimeBalanceMinutes - adjustedReport.payoutMinutes)
+              : null,
+          hasLegalCorrection: legalCorrectionMinutes > 0
         })
       )
       printWindow.document.close()
@@ -1417,6 +1534,114 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 )}
               </div>
 
+              {reportEntries.length > 0 && (
+                <div className="overtime-panel no-print">
+                  <div className="overtime-panel-head">
+                    <label className="overtime-toggle">
+                      <input
+                        type="checkbox"
+                        checked={overtimeMode}
+                        onChange={e => {
+                          setOvertimeMode(e.target.checked)
+                          if (!e.target.checked) {
+                            setAppliedPayoutMinutes(0)
+                            setPayoutInput('0:00')
+                          }
+                        }}
+                      />
+                      <span>Nur Regelarbeitszeit ausweisen (Überstunden bleiben auf dem Konto)</span>
+                    </label>
+                    <div className="overtime-facts">
+                      {overtimeBalanceMinutes != null && (
+                        <span>
+                          Überstundenkonto: <strong>{minutesToHoursLabel(overtimeBalanceMinutes)}</strong>
+                        </span>
+                      )}
+                      {overtimeMode && (
+                        <span>
+                          Im Zeitraum über Regelarbeitszeit:{' '}
+                          <strong>{minutesToHoursLabel(adjustedReport.overtimeAvailableMinutes)}</strong>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {overtimeMode && (
+                    <>
+                      <div className="overtime-controls">
+                        <label>
+                          Regelarbeitszeit/Tag
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={regularDayInput}
+                            onChange={e => setRegularDayInput(e.target.value)}
+                            className="inline-edit overtime-input"
+                            placeholder="8:30"
+                          />
+                        </label>
+                        <label>
+                          Davon auszahlen
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={payoutInput}
+                            onChange={e => setPayoutInput(e.target.value)}
+                            className="inline-edit overtime-input"
+                            placeholder="2:00"
+                          />
+                        </label>
+                        <button type="button" className="btn secondary-btn" onClick={handleApplyPayout}>
+                          In Zeilen übernehmen
+                        </button>
+                        {appliedPayoutMinutes > 0 && (
+                          <button
+                            type="button"
+                            className="btn secondary-btn"
+                            onClick={() => {
+                              setAppliedPayoutMinutes(0)
+                              setPayoutInput('0:00')
+                            }}
+                          >
+                            Zurücksetzen
+                          </button>
+                        )}
+                      </div>
+
+                      {adjustedReport.payoutMinutes > 0 && (
+                        <p className="overtime-result">
+                          <strong>{minutesToHoursLabel(adjustedReport.payoutMinutes)}</strong> auf{' '}
+                          {adjustedReport.days.filter(d => d.payoutMinutes > 0).length} Tage verteilt.
+                          {overtimeBalanceMinutes != null && (
+                            <>
+                              {' '}Konto nach dem Speichern:{' '}
+                              <strong>
+                                {minutesToHoursLabel(
+                                  Math.max(0, overtimeBalanceMinutes - adjustedReport.payoutMinutes)
+                                )}
+                              </strong>
+                              .
+                            </>
+                          )}
+                        </p>
+                      )}
+                      {adjustedReport.payoutBeyondActualMinutes > 0 && (
+                        <p className="overtime-warning">
+                          Achtung: {minutesToHoursLabel(adjustedReport.payoutBeyondActualMinutes)} davon
+                          gehen über die tatsächlich gestempelte Zeit hinaus und füllen andere Tage bis
+                          zur 10-Std-Grenze auf.
+                        </p>
+                      )}
+                      <p className="overtime-hint">
+                        Die Auszahlung wird erst mit „Korrektur abrechnen &amp; speichern“ vom
+                        Überstundenkonto abgezogen. Stempelsätze, Nachkalkulation und Tagesbericht
+                        bleiben in jedem Fall unberührt.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
               {reportEntries.length === 0 ? (
                 <p className="no-data">Keine Zeiteinträge gefunden</p>
               ) : employeeReportView === 'remainder' ? (
@@ -1494,11 +1719,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {reportEntries.map((entry, index) => {
+                      {adjustedEntries.map((entry, index) => {
                         const isSavingRow = savingEntryIds.has(entry.id)
                         const isSavedRow = savedEntryIds.has(entry.id)
                         const canPersist = rowHasPersistableChange(entry)
                         const isEditable = !entry.isReadOnly && entry.source === 'time-entry'
+                        const adjustmentTitle = describeAdjustments(entry)
+                        const clockOutShifted = entry.effectiveClockOut !== entry.clockOut
+                        const pauseAdjusted = entry.effectivePauseMinutes !== entry.pauseMinutes
                         return (
                         <tr
                           key={entry.id}
@@ -1571,6 +1799,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               className="inline-edit time-input"
                               disabled={entry.isReadOnly}
                             />
+                            {clockOutShifted && (
+                              <span className="legal-adjust-note" title={adjustmentTitle}>
+                                Bericht: {entry.effectiveClockOut}
+                              </span>
+                            )}
                           </td>
                           <td>
                             <input
@@ -1582,9 +1815,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               className="inline-edit pause-input"
                               disabled={entry.isReadOnly}
                             />
+                            {pauseAdjusted && (
+                              <span className="legal-adjust-note" title={adjustmentTitle}>
+                                gesetzl. {entry.effectivePauseMinutes} Min
+                              </span>
+                            )}
                           </td>
                           <td className="comment-cell">{entry.notes || '—'}</td>
-                          <td className="hours-cell">{entry.workHours}</td>
+                          <td className="hours-cell">
+                            <span
+                              className={entry.workTimeAdjustments.length > 0 ? 'hours-adjusted' : ''}
+                              title={adjustmentTitle}
+                            >
+                              {entry.effectiveWorkHours}
+                            </span>
+                            {entry.effectiveWorkHours !== entry.workHours && (
+                              <span className="legal-adjust-note" title={adjustmentTitle}>
+                                gestempelt {entry.workHours}
+                              </span>
+                            )}
+                          </td>
                           <td className="no-print actions-cell row-actions-cell">
                             {isSavingRow ? (
                               <span className="row-status saving">Speichert…</span>
@@ -1633,6 +1883,21 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr className="total-row">
                         <td colSpan={6}>
                           <strong>Gesamt:</strong>
+                          {legalCorrectionMinutes > 0 && (
+                            <span className="total-note">
+                              gestempelt {minutesToHoursLabel(adjustedReport.stampedTotalMinutes)}, davon
+                              gesetzliche Korrektur −{minutesToHoursLabel(legalCorrectionMinutes)}
+                            </span>
+                          )}
+                          {overtimeMode &&
+                            adjustedReport.legalTotalMinutes !== adjustedReport.shownTotalMinutes && (
+                              <span className="total-note">
+                                als Überstunden auf dem Konto belassen: −
+                                {minutesToHoursLabel(
+                                  adjustedReport.legalTotalMinutes - adjustedReport.shownTotalMinutes
+                                )}
+                              </span>
+                            )}
                         </td>
                         <td className="hours-cell">
                           <strong>{calculateTotalHours()}</strong>

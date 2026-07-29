@@ -463,6 +463,109 @@
   border-color: var(--medium-gray);
 }
 
+/* ── Gesetzliche Korrektur & Überstunden (nur Bildschirm) ── */
+
+.legal-adjust-note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.hours-adjusted {
+  border-bottom: 1px dotted var(--medium-gray);
+  cursor: help;
+}
+
+.overtime-panel {
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  font-size: var(--font-size-sm);
+}
+
+.overtime-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+.overtime-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.overtime-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.overtime-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  color: var(--text-secondary);
+}
+
+.overtime-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.overtime-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+.overtime-input {
+  width: 90px;
+}
+
+.overtime-result,
+.overtime-warning,
+.overtime-hint {
+  margin: var(--spacing-sm) 0 0;
+}
+
+.overtime-result {
+  color: var(--text-color);
+}
+
+.overtime-warning {
+  color: var(--warning-color, #b26a00);
+  font-weight: var(--font-weight-semibold);
+}
+
+.overtime-hint {
+  color: var(--text-secondary);
+}
+
+.total-note {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 .total-row {
   background: var(--light-color) !important;
   font-size: 1rem;
@@ -953,6 +1056,9 @@
   .report-filters,
   .report-type-tabs,
   .edit-notice,
+  .overtime-panel,
+  .legal-adjust-note,
+  .total-note,
   .lightbox-overlay {
     display: none !important;
   }
