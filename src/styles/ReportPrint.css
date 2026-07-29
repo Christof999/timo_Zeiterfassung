@@ -558,6 +558,48 @@
   color: var(--text-secondary);
 }
 
+.meal-rate-field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+}
+
+.settlement-summary {
+  margin-top: var(--spacing-lg);
+  page-break-inside: avoid;
+}
+
+.settlement-summary h4 {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-md);
+}
+
+.settlement-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.settlement-summary-table td {
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--spacing-sm);
+}
+
+.settlement-summary-table td:first-child {
+  font-weight: var(--font-weight-semibold);
+}
+
+.settlement-summary-table td:nth-child(2) {
+  color: var(--text-secondary);
+}
+
+.settlement-summary-hint {
+  margin: var(--spacing-sm) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 .total-note {
   display: block;
   margin-top: 2px;

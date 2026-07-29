@@ -1,12 +1,22 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { LeaveRequest } from '../../../types'
+import type { Employee, LeaveRequest } from '../../../types'
 import { toast } from '../../ToastContainer'
+import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import '../../../styles/AdminTabs.css'
 
 const VacationTab: React.FC = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [sickModalOpen, setSickModalOpen] = useState(false)
+  const [isSavingSick, setIsSavingSick] = useState(false)
+  const [sickForm, setSickForm] = useState({
+    employeeId: '',
+    startDate: formatDateForInputLocal(new Date()),
+    endDate: formatDateForInputLocal(new Date()),
+    reason: ''
+  })
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null)
@@ -42,11 +52,56 @@ const VacationTab: React.FC = () => {
       })
       
       setRequests(requestsWithNames)
+      setEmployees(allEmployees)
     } catch (error) {
       console.error('Fehler beim Laden:', error)
       toast.error('Fehler beim Laden der Urlaubsanträge')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const employeeLabel = (employee: Employee): string =>
+    employee.name ||
+    `${employee.firstName || ''} ${employee.lastName || ''}`.trim() ||
+    employee.id ||
+    'Mitarbeiter'
+
+  const handleReportSick = async () => {
+    if (!sickForm.employeeId) {
+      toast.error('Bitte einen Mitarbeiter auswählen')
+      return
+    }
+    const start = new Date(`${sickForm.startDate}T12:00:00`)
+    const end = new Date(`${sickForm.endDate}T12:00:00`)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      toast.error('Bitte gültige Daten angeben')
+      return
+    }
+    if (end < start) {
+      toast.error('Das Ende darf nicht vor dem Beginn liegen')
+      return
+    }
+
+    setIsSavingSick(true)
+    try {
+      const employee = employees.find(e => e.id === sickForm.employeeId)
+      await DataService.reportSickLeave({
+        employeeId: sickForm.employeeId,
+        employeeName: employee ? employeeLabel(employee) : '',
+        startDate: start,
+        endDate: end,
+        reason: sickForm.reason.trim(),
+        reportedBy: 'Admin'
+      })
+      toast.success('Krankmeldung gespeichert')
+      setSickModalOpen(false)
+      setSickForm(prev => ({ ...prev, reason: '' }))
+      loadData()
+    } catch (error: any) {
+      toast.error(error?.message || 'Krankmeldung konnte nicht gespeichert werden')
+    } finally {
+      setIsSavingSick(false)
     }
   }
 
@@ -130,6 +185,13 @@ const VacationTab: React.FC = () => {
             <span className="pending-badge">{pendingCount} offen</span>
           )}
         </h3>
+        <button
+          type="button"
+          className="btn primary-btn"
+          onClick={() => setSickModalOpen(true)}
+        >
+          Krankheit melden
+        </button>
       </div>
 
       {/* Filter */}
@@ -247,6 +309,75 @@ const VacationTab: React.FC = () => {
               </button>
               <button onClick={handleRejectConfirm} className="btn danger-btn">
                 Antrag ablehnen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sickModalOpen && (
+        <div className="modal-overlay" onClick={() => setSickModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Krankheit melden</h3>
+              <button className="modal-close" onClick={() => setSickModalOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Mitarbeiter:</label>
+                <select
+                  value={sickForm.employeeId}
+                  onChange={(e) => setSickForm({ ...sickForm, employeeId: e.target.value })}
+                >
+                  <option value="">— bitte wählen —</option>
+                  {employees.filter((employee) => !!employee.id).map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employeeLabel(employee)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Von:</label>
+                <input
+                  type="date"
+                  value={sickForm.startDate}
+                  onChange={(e) => setSickForm({ ...sickForm, startDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Bis:</label>
+                <input
+                  type="date"
+                  value={sickForm.endDate}
+                  onChange={(e) => setSickForm({ ...sickForm, endDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Notiz (optional):</label>
+                <textarea
+                  value={sickForm.reason}
+                  onChange={(e) => setSickForm({ ...sickForm, reason: e.target.value })}
+                  placeholder="z.B. Attest liegt vor"
+                  rows={2}
+                />
+              </div>
+              <p className="modal-hint">
+                Gezählt werden nur Werktage ohne gesetzlichen Feiertag. Im Zeiterfassungsbericht
+                werden sie mit der Regelarbeitszeit vergütet – Montag bis Donnerstag 8 Std,
+                Freitag 6 Std.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setSickModalOpen(false)} className="btn secondary-btn">
+                Abbrechen
+              </button>
+              <button
+                onClick={handleReportSick}
+                className="btn primary-btn"
+                disabled={isSavingSick}
+              >
+                {isSavingSick ? 'Speichert…' : 'Krankmeldung speichern'}
               </button>
             </div>
           </div>

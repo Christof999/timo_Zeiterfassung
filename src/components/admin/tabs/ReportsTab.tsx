@@ -12,11 +12,14 @@ import {
   type ReportType,
   type ReportEntry,
   type EmployeeSummary,
-  VACATION_WORK_HOURS_LABEL,
+  type AbsenceKind,
   convertToDate,
   formatDateForDisplay,
   getDateKey,
-  getApprovedVacationDates,
+  getApprovedLeaveDates,
+  enumerateDays,
+  isWeekendDate,
+  DEFAULT_MEAL_ALLOWANCE_EUR,
   formatTimeForInput,
   formatHoursMinutes,
   calculateWorkHours,
@@ -32,8 +35,13 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
-import { REGULAR_DAY_MINUTES } from '../../../services/data/shared'
-import { buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
+import {
+  DEFAULT_REGULAR_WORK_TIME,
+  regularMinutesForDate,
+  regularMinutesForDateKey,
+  type RegularWorkTimeConfig
+} from '../../../utils/regularWorkTime'
+import { COMPANY_NAME, buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
 import ReportAddEntryModal from '../ReportAddEntryModal'
 import '../../../styles/AdminTabs.css'
@@ -99,9 +107,23 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   // Überstunden-Modus: weist im Bericht nur die Regelarbeitszeit aus und
   // verteilt einen bewusst eingegebenen Auszahlungsbetrag auf die Zeilen.
   const [overtimeMode, setOvertimeMode] = useState(false)
-  const [regularDayInput, setRegularDayInput] = useState(() =>
-    minutesToHoursLabel(REGULAR_DAY_MINUTES)
+  const [regularMonThuInput, setRegularMonThuInput] = useState(() =>
+    minutesToHoursLabel(DEFAULT_REGULAR_WORK_TIME.monThu)
   )
+  const [regularFriInput, setRegularFriInput] = useState(() =>
+    minutesToHoursLabel(DEFAULT_REGULAR_WORK_TIME.fri)
+  )
+  const [mealAllowanceInput, setMealAllowanceInput] = useState(String(DEFAULT_MEAL_ALLOWANCE_EUR))
+
+  /** Regelarbeitszeit Mo–Do / Fr; ungültige Eingaben fallen auf 8:00 bzw. 6:00 zurück. */
+  const regularWorkTimeConfig: RegularWorkTimeConfig = {
+    monThu: parseHoursMinutesInput(regularMonThuInput) ?? DEFAULT_REGULAR_WORK_TIME.monThu,
+    fri: parseHoursMinutesInput(regularFriInput) ?? DEFAULT_REGULAR_WORK_TIME.fri
+  }
+  const mealAllowanceRate = (() => {
+    const parsed = Number((mealAllowanceInput || '').replace(',', '.'))
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEAL_ALLOWANCE_EUR
+  })()
   const [payoutInput, setPayoutInput] = useState('0:00')
   /** Übernommener Auszahlungsbetrag – erst ein Klick auf „In Zeilen übernehmen" setzt ihn. */
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
@@ -298,30 +320,32 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           .map((entry) => entry.dateKey)
           .filter((dateKey) => !!dateKey)
       )
-      const vacationEntries: ReportEntry[] = getApprovedVacationDates(
-        leaveRequests,
-        start,
-        end,
-        occupiedTimeEntryDates
-      ).map(({ date, request }) => {
+
+      /**
+       * Baut eine bezahlte Abwesenheitszeile. Vergütet wird immer mit der
+       * Regelarbeitszeit des Wochentags (Mo–Do 8 Std, Fr 6 Std).
+       */
+      const buildAbsenceRow = (
+        date: Date,
+        kind: AbsenceKind,
+        idPrefix: string,
+        projectName: string,
+        notes: string
+      ): ReportEntry => {
         const dateKey = getDateKey(date)
+        const minutes = regularMinutesForDate(date, regularWorkTimeConfig)
         const syntheticClockIn = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0, 0, 0)
-        const syntheticClockOut = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 17, 0, 0, 0)
-        const reason = (request.reason || '').trim()
-        const notes = reason
-          ? `Genehmigter Urlaub (${VACATION_WORK_HOURS_LABEL} Arbeitsstunden): ${reason}`
-          : `Genehmigter Urlaub (${VACATION_WORK_HOURS_LABEL} Arbeitsstunden)`
+        const syntheticClockOut = new Date(syntheticClockIn.getTime() + minutes * 60 * 1000)
         const originalEntry: TimeEntry = {
-          id: `vacation-${request.id || dateKey}-${dateKey}`,
+          id: `${idPrefix}-${dateKey}`,
           employeeId: selectedEmployeeId,
-          projectId: 'vacation',
+          projectId: kind,
           clockInTime: syntheticClockIn,
           clockOutTime: syntheticClockOut,
           pauseTotalTime: 0,
           notes,
-          isVacationDay: true
+          isVacationDay: kind === 'vacation'
         }
-
         return {
           id: originalEntry.id,
           originalEntry,
@@ -329,28 +353,89 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           date: formatDateForDisplay(date),
           dateRaw: date,
           dateKey,
-          projectId: 'vacation',
-          projectName: 'Urlaub',
+          projectId: kind,
+          projectName,
           clockIn: '',
           clockOut: '',
           pauseMinutes: 0,
           pauseMs: 0,
-          workHours: VACATION_WORK_HOURS_LABEL,
+          workHours: minutesToHoursLabel(minutes),
           notes,
           originalNotes: notes,
           isEdited: false,
           isReadOnly: true,
+          absenceKind: kind,
           holidayName: getBavariaHolidayName(date)
         }
+      }
+
+      // Feiertage zuerst: an einem gesetzlichen Feiertag kann niemand Urlaub
+      // nehmen oder krank sein, der Feiertag hat Vorrang.
+      const holidayEntries: ReportEntry[] = enumerateDays(start, end)
+        .filter((date) => !isWeekendDate(date) && !!getBavariaHolidayName(date))
+        .filter((date) => !occupiedTimeEntryDates.has(getDateKey(date)))
+        .map((date) =>
+          buildAbsenceRow(
+            date,
+            'holiday',
+            'holiday',
+            'Feiertag',
+            `Gesetzlicher Feiertag: ${getBavariaHolidayName(date)}`
+          )
+        )
+
+      const blockedDates = new Set([
+        ...occupiedTimeEntryDates,
+        // Auch bestempelte Feiertage sperren Urlaub/Krankheit für diesen Tag.
+        ...enumerateDays(start, end)
+          .filter((date) => !!getBavariaHolidayName(date))
+          .map((date) => getDateKey(date))
+      ])
+
+      const vacationEntries: ReportEntry[] = getApprovedLeaveDates(
+        leaveRequests,
+        'vacation',
+        start,
+        end,
+        blockedDates
+      ).map(({ date, request }) => {
+        const reason = (request.reason || '').trim()
+        return buildAbsenceRow(
+          date,
+          'vacation',
+          `vacation-${request.id || ''}`,
+          'Urlaub',
+          reason ? `Genehmigter Urlaub: ${reason}` : 'Genehmigter Urlaub'
+        )
       })
 
-      const reportRows = [...entries, ...vacationEntries].sort((a, b) => {
-        const ta = a.dateRaw?.getTime() || 0
-        const tb = b.dateRaw?.getTime() || 0
-        if (ta !== tb) return ta - tb
-        if (a.source !== b.source) return a.source === 'time-entry' ? -1 : 1
-        return a.id.localeCompare(b.id)
+      const vacationDates = new Set(vacationEntries.map((entry) => entry.dateKey))
+      const sickEntries: ReportEntry[] = getApprovedLeaveDates(
+        leaveRequests,
+        'sick',
+        start,
+        end,
+        new Set([...blockedDates, ...vacationDates])
+      ).map(({ date, request }) => {
+        const reason = (request.reason || '').trim()
+        return buildAbsenceRow(
+          date,
+          'sick',
+          `sick-${request.id || ''}`,
+          'Krankheit',
+          reason ? `Krankheitstag: ${reason}` : 'Krankheitstag'
+        )
       })
+
+      const reportRows = [...entries, ...holidayEntries, ...vacationEntries, ...sickEntries].sort(
+        (a, b) => {
+          const ta = a.dateRaw?.getTime() || 0
+          const tb = b.dateRaw?.getTime() || 0
+          if (ta !== tb) return ta - tb
+          if (a.source !== b.source) return a.source === 'time-entry' ? -1 : 1
+          return a.id.localeCompare(b.id)
+        }
+      )
 
       setReportEntries(reportRows)
       const emp = employees.find(e => e.id === selectedEmployeeId)
@@ -624,8 +709,13 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   // ---------- Gesetzliche Korrektur & Überstunden (reine Anzeige) ----------
 
-  /** Regelarbeitszeit aus dem Eingabefeld; ungültige Eingabe fällt auf den Systemwert zurück. */
-  const regularDayMinutes = parseHoursMinutesInput(regularDayInput) ?? REGULAR_DAY_MINUTES
+  const selectedEmployeeRecord = employees.find(e => e.id === selectedEmployeeId)
+  const employeeHourlyRate =
+    selectedEmployeeRecord?.hourlyWage || selectedEmployeeRecord?.hourlyRate || 0
+  const employeeOvertimeBalance =
+    typeof selectedEmployeeRecord?.overtimeBalanceMinutes === 'number'
+      ? selectedEmployeeRecord.overtimeBalanceMinutes
+      : null
 
   /**
    * Abgeleitete Sicht auf die Berichtszeilen: gesetzliche Pausen, 10-Std-Grenze
@@ -636,13 +726,34 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const adjustedReport = useMemo(
     () =>
       buildAdjustedReport(reportEntries, {
-        regularDayMinutes: overtimeMode ? regularDayMinutes : null,
-        requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0
+        regularDayMinutes: overtimeMode
+          ? (dateKey: string) => regularMinutesForDateKey(dateKey, regularWorkTimeConfig)
+          : null,
+        requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0,
+        hourlyRate: employeeHourlyRate,
+        mealAllowanceRate,
+        overtimeBalanceMinutes: employeeOvertimeBalance
       }),
-    [reportEntries, overtimeMode, regularDayMinutes, appliedPayoutMinutes]
+    [
+      reportEntries,
+      overtimeMode,
+      regularWorkTimeConfig.monThu,
+      regularWorkTimeConfig.fri,
+      appliedPayoutMinutes,
+      employeeHourlyRate,
+      mealAllowanceRate,
+      employeeOvertimeBalance
+    ]
   )
 
   const adjustedEntries = adjustedReport.entries
+  const regularWorkTimeLabel = `Mo–Do ${minutesToHoursLabel(regularWorkTimeConfig.monThu)} · Fr ${minutesToHoursLabel(regularWorkTimeConfig.fri)}`
+  /** true, sobald der Bericht eine Pause ergänzt oder auf 10 Std gedeckelt hat. */
+  const hasLegalCorrection = adjustedReport.entries.some(
+    entry =>
+      entry.workTimeAdjustments.includes('break') ||
+      entry.workTimeAdjustments.includes('max-hours')
+  )
 
   /** Klartext für Tooltip/Hinweis, warum eine Zeile im Bericht abweicht. */
   const describeAdjustments = (entry: AdjustedReportEntry): string => {
@@ -666,11 +777,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const legalCorrectionMinutes =
     adjustedReport.stampedTotalMinutes - adjustedReport.legalTotalMinutes
 
-  const selectedEmployee = employees.find(e => e.id === selectedEmployeeId)
-  const overtimeBalanceMinutes =
-    typeof selectedEmployee?.overtimeBalanceMinutes === 'number'
-      ? selectedEmployee.overtimeBalanceMinutes
-      : null
+  const overtimeBalanceMinutes = employeeOvertimeBalance
 
   const handleApplyPayout = () => {
     const requested = parseHoursMinutesInput(payoutInput)
@@ -684,7 +791,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       return
     }
     const preview = buildAdjustedReport(reportEntries, {
-      regularDayMinutes,
+      regularDayMinutes: (dateKey: string) => regularMinutesForDateKey(dateKey, regularWorkTimeConfig),
       requestedPayoutMinutes: requested
     })
     if (preview.payoutUnallocatedMinutes > 0) {
@@ -738,7 +845,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     // würden die Mitarbeiter genau die Stunden verlieren, die ihnen erhalten
     // bleiben sollen.
     const withoutPayout = overtimeMode
-      ? buildAdjustedReport(reportEntries, { regularDayMinutes, requestedPayoutMinutes: 0 })
+      ? buildAdjustedReport(reportEntries, {
+          regularDayMinutes: (dateKey: string) =>
+            regularMinutesForDateKey(dateKey, regularWorkTimeConfig),
+          requestedPayoutMinutes: 0
+        })
       : null
 
     const lines = overtimeMode
@@ -1304,13 +1415,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           endDate,
           employeeName: selectedEmployeeName,
           periodLabel: formatPeriod(),
-          regularDayMinutes: overtimeMode ? regularDayMinutes : null,
+          regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
           payoutMinutes: adjustedReport.payoutMinutes,
-          remainingOvertimeMinutes:
-            overtimeMode && overtimeBalanceMinutes != null
-              ? Math.max(0, overtimeBalanceMinutes - adjustedReport.payoutMinutes)
-              : null,
-          hasLegalCorrection: legalCorrectionMinutes > 0
+          hasLegalCorrection: hasLegalCorrection,
+          summary: adjustedReport.summary
         })
       )
       printWindow.document.close()
@@ -1563,6 +1671,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                           <strong>{minutesToHoursLabel(adjustedReport.overtimeAvailableMinutes)}</strong>
                         </span>
                       )}
+                      <label className="meal-rate-field">
+                        Verpflegungsmehraufwand €/Tag
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={mealAllowanceInput}
+                          onChange={e => setMealAllowanceInput(e.target.value)}
+                          className="inline-edit overtime-input"
+                          placeholder="14"
+                        />
+                      </label>
                     </div>
                   </div>
 
@@ -1570,14 +1689,25 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     <>
                       <div className="overtime-controls">
                         <label>
-                          Regelarbeitszeit/Tag
+                          Regelarbeitszeit Mo–Do
                           <input
                             type="text"
                             inputMode="numeric"
-                            value={regularDayInput}
-                            onChange={e => setRegularDayInput(e.target.value)}
+                            value={regularMonThuInput}
+                            onChange={e => setRegularMonThuInput(e.target.value)}
                             className="inline-edit overtime-input"
-                            placeholder="8:30"
+                            placeholder="8:00"
+                          />
+                        </label>
+                        <label>
+                          Freitag
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={regularFriInput}
+                            onChange={e => setRegularFriInput(e.target.value)}
+                            className="inline-edit overtime-input"
+                            placeholder="6:00"
                           />
                         </label>
                         <label>
@@ -1909,10 +2039,82 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 </div>
               )}
 
+              {reportEntries.length > 0 && (
+                <div className="settlement-summary">
+                  <h4>Abrechnung</h4>
+                  <table className="settlement-summary-table">
+                    <tbody>
+                      <tr>
+                        <td>Geleistete Arbeitsstunden</td>
+                        <td>
+                          {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std ×{' '}
+                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.workAmount)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Nicht abgerechnete Überstunden</td>
+                        <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
+                        <td className="number-cell">—</td>
+                      </tr>
+                      <tr>
+                        <td>Verpflegungsmehraufwand</td>
+                        <td>
+                          {adjustedReport.summary.mealAllowanceDays} Tage ×{' '}
+                          {formatCurrency(adjustedReport.summary.mealAllowanceRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.mealAllowanceAmount)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Urlaubsstunden</td>
+                        <td>
+                          {minutesToHoursLabel(adjustedReport.summary.vacationMinutes)} Std ×{' '}
+                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.vacationAmount)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Feiertagsstunden</td>
+                        <td>
+                          {minutesToHoursLabel(adjustedReport.summary.holidayMinutes)} Std ×{' '}
+                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.holidayAmount)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Krankheitstage</td>
+                        <td>
+                          {adjustedReport.summary.sickDays} Tage (
+                          {minutesToHoursLabel(adjustedReport.summary.sickMinutes)} Std) ×{' '}
+                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.sickAmount)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {adjustedReport.summary.hourlyRate === 0 && (
+                    <p className="settlement-summary-hint no-print">
+                      Für {selectedEmployeeName} ist kein Stundenlohn hinterlegt – die Beträge bleiben
+                      deshalb bei 0,00 €. Der Satz lässt sich im Mitarbeiter-Profil setzen.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="print-footer print-only">
                 <div className="signature-line">
-                  <div className="signature-box"><p>Unterschrift Mitarbeiter</p><div className="line"></div></div>
-                  <div className="signature-box"><p>Unterschrift Arbeitgeber</p><div className="line"></div></div>
+                  <div className="signature-box"><p>{selectedEmployeeName || 'Mitarbeiter'}</p><div className="line"></div></div>
+                  <div className="signature-box"><p>{COMPANY_NAME}</p><div className="line"></div></div>
                 </div>
               </div>
             </div>

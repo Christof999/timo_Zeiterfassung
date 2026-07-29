@@ -1,6 +1,11 @@
 // Gesetzliche Arbeitszeit-Regeln und Überstunden-Verteilung für den
 // Zeiterfassungsbericht.
 //
+// Pausen werden auf die Anwesenheit DRAUFGERECHNET statt von der Arbeitszeit
+// abgezogen: die Mitarbeiter machen faktisch keine Pause, der Nachweis muss
+// sie aber ausweisen. Deshalb wandert die Gehen-Zeit nach hinten und die
+// geleisteten Stunden bleiben stehen.
+//
 // WICHTIG: Alles hier ist reine Anzeige-Logik. Die Ergebnisse fließen in die
 // Bildschirm-Tabelle, die Summen und den Ausdruck — niemals in die
 // gespeicherten Stempelsätze. Die einzige bewusst gespeicherte Größe ist der
@@ -59,9 +64,17 @@ export interface WorkTimeRowResult {
 
 export interface WorkTimeDaySummary {
   dateKey: string
+  /**
+   * Tatsächliche Anwesenheit (Gehen − Kommen, inkl. Fahrtzeit-Gutschrift).
+   * Basis für den Verpflegungsmehraufwand ab 8 Std.
+   */
+  attendanceMinutes: number
   /** Arbeitszeit exakt so, wie gestempelt */
   stampedWorkMinutes: number
-  /** nach Pausen- und 10-Std-Regel — das ist die „echte" Zeit des Mitarbeiters */
+  /**
+   * Nach der 10-Std-Grenze — das ist die „echte" Zeit des Mitarbeiters. Die
+   * Pause kürzt sie nicht, sie wird auf die Anwesenheit draufgerechnet.
+   */
   legalWorkMinutes: number
   /** was im Bericht/Ausdruck steht */
   shownWorkMinutes: number
@@ -75,10 +88,11 @@ export interface WorkTimeDaySummary {
 
 export interface WorkTimeOptions {
   /**
-   * Regelarbeitszeit pro Tag. `null` = keine Deckelung, es gilt nur die
-   * gesetzliche Pausen-/10-Std-Korrektur.
+   * Regelarbeitszeit pro Tag – fester Wert oder Funktion je Datum (Mo–Do 8
+   * Std, Fr 6 Std). `null` = keine Deckelung, es gilt nur die gesetzliche
+   * Pausen-/10-Std-Korrektur.
    */
-  regularDayMinutes?: number | null
+  regularDayMinutes?: number | ((dateKey: string) => number) | null
   /** Je Tag auszuzahlende Überstunden (aus `allocateOvertimePayout`). */
   payoutByDate?: Map<string, number>
 }
@@ -167,6 +181,10 @@ export function applyWorkTimeRules(
   options: WorkTimeOptions = {}
 ): WorkTimeResult {
   const { regularDayMinutes = null, payoutByDate } = options
+  const regularMinutesOf = (dateKey: string): number | null => {
+    if (regularDayMinutes === null) return null
+    return typeof regularDayMinutes === 'function' ? regularDayMinutes(dateKey) : regularDayMinutes
+  }
 
   const results = new Map<string, WorkTimeRowResult>()
   const days: WorkTimeDaySummary[] = []
@@ -206,13 +224,18 @@ export function applyWorkTimeRules(
     const stampedNet = dayRows.reduce((sum, r) => sum + r.net, 0)
 
     // ── Schritt 1: gesetzliche Pause + 10-Std-Grenze ──
+    // Die Pause wird NICHT von der geleisteten Zeit abgezogen, sondern auf die
+    // Anwesenheit draufgerechnet: die Mitarbeiter machen faktisch keine Pause,
+    // sollen die Stunden aber auch nicht verlieren. Aus 07:00–15:00 ohne Pause
+    // wird im Bericht 07:00–15:30 mit 30 Min Pause und weiterhin 8:00 Arbeit.
     const legalPause = Math.max(stampedPause, requiredBreakMinutes(dayAttendance))
-    const netAfterBreak = Math.max(0, dayAttendance - legalPause)
-    const legalNet = Math.min(netAfterBreak, MAX_DAILY_WORK_MINUTES)
-    const maxHoursCut = netAfterBreak - legalNet
+    const netBeforeCap = stampedNet
+    const legalNet = Math.min(netBeforeCap, MAX_DAILY_WORK_MINUTES)
+    const maxHoursCut = netBeforeCap - legalNet
 
     // ── Schritt 2: Regelarbeitszeit-Deckelung + ausbezahlte Überstunden ──
-    const cappedNet = regularDayMinutes !== null ? Math.min(legalNet, regularDayMinutes) : legalNet
+    const regularMinutes = regularMinutesOf(dateKey)
+    const cappedNet = regularMinutes !== null ? Math.min(legalNet, regularMinutes) : legalNet
     const regularCut = legalNet - cappedNet
     const payout = Math.max(0, payoutByDate?.get(dateKey) || 0)
     const targetNet = Math.min(MAX_DAILY_WORK_MINUTES, cappedNet + payout)
@@ -277,10 +300,11 @@ export function applyWorkTimeRules(
 
     days.push({
       dateKey,
+      attendanceMinutes: dayAttendance,
       stampedWorkMinutes: stampedNet,
       legalWorkMinutes: legalNet,
       shownWorkMinutes: targetNet,
-      overtimeMinutes: regularDayMinutes !== null ? Math.max(0, legalNet - regularDayMinutes) : 0,
+      overtimeMinutes: regularMinutes !== null ? Math.max(0, legalNet - regularMinutes) : 0,
       payoutMinutes: appliedPayout,
       extraHeadroomMinutes: Math.max(0, MAX_DAILY_WORK_MINUTES - legalNet)
     })

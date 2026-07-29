@@ -249,7 +249,9 @@ describe('buildAdjustedReport – Korrektur bleibt außerhalb der Datenbank', ()
     const adjusted = report.entries[0]
 
     expect(adjusted.effectivePauseMinutes).toBe(45)
-    expect(adjusted.effectiveWorkHours).toBe('8:15')
+    // Die Pause wird draufgerechnet, die geleisteten 9 Std bleiben stehen.
+    expect(adjusted.effectiveWorkHours).toBe('9:00')
+    expect(adjusted.effectiveClockOut).toBe('16:45')
     // Die Originalfelder – und nur die werden gespeichert – bleiben unberührt.
     expect(adjusted.pauseMinutes).toBe(0)
     expect(adjusted.clockOut).toBe('16:00')
@@ -275,5 +277,115 @@ describe('buildAdjustedReport – Korrektur bleibt außerhalb der Datenbank', ()
     const changes = getReportRowChanges(report.entries[0], roundTimeToStep)
     expect(changes.pause).toBe(true)
     expect(changes.any).toBe(true)
+  })
+})
+
+describe('Abrechnungs-Summen für den Beleg', () => {
+  const workEntry = (day: number, cin: string, cout: string): ReportEntry => {
+    const [ih, im] = cin.split(':').map(Number)
+    const [oh, om] = cout.split(':').map(Number)
+    const original: TimeEntry = {
+      id: `e${day}`,
+      employeeId: 'm1',
+      projectId: 'p1',
+      clockInTime: new Date(2026, 2, day, ih, im),
+      clockOutTime: new Date(2026, 2, day, oh, om),
+      pauseTotalTime: 0
+    }
+    return {
+      id: `e${day}`,
+      originalEntry: original,
+      source: 'time-entry',
+      date: `0${day}.03.2026`,
+      dateRaw: new Date(2026, 2, day),
+      dateKey: `2026-03-0${day}`,
+      projectId: 'p1',
+      projectName: 'Baustelle',
+      clockIn: cin,
+      clockOut: cout,
+      pauseMinutes: 0,
+      pauseMs: 0,
+      workHours: '-',
+      notes: '',
+      originalNotes: '',
+      isEdited: false
+    }
+  }
+
+  const absenceEntry = (day: number, kind: 'vacation' | 'holiday' | 'sick', minutes: number): ReportEntry => {
+    const start = new Date(2026, 2, day, 7, 0)
+    const original: TimeEntry = {
+      id: `${kind}-${day}`,
+      employeeId: 'm1',
+      projectId: kind,
+      clockInTime: start,
+      clockOutTime: new Date(start.getTime() + minutes * 60000),
+      pauseTotalTime: 0
+    }
+    return {
+      id: `${kind}-${day}`,
+      originalEntry: original,
+      source: 'leave-request',
+      date: `0${day}.03.2026`,
+      dateRaw: new Date(2026, 2, day),
+      dateKey: `2026-03-0${day}`,
+      projectId: kind,
+      projectName: kind,
+      clockIn: '',
+      clockOut: '',
+      pauseMinutes: 0,
+      pauseMs: 0,
+      workHours: `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`,
+      notes: '',
+      originalNotes: '',
+      isEdited: false,
+      isReadOnly: true,
+      absenceKind: kind
+    }
+  }
+
+  it('trennt Arbeitszeit, Urlaub, Feiertag und Krankheit', () => {
+    const report = buildAdjustedReport(
+      [
+        workEntry(2, '07:00', '15:00'),
+        absenceEntry(3, 'vacation', 8 * 60),
+        absenceEntry(4, 'holiday', 8 * 60),
+        absenceEntry(5, 'sick', 8 * 60),
+        absenceEntry(6, 'vacation', 6 * 60)
+      ],
+      { hourlyRate: 20 }
+    )
+
+    expect(report.summary.workMinutes).toBe(8 * 60)
+    expect(report.summary.workAmount).toBe(160)
+    // Urlaub: Donnerstag 8 Std + Freitag 6 Std
+    expect(report.summary.vacationMinutes).toBe(14 * 60)
+    expect(report.summary.vacationAmount).toBe(280)
+    expect(report.summary.holidayMinutes).toBe(8 * 60)
+    expect(report.summary.sickDays).toBe(1)
+    expect(report.summary.sickMinutes).toBe(8 * 60)
+  })
+
+  it('zählt Verpflegungsmehraufwand ab 8 Std Anwesenheit', () => {
+    const report = buildAdjustedReport(
+      [
+        workEntry(2, '07:00', '15:00'), // exakt 8:00 → zählt
+        workEntry(3, '07:00', '14:59'), // 7:59 → zählt nicht
+        workEntry(4, '06:00', '17:00') // 11:00 → zählt
+      ],
+      { mealAllowanceRate: 14 }
+    )
+    expect(report.summary.mealAllowanceDays).toBe(2)
+    expect(report.summary.mealAllowanceAmount).toBe(28)
+  })
+
+  it('weist nur die noch offenen Überstunden aus', () => {
+    const report = buildAdjustedReport([workEntry(2, '07:00', '17:00')], {
+      regularDayMinutes: 480,
+      requestedPayoutMinutes: 60,
+      overtimeBalanceMinutes: 300
+    })
+    expect(report.payoutMinutes).toBe(60)
+    expect(report.summary.openOvertimeMinutes).toBe(240)
   })
 })

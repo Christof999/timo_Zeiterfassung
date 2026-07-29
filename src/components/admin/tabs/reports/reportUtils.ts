@@ -15,6 +15,9 @@ import {
 export type ReportType = 'employee' | 'project'
 export type ReportEntrySource = 'time-entry' | 'leave-request'
 
+/** Bezahlte Abwesenheit; alle drei werden mit der Regelarbeitszeit vergütet. */
+export type AbsenceKind = 'vacation' | 'holiday' | 'sick'
+
 export const VACATION_WORK_MINUTES = 8 * 60
 export const VACATION_WORK_HOURS_LABEL = '8:00'
 
@@ -37,6 +40,8 @@ export interface ReportEntry {
   isEdited: boolean
   isReadOnly?: boolean
   holidayName?: string | null
+  /** gesetzt bei Urlaub, Feiertag und Krankheit — Basis für die Beleg-Summen */
+  absenceKind?: AbsenceKind
 }
 
 export interface EmployeeSummary {
@@ -114,11 +119,19 @@ export const enumerateDays = (start: Date, end: Date): Date[] => {
 export const isLeaveDateCancelled = (request: LeaveRequest, dateKey: string): boolean =>
   (request.cancelledDates || []).some((key) => String(key).slice(0, 10) === dateKey)
 
-export const getApprovedVacationDates = (
+/**
+ * Genehmigte Abwesenheitstage eines Typs im Zeitraum.
+ *
+ * `blockedDates` hält Tage frei, die schon anderweitig belegt sind: gestempelte
+ * Zeiten und gesetzliche Feiertage. An einem Feiertag kann niemand Urlaub
+ * nehmen oder krank sein — der Feiertag gewinnt.
+ */
+export const getApprovedLeaveDates = (
   requests: LeaveRequest[],
+  type: LeaveRequest['type'],
   rangeStart: Date,
   rangeEnd: Date,
-  occupiedTimeEntryDates: Set<string>
+  blockedDates: Set<string>
 ): Array<{ date: Date; request: LeaveRequest }> => {
   const vacationDates = new Map<string, { date: Date; request: LeaveRequest }>()
   const start = new Date(rangeStart)
@@ -127,7 +140,7 @@ export const getApprovedVacationDates = (
   end.setHours(23, 59, 59, 999)
 
   for (const request of requests) {
-    if (request.status !== 'approved' || request.type !== 'vacation') continue
+    if (request.status !== 'approved' || request.type !== type) continue
     const reqStart = convertToDate(request.startDate)
     const reqEnd = convertToDate(request.endDate)
     if (!reqStart || !reqEnd) continue
@@ -145,7 +158,7 @@ export const getApprovedVacationDates = (
     for (const date of enumerateDays(first, last)) {
       const dateKey = getDateKey(date)
       if (isWeekendDate(date)) continue
-      if (occupiedTimeEntryDates.has(dateKey)) continue
+      if (blockedDates.has(dateKey)) continue
       if (isLeaveDateCancelled(request, dateKey)) continue
       if (!vacationDates.has(dateKey)) {
         vacationDates.set(dateKey, { date, request })
@@ -155,6 +168,15 @@ export const getApprovedVacationDates = (
 
   return [...vacationDates.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
 }
+
+/** Rückwärtskompatibler Kurzschluss für Urlaubstage. */
+export const getApprovedVacationDates = (
+  requests: LeaveRequest[],
+  rangeStart: Date,
+  rangeEnd: Date,
+  blockedDates: Set<string>
+): Array<{ date: Date; request: LeaveRequest }> =>
+  getApprovedLeaveDates(requests, 'vacation', rangeStart, rangeEnd, blockedDates)
 
 export const formatTimeForInput = (date: Date | null): string => {
   if (!date) return ''
@@ -335,6 +357,35 @@ export interface AdjustedReportEntry extends ReportEntry {
   workTimeAdjustments: WorkTimeAdjustment[]
 }
 
+/** Steuerlicher Verpflegungsmehraufwand: Satz je Tag ab 8 Std Abwesenheit. */
+export const DEFAULT_MEAL_ALLOWANCE_EUR = 14
+export const MEAL_ALLOWANCE_FROM_MINUTES = 8 * 60
+
+/**
+ * Die Summen, die Petra für die Lohnabrechnung meldet. Alle Beträge ergeben
+ * sich aus Stunden × Stundenlohn; die Stunden kommen aus der ausgewiesenen
+ * (gesetzlich korrigierten) Sicht, nicht aus den Rohzeiten.
+ */
+export interface ReportSettlementSummary {
+  /** geleistete Arbeitsstunden ohne Urlaub/Feiertag/Krankheit */
+  workMinutes: number
+  workAmount: number
+  /** nicht abgerechnete, also im Konto verbleibende Überstunden */
+  openOvertimeMinutes: number
+  /** Tage mit mindestens 8 Std Anwesenheit */
+  mealAllowanceDays: number
+  mealAllowanceRate: number
+  mealAllowanceAmount: number
+  vacationMinutes: number
+  vacationAmount: number
+  holidayMinutes: number
+  holidayAmount: number
+  sickDays: number
+  sickMinutes: number
+  sickAmount: number
+  hourlyRate: number
+}
+
 export interface AdjustedReport {
   entries: AdjustedReportEntry[]
   days: WorkTimeDaySummary[]
@@ -352,6 +403,10 @@ export interface AdjustedReport {
   payoutBeyondActualMinutes: number
   /** angefordert, aber nicht unterzubringen */
   payoutUnallocatedMinutes: number
+  /** Tage mit mindestens 8 Std Anwesenheit (Verpflegungsmehraufwand) */
+  mealAllowanceDays: number
+  /** Summen für den Abrechnungsbeleg */
+  summary: ReportSettlementSummary
 }
 
 const isFixedReportEntry = (entry: ReportEntry): boolean =>
@@ -364,9 +419,24 @@ const isFixedReportEntry = (entry: ReportEntry): boolean =>
  */
 export const buildAdjustedReport = (
   entries: ReportEntry[],
-  options: { regularDayMinutes?: number | null; requestedPayoutMinutes?: number } = {}
+  options: {
+    regularDayMinutes?: number | ((dateKey: string) => number) | null
+    requestedPayoutMinutes?: number
+    /** Stundenlohn für die Beträge auf dem Beleg */
+    hourlyRate?: number
+    /** Satz je Tag Verpflegungsmehraufwand */
+    mealAllowanceRate?: number
+    /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
+    overtimeBalanceMinutes?: number | null
+  } = {}
 ): AdjustedReport => {
-  const { regularDayMinutes = null, requestedPayoutMinutes = 0 } = options
+  const {
+    regularDayMinutes = null,
+    requestedPayoutMinutes = 0,
+    hourlyRate = 0,
+    mealAllowanceRate = DEFAULT_MEAL_ALLOWANCE_EUR,
+    overtimeBalanceMinutes = null
+  } = options
 
   const orderByDate = new Map<string, number>()
   const rowInputs: WorkTimeRowInput[] = entries.map((entry) => {
@@ -419,8 +489,32 @@ export const buildAdjustedReport = (
 
   const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
   // Urlaubstage & Co. laufen nicht durch das Regelwerk, ihre feste Ausweisung
-  // (z. B. 8:00) muss aber in jeder Summe stecken.
+  // muss aber in jeder Summe stecken.
   const fixedMinutes = sum(entries.filter(isFixedReportEntry).map(workMinutesFromReportEntry))
+
+  const minutesOfKind = (kind: AbsenceKind): number =>
+    sum(adjusted.filter((entry) => entry.absenceKind === kind).map((e) => e.effectiveWorkMinutes))
+  const amountFor = (minutes: number): number =>
+    Math.round((minutes / 60) * hourlyRate * 100) / 100
+
+  const mealAllowanceDays = base.days.filter(
+    (day) => day.attendanceMinutes >= MEAL_ALLOWANCE_FROM_MINUTES
+  ).length
+
+  // Geleistete Arbeitszeit = alles, was kein Urlaub, Feiertag oder Krankheit ist.
+  const workMinutes = sum(
+    adjusted.filter((entry) => !entry.absenceKind).map((entry) => entry.effectiveWorkMinutes)
+  )
+  const vacationMinutes = minutesOfKind('vacation')
+  const holidayMinutes = minutesOfKind('holiday')
+  const sickMinutes = minutesOfKind('sick')
+  const sickDays = adjusted.filter((entry) => entry.absenceKind === 'sick').length
+
+  // „Nicht abgerechnet" = was nach der Auszahlung im Konto stehen bleibt.
+  const openOvertimeMinutes =
+    typeof overtimeBalanceMinutes === 'number'
+      ? Math.max(0, overtimeBalanceMinutes - allocation.allocatedMinutes)
+      : sum(base.days.map((day) => day.overtimeMinutes)) - allocation.allocatedMinutes
 
   return {
     entries: adjusted,
@@ -431,6 +525,23 @@ export const buildAdjustedReport = (
     overtimeAvailableMinutes: sum(base.days.map((day) => day.overtimeMinutes)),
     payoutMinutes: allocation.allocatedMinutes,
     payoutBeyondActualMinutes: allocation.beyondActualMinutes,
-    payoutUnallocatedMinutes: allocation.unallocatedMinutes
+    payoutUnallocatedMinutes: allocation.unallocatedMinutes,
+    mealAllowanceDays,
+    summary: {
+      workMinutes,
+      workAmount: amountFor(workMinutes),
+      openOvertimeMinutes: Math.max(0, openOvertimeMinutes),
+      mealAllowanceDays,
+      mealAllowanceRate,
+      mealAllowanceAmount: Math.round(mealAllowanceDays * mealAllowanceRate * 100) / 100,
+      vacationMinutes,
+      vacationAmount: amountFor(vacationMinutes),
+      holidayMinutes,
+      holidayAmount: amountFor(holidayMinutes),
+      sickDays,
+      sickMinutes,
+      sickAmount: amountFor(sickMinutes),
+      hourlyRate
+    }
   }
 }

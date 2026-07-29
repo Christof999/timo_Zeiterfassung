@@ -11,7 +11,9 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '../firebaseConfig'
 import type { Employee, LeaveRequest } from '../../types'
-import { authReady, isDevMode, postWithIdToken, REGULAR_DAY_MINUTES } from './shared'
+import { authReady, isDevMode, postWithIdToken } from './shared'
+import { regularMinutesForRange } from '../../utils/regularWorkTime'
+import { getBavariaHolidayName } from '../../utils/bavariaHolidays'
 
 export async function getLeaveRequestsByEmployee(employeeId: string): Promise<LeaveRequest[]> {
   await authReady
@@ -59,6 +61,64 @@ async function triggerLeaveRequestPushNotification(payload: {
     // Push-Fehler dürfen den Urlaubsantrag nicht blockieren.
     console.error('Fehler beim Auslösen der Push-Benachrichtigung:', error)
   }
+}
+
+/** Firestore-Timestamp, Date oder String robust in ein Date wandeln. */
+function toDateValue(value: unknown): Date | null {
+  if (!value) return null
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value
+  const withToDate = value as { toDate?: () => Date; seconds?: number }
+  if (typeof withToDate.toDate === 'function') return withToDate.toDate()
+  if (typeof withToDate.seconds === 'number') return new Date(withToDate.seconds * 1000)
+  const parsed = new Date(value as string | number)
+  return isNaN(parsed.getTime()) ? null : parsed
+}
+
+/**
+ * Krankheitstage werden vom Admin gemeldet, nicht beantragt: der Eintrag wird
+ * direkt als genehmigt gespeichert und löst keine Benachrichtigung aus.
+ * Gezählt werden nur Werktage ohne gesetzlichen Feiertag — an einem Feiertag
+ * kann niemand krank gemeldet werden.
+ */
+export async function reportSickLeave(data: {
+  employeeId: string
+  employeeName?: string
+  startDate: Date
+  endDate: Date
+  reason?: string
+  reportedBy?: string
+}): Promise<string> {
+  await authReady
+  const current = new Date(data.startDate)
+  current.setHours(12, 0, 0, 0)
+  const last = new Date(data.endDate)
+  last.setHours(12, 0, 0, 0)
+
+  let workingDays = 0
+  while (current <= last) {
+    const day = current.getDay()
+    if (day !== 0 && day !== 6 && !getBavariaHolidayName(current)) workingDays++
+    current.setDate(current.getDate() + 1)
+  }
+  if (workingDays === 0) {
+    throw new Error('Im gewählten Zeitraum liegt kein Arbeitstag (Wochenenden und Feiertage zählen nicht).')
+  }
+
+  const leaveRequestsRef = collection(db, 'leaveRequests')
+  const docRef = await addDoc(leaveRequestsRef, {
+    employeeId: data.employeeId,
+    employeeName: data.employeeName || '',
+    startDate: data.startDate,
+    endDate: data.endDate,
+    type: 'sick',
+    reason: data.reason || '',
+    workingDays,
+    status: 'approved',
+    approvedBy: data.reportedBy || 'Admin',
+    approvedAt: new Date(),
+    createdAt: new Date()
+  })
+  return docRef.id
 }
 
 export async function createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
@@ -119,7 +179,12 @@ export async function approveLeaveRequest(id: string, approvedBy: string): Promi
 
       // „Urlaub auf Überstunden": benötigte Stunden vom Überstundenkonto abziehen
       if (leaveRequest.type === 'overtime') {
-        const neededMinutes = (Number(leaveRequest.workingDays) || 0) * REGULAR_DAY_MINUTES
+        // Regelarbeitszeit des tatsächlichen Zeitraums (Mo–Do 8 Std, Fr 6 Std)
+        // statt einer Tagespauschale — ein Freitag kostet nur 6 Std.
+        const rangeStart = toDateValue(leaveRequest.startDate)
+        const rangeEnd = toDateValue(leaveRequest.endDate)
+        const neededMinutes =
+          rangeStart && rangeEnd ? regularMinutesForRange(rangeStart, rangeEnd) : 0
         const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
         const employeeDoc = await transaction.get(employeeRef)
         if (!employeeDoc.exists()) {

@@ -3,10 +3,12 @@ import { getBavariaHolidayName } from '../../../../utils/bavariaHolidays'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
 import {
   type AdjustedReportEntry,
+  type ReportSettlementSummary,
   calculateWorkHours,
   convertToDate,
   enumerateDays,
   escapeHtml,
+  formatCurrency,
   formatDateForDisplay,
   formatNotesForPrintHtml,
   formatTimeForInput,
@@ -104,7 +106,9 @@ export const buildEmployeePrintRows = (
           projectName: entry.projectName,
           clockIn: entry.clockIn || '—',
           clockOut: entry.effectiveClockOut || '—',
-          pauseMinutes: entry.effectivePauseMinutes,
+          // Urlaub, Feiertag und Krankheit haben keine Stempelzeiten – dort
+          // wäre eine „0" als Pausenangabe irreführend.
+          pauseMinutes: entry.clockIn ? entry.effectivePauseMinutes : null,
           notes,
           workHours: entry.effectiveWorkHours || '0:00',
           workMinutes: entry.effectiveWorkMinutes,
@@ -147,28 +151,101 @@ export const buildEmployeePrintRows = (
 export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): string =>
   minutesToHoursLabel(rows.reduce((sum, row) => sum + row.workMinutes, 0))
 
+/**
+ * Der Abrechnungsblock, den Petra an die Lohnbuchhaltung meldet. Bewusst als
+ * eigene Tabelle unter dem Nachweis, damit beides auf einem Blatt steht.
+ */
+const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string => {
+  const hours = (minutes: number): string => `${minutesToHoursLabel(minutes)} Std`
+  const rate = formatCurrency(summary.hourlyRate)
+
+  const lines: Array<[string, string, string]> = [
+    [
+      'Geleistete Arbeitsstunden',
+      `${hours(summary.workMinutes)} × ${rate}`,
+      formatCurrency(summary.workAmount)
+    ],
+    ['Nicht abgerechnete Überstunden', hours(summary.openOvertimeMinutes), '—'],
+    [
+      'Verpflegungsmehraufwand',
+      `${summary.mealAllowanceDays} Tage × ${formatCurrency(summary.mealAllowanceRate)}`,
+      formatCurrency(summary.mealAllowanceAmount)
+    ],
+    [
+      'Urlaubsstunden',
+      `${hours(summary.vacationMinutes)} × ${rate}`,
+      formatCurrency(summary.vacationAmount)
+    ],
+    [
+      'Feiertagsstunden',
+      `${hours(summary.holidayMinutes)} × ${rate}`,
+      formatCurrency(summary.holidayAmount)
+    ],
+    [
+      'Krankheitstage',
+      `${summary.sickDays} Tage (${hours(summary.sickMinutes)}) × ${rate}`,
+      formatCurrency(summary.sickAmount)
+    ]
+  ]
+
+  const rowsHtml = lines
+    .map(
+      ([label, detail, amount]) => `<tr>
+  <td>${escapeHtml(label)}</td>
+  <td>${escapeHtml(detail)}</td>
+  <td class="right">${escapeHtml(amount)}</td>
+</tr>`
+    )
+    .join('')
+
+  return `<h2 class="summary-title">Abrechnung</h2>
+<table class="summary-table">
+  <thead>
+    <tr><th>Position</th><th>Berechnung</th><th class="right">Summe</th></tr>
+  </thead>
+  <tbody>${rowsHtml}</tbody>
+</table>`
+}
+
+/** Unterschriftenfelder – jeder Bericht muss von beiden Seiten gezeichnet sein. */
+const buildSignatureHtml = (employeeName: string, companyName: string): string =>
+  `<div class="signatures">
+  <div class="signature-box">
+    <div class="signature-line"></div>
+    <p>${escapeHtml(employeeName || 'Mitarbeiter')}</p>
+  </div>
+  <div class="signature-box">
+    <div class="signature-line"></div>
+    <p>${escapeHtml(companyName)}</p>
+  </div>
+</div>`
+
 /** Arbeitszeitnachweis eines Mitarbeiters als eigenständiges Druck-HTML. */
+export const COMPANY_NAME = 'Fliesen Reislöhner'
+
 export const buildEmployeePrintHtml = (params: {
   reportEntries: AdjustedReportEntry[]
   startDate: string
   endDate: string
   employeeName: string
   periodLabel: string
-  /** gesetzt, wenn nur die Regelarbeitszeit ausgewiesen wird */
-  regularDayMinutes?: number | null
+  /** z. B. "Mo–Do 8:00 · Fr 6:00" – gesetzt, wenn nur die Regelarbeitszeit ausgewiesen wird */
+  regularWorkTimeLabel?: string | null
   /** ausbezahlte und damit in den Zeilen enthaltene Überstunden */
   payoutMinutes?: number
-  /** Überstundenkonto nach Abzug der Auszahlung */
-  remainingOvertimeMinutes?: number | null
   /** true, wenn im Bericht Pausen ergänzt oder auf 10 Std gedeckelt wurde */
   hasLegalCorrection?: boolean
+  /** Summenblock für die Lohnabrechnung */
+  summary?: ReportSettlementSummary
+  companyName?: string
 }): string => {
   const printRows = buildEmployeePrintRows(params.reportEntries, params.startDate, params.endDate)
+  const company = params.companyName || COMPANY_NAME
 
   const metaExtras: string[] = []
-  if (typeof params.regularDayMinutes === 'number') {
+  if (params.regularWorkTimeLabel) {
     metaExtras.push(
-      `<div><strong>Regelarbeitszeit:</strong> ${escapeHtml(minutesToHoursLabel(params.regularDayMinutes))} Std/Tag</div>`
+      `<div><strong>Regelarbeitszeit:</strong> ${escapeHtml(params.regularWorkTimeLabel)}</div>`
     )
   }
   if (params.payoutMinutes) {
@@ -176,19 +253,14 @@ export const buildEmployeePrintHtml = (params: {
       `<div><strong>Ausbezahlte Überstunden:</strong> ${escapeHtml(minutesToHoursLabel(params.payoutMinutes))} Std (in den Zeiten enthalten)</div>`
     )
   }
-  if (typeof params.remainingOvertimeMinutes === 'number') {
-    metaExtras.push(
-      `<div><strong>Überstunden-Guthaben:</strong> ${escapeHtml(minutesToHoursLabel(params.remainingOvertimeMinutes))} Std</div>`
-    )
-  }
 
   const footnotes: string[] = []
   if (params.hasLegalCorrection) {
     footnotes.push(
-      'Pausen sind nach §4 ArbZG angesetzt (ab 6 Std 30 Min, ab 9 Std 45 Min); die tägliche Arbeitszeit ist auf 10 Std begrenzt.'
+      'Pausen sind nach §4 ArbZG ausgewiesen (ab 6 Std 30 Min, ab 9 Std 45 Min) und auf die Anwesenheit aufgeschlagen; die tägliche Arbeitszeit ist auf 10 Std begrenzt.'
     )
   }
-  if (typeof params.regularDayMinutes === 'number') {
+  if (params.regularWorkTimeLabel) {
     footnotes.push(
       'Über die Regelarbeitszeit hinaus geleistete Zeit ist nicht ausgewiesen, sondern dem Überstundenkonto gutgeschrieben.'
     )
@@ -196,6 +268,8 @@ export const buildEmployeePrintHtml = (params: {
   const footnoteHtml = footnotes.length
     ? `<p class="footnote">${footnotes.map((note) => escapeHtml(note)).join('<br />')}</p>`
     : ''
+
+  const summaryHtml = params.summary ? buildSettlementSummaryHtml(params.summary) : ''
   const rowsHtml = printRows
     .map((row) => {
       const classes = [
@@ -269,6 +343,52 @@ export const buildEmployeePrintHtml = (params: {
     .right {
       text-align: right;
     }
+    .doc-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 2px solid #222;
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+    }
+    .doc-head .company {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .doc-head .employee {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .summary-title {
+      font-size: 15px;
+      margin: 22px 0 8px;
+    }
+    .summary-table {
+      page-break-inside: avoid;
+    }
+    .summary-table tbody tr:last-child td {
+      border-bottom: 1px solid #d6d6d6;
+    }
+    .signatures {
+      display: flex;
+      gap: 48px;
+      margin-top: 42px;
+      page-break-inside: avoid;
+    }
+    .signatures .signature-box {
+      flex: 1 1 0;
+    }
+    .signatures .signature-line {
+      border-top: 1px solid #222;
+      margin-bottom: 6px;
+    }
+    .signatures p {
+      margin: 0;
+      font-size: 12px;
+      color: #333;
+    }
     .footnote {
       margin-top: 14px;
       color: #555;
@@ -301,8 +421,12 @@ export const buildEmployeePrintHtml = (params: {
   </style>
 </head>
 <body>
+  <div class="doc-head">
+    <div class="company">${escapeHtml(company)}</div>
+    <div class="employee">${escapeHtml(params.employeeName || '-')}</div>
+  </div>
+
   <div class="meta">
-    <div><strong>Mitarbeiter:</strong> ${escapeHtml(params.employeeName || '-')}</div>
     <div><strong>Zeitraum:</strong> ${escapeHtml(params.periodLabel)}</div>
     ${metaExtras.join('\n    ')}
   </div>
@@ -329,7 +453,9 @@ export const buildEmployeePrintHtml = (params: {
       </tr>
     </tfoot>
   </table>
+  ${summaryHtml}
   ${footnoteHtml}
+  ${buildSignatureHtml(params.employeeName, company)}
 </body>
 </html>`
 }

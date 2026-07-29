@@ -6,10 +6,11 @@ import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
+import { REGULAR_MINUTES_MON_THU } from '../utils/regularWorkTime'
 
 // Reguläre Tagesarbeitszeit in Minuten (= Kosten eines „Urlaub auf Überstunden"-Tages).
-// Muss mit DataService.REGULAR_DAY_MINUTES übereinstimmen.
-const REGULAR_DAY_MINUTES = 8.5 * 60
+// Regelarbeitszeit Mo–Do; für die grobe Tages-Schätzung des Überstunden-Urlaubs.
+const REGULAR_DAY_MINUTES = REGULAR_MINUTES_MON_THU
 
 const VacationRequests: React.FC = () => {
   const navigate = useNavigate()

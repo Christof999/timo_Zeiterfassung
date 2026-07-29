@@ -41,23 +41,26 @@ describe('Pausenanspruch', () => {
   })
 })
 
-describe('Gesetzliche Korrektur im Bericht', () => {
-  it('ergänzt 30 Min Pause bei 8 Std Anwesenheit ohne Pause', () => {
+describe('Gesetzliche Pause wird draufgerechnet', () => {
+  it('schiebt die Gehen-Zeit um 30 Min nach hinten und lässt die Stunden stehen', () => {
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '07:00', clockOut: '15:00' })])
     const result = rows.get('a')!
     expect(result.pauseMinutes).toBe(30)
-    expect(result.workMinutes).toBe(7 * 60 + 30)
-    // Ohne Deckelung bleibt die gestempelte Gehen-Zeit stehen.
-    expect(result.clockOut).toBe('15:00')
+    // Die geleisteten 8 Std bleiben erhalten – das ist der Kern der Regel.
+    expect(result.workMinutes).toBe(8 * 60)
+    expect(result.clockOut).toBe('15:30')
     expect(result.adjustments).toContain('break')
   })
 
-  it('füllt eine zu kurze Pause auf das gesetzliche Minimum auf', () => {
+  it('füllt eine zu kurze Pause auf und schiebt nur die Differenz', () => {
     const { rows } = applyWorkTimeRules([
       row({ id: 'a', clockIn: '07:00', clockOut: '15:00', pauseMinutes: 10 })
     ])
-    expect(rows.get('a')!.pauseMinutes).toBe(30)
-    expect(rows.get('a')!.workMinutes).toBe(7 * 60 + 30)
+    const result = rows.get('a')!
+    expect(result.pauseMinutes).toBe(30)
+    // 7:50 gearbeitet, 20 Min fehlende Pause kommen hinten dran.
+    expect(result.workMinutes).toBe(7 * 60 + 50)
+    expect(result.clockOut).toBe('15:20')
   })
 
   it('lässt eine ausreichend lange Pause unangetastet', () => {
@@ -67,36 +70,37 @@ describe('Gesetzliche Korrektur im Bericht', () => {
     const result = rows.get('a')!
     expect(result.pauseMinutes).toBe(60)
     expect(result.workMinutes).toBe(7 * 60)
+    expect(result.clockOut).toBe('15:00')
     expect(result.adjustments).toEqual([])
   })
 
-  it('greift bei exakt 6 Std Anwesenheit', () => {
+  it('greift bei exakt 6 Std', () => {
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '07:00', clockOut: '13:00' })])
     expect(rows.get('a')!.pauseMinutes).toBe(30)
-    expect(rows.get('a')!.workMinutes).toBe(5 * 60 + 30)
+    expect(rows.get('a')!.workMinutes).toBe(6 * 60)
+    expect(rows.get('a')!.clockOut).toBe('13:30')
   })
 
   it('lässt knapp unter 6 Std unangetastet', () => {
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '07:00', clockOut: '12:59' })])
     expect(rows.get('a')!.pauseMinutes).toBe(0)
     expect(rows.get('a')!.workMinutes).toBe(5 * 60 + 59)
+    expect(rows.get('a')!.clockOut).toBe('12:59')
   })
 
-  it('rechnet 10:45 Anwesenheit mit 45 Min Pause auf glatte 10:00', () => {
-    // Das Beispiel aus der Anforderung.
+  it('setzt ab 9 Std 45 Min an', () => {
+    const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '07:00', clockOut: '16:00' })])
+    const result = rows.get('a')!
+    expect(result.pauseMinutes).toBe(45)
+    expect(result.workMinutes).toBe(9 * 60)
+    expect(result.clockOut).toBe('16:45')
+  })
+
+  it('deckelt die Arbeitszeit weiterhin bei 10 Std', () => {
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '06:00', clockOut: '16:45' })])
     const result = rows.get('a')!
-    expect(result.pauseMinutes).toBe(45)
     expect(result.workMinutes).toBe(MAX_DAILY_WORK_MINUTES)
-    expect(result.clockOut).toBe('16:45')
-    expect(result.adjustments).not.toContain('max-hours')
-  })
-
-  it('deckelt auf 10 Std und zieht die Gehen-Zeit entsprechend vor', () => {
-    const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '06:00', clockOut: '18:00' })])
-    const result = rows.get('a')!
     expect(result.pauseMinutes).toBe(45)
-    expect(result.workMinutes).toBe(MAX_DAILY_WORK_MINUTES)
     expect(result.clockOut).toBe('16:45')
     expect(result.adjustments).toContain('max-hours')
   })
@@ -104,8 +108,8 @@ describe('Gesetzliche Korrektur im Bericht', () => {
   it('behandelt Nachtschichten über Mitternacht', () => {
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '20:00', clockOut: '04:00' })])
     expect(rows.get('a')!.pauseMinutes).toBe(30)
-    expect(rows.get('a')!.workMinutes).toBe(7 * 60 + 30)
-    expect(rows.get('a')!.clockOut).toBe('04:00')
+    expect(rows.get('a')!.workMinutes).toBe(8 * 60)
+    expect(rows.get('a')!.clockOut).toBe('04:30')
   })
 })
 
@@ -121,10 +125,10 @@ describe('Mehrere Stempelsätze an einem Tag', () => {
     expect(a.pauseMinutes + b.pauseMinutes).toBe(45)
     // Die längere Zeile trägt die Pause.
     expect(b.pauseMinutes).toBe(45)
-    expect(a.workMinutes + b.workMinutes).toBe(8 * 60 + 15)
-    // Beide Gehen-Zeiten bleiben stehen, es wurde nur Pause ergänzt.
+    // Die vollen 9 Std bleiben erhalten, die Pause kommt oben drauf.
+    expect(a.workMinutes + b.workMinutes).toBe(9 * 60)
     expect(a.clockOut).toBe('11:00')
-    expect(b.clockOut).toBe('16:00')
+    expect(b.clockOut).toBe('16:45')
   })
 
   it('kürzt bei der 10-Std-Grenze von hinten', () => {
@@ -146,7 +150,7 @@ describe('Mehrere Stempelsätze an einem Tag', () => {
       row({ id: 'b', dateKey: '2026-03-03', clockIn: '07:00', clockOut: '15:00' })
     ])
     expect(days).toHaveLength(2)
-    expect(days.map((d) => d.legalWorkMinutes)).toEqual([450, 450])
+    expect(days.map((d) => d.legalWorkMinutes)).toEqual([480, 480])
   })
 })
 
@@ -175,7 +179,7 @@ describe('Fahrtzeit-Gutschrift', () => {
     ])
     const result = rows.get('a')!
     expect(result.pauseMinutes).toBe(30)
-    expect(result.workMinutes).toBe(5 * 60 + 45)
+    expect(result.workMinutes).toBe(6 * 60 + 15)
   })
 })
 
@@ -200,9 +204,9 @@ describe('Regelarbeitszeit-Deckelung', () => {
       [row({ id: 'a', clockIn: '08:00', clockOut: '14:00' })],
       { regularDayMinutes: 510 }
     )
-    expect(rows.get('a')!.workMinutes).toBe(5 * 60 + 30)
+    expect(rows.get('a')!.workMinutes).toBe(6 * 60)
     expect(days[0].overtimeMinutes).toBe(0)
-    expect(days[0].extraHeadroomMinutes).toBe(MAX_DAILY_WORK_MINUTES - 330)
+    expect(days[0].extraHeadroomMinutes).toBe(MAX_DAILY_WORK_MINUTES - 360)
   })
 })
 
@@ -231,8 +235,8 @@ describe('Überstunden-Auszahlung', () => {
     const allocation = allocateOvertimePayout(days(), 210)
     expect(allocation.byDate.get('2026-03-02')).toBe(90)
     expect(allocation.allocatedMinutes).toBe(210)
-    // 90 Min echter Überhang, der Rest geht über die gestempelte Zeit hinaus.
-    expect(allocation.beyondActualMinutes).toBe(120)
+    // Mo 1:30 + Di 0:30 echter Überhang, der Rest über die gestempelte Zeit hinaus.
+    expect(allocation.beyondActualMinutes).toBe(90)
   })
 
   it('meldet, was nicht mehr unterzubringen ist', () => {
@@ -266,17 +270,16 @@ describe('Überstunden-Auszahlung', () => {
   })
 
   it('hebt die Pause an, wenn die Auszahlung den Tag über 9 Std hebt', () => {
-    // 6:30 Anwesenheit → 30 Min Pause → 6:00 Arbeitszeit. Mit 2:30 Auszahlung
-    // sind es 8:30 Zielzeit; die Anwesenheit steigt damit auf 9:15 und
-    // verlangt 45 statt 30 Min Pause.
+    // 6:30 gearbeitet, mit 2:30 Auszahlung sind es 9:00 Zielzeit; die
+    // ausgewiesene Anwesenheit steigt damit auf 9:45 und verlangt 45 Min Pause.
     const { rows } = applyWorkTimeRules([row({ id: 'a', clockIn: '07:00', clockOut: '13:30' })], {
       regularDayMinutes: 510,
       payoutByDate: new Map([['2026-03-02', 150]])
     })
     const result = rows.get('a')!
-    expect(result.workMinutes).toBe(8 * 60 + 30)
+    expect(result.workMinutes).toBe(9 * 60)
     expect(result.pauseMinutes).toBe(45)
-    expect(result.clockOut).toBe('16:15')
+    expect(result.clockOut).toBe('16:45')
     expect(result.adjustments).toContain('overtime-payout')
   })
 })

@@ -20,7 +20,8 @@ import {
 } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from './firebaseConfig'
-import { authReady, convertToDate as sharedConvertToDate, REGULAR_DAY_MINUTES } from './data/shared'
+import { authReady, convertToDate as sharedConvertToDate } from './data/shared'
+import { regularMinutesForDateKey, regularMinutesForRange } from '../utils/regularWorkTime'
 import * as session from './data/session'
 import * as customers from './data/customers'
 import * as vehicles from './data/vehicles'
@@ -803,8 +804,13 @@ class DataServiceClass {
     }
   }
 
-  /** Reguläre Tagesarbeitszeit (ohne Pause) in Minuten. Überstunden entstehen erst darüber. */
-  private static readonly REGULAR_DAY_MINUTES = REGULAR_DAY_MINUTES
+  /**
+   * Reguläre Tagesarbeitszeit (ohne Pause) in Minuten – Mo–Do 8 Std, Fr 6 Std,
+   * Wochenende 0. Überstunden entstehen erst darüber.
+   */
+  private static regularMinutesForDay(dateKey: string): number {
+    return regularMinutesForDateKey(dateKey)
+  }
 
   /** Gebuchte Arbeitsminuten eines Eintrags (Kommen − Gehen − Pause + Rückfahrt-Gutschrift). */
   private overtimeWorkedMinutesForEntry(entry: TimeEntry): number {
@@ -828,7 +834,7 @@ class DataServiceClass {
       if (this.getDateKeyFromValue(entry.clockInTime) !== dateKey) continue
       dayMinutes += this.overtimeWorkedMinutesForEntry(entry)
     }
-    return Math.max(0, Math.round(dayMinutes - DataServiceClass.REGULAR_DAY_MINUTES))
+    return Math.max(0, Math.round(dayMinutes - DataServiceClass.regularMinutesForDay(dateKey)))
   }
 
   /**
@@ -949,7 +955,7 @@ class DataServiceClass {
     let earned = 0
     const dayOvertimes: Array<{ dateKey: string; minutes: number }> = []
     for (const [dateKey, mins] of minutesByDay) {
-      const ot = Math.max(0, Math.round(mins - DataServiceClass.REGULAR_DAY_MINUTES))
+      const ot = Math.max(0, Math.round(mins - DataServiceClass.regularMinutesForDay(dateKey)))
       dayOvertimes.push({ dateKey, minutes: ot })
       earned += ot
     }
@@ -959,7 +965,9 @@ class DataServiceClass {
     let spent = 0
     for (const req of leaveRequests) {
       if (req.type === 'overtime' && req.status === 'approved') {
-        spent += (Number(req.workingDays) || 0) * DataServiceClass.REGULAR_DAY_MINUTES
+        const reqStart = this.convertToDate(req.startDate)
+        const reqEnd = this.convertToDate(req.endDate)
+        spent += reqStart && reqEnd ? regularMinutesForRange(reqStart, reqEnd) : 0
       }
     }
 
@@ -2293,6 +2301,18 @@ class DataServiceClass {
 
   createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
     return leave.createLeaveRequest(requestData)
+  }
+
+  /** Krankmeldung durch den Admin – wird direkt als genehmigt gespeichert. */
+  reportSickLeave(data: {
+    employeeId: string
+    employeeName?: string
+    startDate: Date
+    endDate: Date
+    reason?: string
+    reportedBy?: string
+  }): Promise<string> {
+    return leave.reportSickLeave(data)
   }
 
   updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {
