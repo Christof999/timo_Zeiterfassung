@@ -29,10 +29,12 @@ describe('Sichtbare Bereiche', () => {
     }
   })
 
-  it('beschränkt die Lohnabrechnung auf Bericht und Mitarbeiter', () => {
-    expect(allowedAdminTabs('payroll')).toEqual(['reports', 'employees'])
+  it('beschränkt die Lohnabrechnung auf Bericht, Mitarbeiter und Urlaub', () => {
+    expect(allowedAdminTabs('payroll')).toEqual(['reports', 'employees', 'vacation'])
     expect(isTabAllowedForRole('payroll', 'reports')).toBe(true)
     expect(isTabAllowedForRole('payroll', 'employees')).toBe(true)
+    // Urlaub ist dabei, weil dort die Krankmeldungen erfasst werden.
+    expect(isTabAllowedForRole('payroll', 'vacation')).toBe(true)
   })
 
   it('sperrt Dashboard, Projekte und Nachkalkulation', () => {
@@ -45,7 +47,6 @@ describe('Sichtbare Bereiche', () => {
       'customers',
       'material',
       'hero',
-      'vacation',
       'diagnostics'
     ]) {
       expect(isTabAllowedForRole('payroll', tab)).toBe(false)

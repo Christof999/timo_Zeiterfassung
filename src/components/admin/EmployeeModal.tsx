@@ -266,7 +266,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               </select>
               <small className="form-hint">
                 „Nur Lohnabrechnung“ blendet Übersicht, Projekte, Kunden, Material und
-                Nachkalkulation aus – es bleiben Zeiterfassungsbericht und Mitarbeiter.
+                Nachkalkulation aus – es bleiben Zeiterfassungsbericht, Mitarbeiter und
+                Urlaub (dort werden Krankmeldungen erfasst).
               </small>
             </div>
           )}

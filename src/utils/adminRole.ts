@@ -24,9 +24,14 @@ export const resolveAdminRole = (
   return PAYROLL_USERNAMES.includes(username) ? 'payroll' : 'full'
 }
 
-/** Tabs, die eine Rolle im Admin-Bereich öffnen darf. */
+/**
+ * Tabs, die eine Rolle im Admin-Bereich öffnen darf.
+ *
+ * 'vacation' ist für die Lohnabrechnung dabei, weil dort die Krankmeldungen
+ * gepflegt werden — die Krankheitstage braucht sie für den Beleg.
+ */
 export const allowedAdminTabs = (role: AdminRole): string[] =>
-  role === 'payroll' ? ['reports', 'employees'] : []
+  role === 'payroll' ? ['reports', 'employees', 'vacation'] : []
 
 export const isTabAllowedForRole = (role: AdminRole, tabId: string): boolean => {
   if (role === 'full') return true
@@ -35,5 +40,5 @@ export const isTabAllowedForRole = (role: AdminRole, tabId: string): boolean => 
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   full: 'Voller Zugriff',
-  payroll: 'Nur Lohnabrechnung (Zeiterfassungsbericht + Mitarbeiter)'
+  payroll: 'Nur Lohnabrechnung (Zeiterfassungsbericht, Mitarbeiter, Urlaub)'
 }
