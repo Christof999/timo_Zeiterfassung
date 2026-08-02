@@ -35,6 +35,8 @@ export interface Employee {
   /** Interner Kostensatz (EUR/Std) – was der Mitarbeiter das Unternehmen kostet.
    *  Gegenstück zum Material-Einkaufspreis; nur Admin/Nachkalkulation. */
   hourlyCostRate?: number
+  /** Lohnnebenkosten (EUR/Std) – frei befüllbares Stammdatenfeld, analog zum Stundenlohn. */
+  ancillaryWageCosts?: number
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'
