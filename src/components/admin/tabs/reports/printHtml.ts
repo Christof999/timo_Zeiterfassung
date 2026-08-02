@@ -254,10 +254,7 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
     <tr><th>Position</th><th>Berechnung</th><th class="right">Summe</th></tr>
   </thead>
   <tbody>${rowsHtml}</tbody>
-</table>
-<p class="summary-hint">An den Steuerberater zu melden ist der Bruttolohn von
-${escapeHtml(formatCurrency(summary.grossWageAmount))} – ohne Lohnnebenkosten und ohne den
-steuerfreien Verpflegungsmehraufwand.</p>`
+</table>`
 }
 
 /** Unterschriftenfelder – jeder Bericht muss von beiden Seiten gezeichnet sein. */
@@ -430,11 +427,6 @@ export const buildEmployeePrintHtml = (params: {
     }
     .summary-table tr.summary-note td {
       color: #555;
-    }
-    .summary-hint {
-      font-size: 11px;
-      color: #555;
-      margin-top: 6px;
     }
     .signatures {
       display: flex;

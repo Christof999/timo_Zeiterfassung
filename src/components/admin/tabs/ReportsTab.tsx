@@ -2144,7 +2144,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       )}
                     </tbody>
                   </table>
-                  <p className="settlement-summary-hint">
+                  <p className="settlement-summary-hint no-print">
                     An den Steuerberater zu melden ist der Bruttolohn von{' '}
                     <strong>{formatCurrency(adjustedReport.summary.grossWageAmount)}</strong> – ohne
                     Lohnnebenkosten und ohne den steuerfreien Verpflegungsmehraufwand.
