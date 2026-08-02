@@ -9,9 +9,16 @@ import RetroactiveDocumentationListModal from './RetroactiveDocumentationListMod
 import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
+import OvertimeReminderModal from './OvertimeReminderModal'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
+import { currentMonthKey } from '../utils/overtimeMonth'
+import {
+  readDismissedMonth,
+  shouldShowOvertimeReminder,
+  writeDismissedMonth
+} from '../utils/overtimeReminder'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import '../styles/TimeTracking.css'
 
@@ -35,11 +42,55 @@ const TimeTracking: React.FC = () => {
   const [showManualEntryModal, setShowManualEntryModal] = useState(false)
   const [showRetroDocListModal, setShowRetroDocListModal] = useState(false)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
+  /** Monatsend-Erinnerung an die Überstunden-Verrechnung (null = kein Hinweis). */
+  const [overtimeReminder, setOvertimeReminder] = useState<{
+    month: string
+    balanceMinutes: number
+  } | null>(null)
   const navigate = useNavigate()
 
   const canManualTimeEntry = canAddManualTimeEntries(currentUser?.username)
   /** Dokumentation zu abgeschlossenen Tagen – für alle; Stempel-Nachträge nur wenn explizit erlaubt (derzeit aus). */
   const canRetroactiveDocumentation = true
+
+  /**
+   * Blendet zum Monatsende die Erinnerung an die Überstunden-Verrechnung ein.
+   * Der Tagescheck läuft zuerst, damit an den übrigen Tagen des Monats gar
+   * kein Firestore-Zugriff nötig ist.
+   */
+  const checkOvertimeReminder = async (employee: Employee) => {
+    if (!employee.id) return
+    const today = new Date()
+    const balanceMinutes = Math.max(0, Number(employee.overtimeBalanceMinutes) || 0)
+    const dismissedMonth = readDismissedMonth(employee.id)
+    const month = currentMonthKey()
+
+    if (
+      !shouldShowOvertimeReminder({
+        today,
+        hasSettlementForMonth: false,
+        balanceMinutes,
+        dismissedMonth
+      })
+    ) {
+      return
+    }
+
+    try {
+      const settlement = await DataService.getOvertimeSettlement(employee.id, month)
+      if (settlement) return
+      setOvertimeReminder({ month, balanceMinutes })
+    } catch (error) {
+      console.warn('Überstunden-Erinnerung konnte nicht geprüft werden:', error)
+    }
+  }
+
+  const handleDismissOvertimeReminder = () => {
+    if (currentUser?.id && overtimeReminder) {
+      writeDismissedMonth(currentUser.id, overtimeReminder.month)
+    }
+    setOvertimeReminder(null)
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -53,11 +104,14 @@ const TimeTracking: React.FC = () => {
 
       // Frischen Überstunden-/Urlaubsstand nachladen (localStorage kann veraltet sein)
       DataService.getEmployeeById(user.id)
-        .then((fresh) => {
+        .then(async (fresh) => {
           if (fresh) {
             setCurrentUser(fresh)
             DataService.setCurrentUser(fresh)
           }
+          // Erst mit dem frischen Kontostand prüfen – sonst erinnert die App
+          // womöglich an Überstunden, die längst verrechnet sind.
+          await checkOvertimeReminder(fresh || user)
         })
         .catch(() => {})
 
@@ -361,6 +415,14 @@ const TimeTracking: React.FC = () => {
             employee={currentUser}
             onClose={() => setShowRetroDocListModal(false)}
             onDocumentationSaved={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
+
+        {overtimeReminder && (
+          <OvertimeReminderModal
+            month={overtimeReminder.month}
+            balanceMinutes={overtimeReminder.balanceMinutes}
+            onDismiss={handleDismissOvertimeReminder}
           />
         )}
       </main>

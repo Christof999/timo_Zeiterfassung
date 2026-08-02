@@ -1,0 +1,26 @@
+/* Monatsend-Erinnerung an die Überstunden-Verrechnung. */
+
+.overtime-reminder-modal {
+  max-width: 460px;
+}
+
+.overtime-reminder-modal .modal-body p {
+  margin: 0 0 var(--spacing-md);
+  color: var(--text-color);
+  line-height: var(--line-height-relaxed);
+}
+
+.overtime-reminder-balance {
+  color: var(--text-secondary) !important;
+}
+
+.overtime-reminder-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+.overtime-reminder-actions .btn {
+  width: 100%;
+}
