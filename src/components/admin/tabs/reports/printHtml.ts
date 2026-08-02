@@ -159,43 +159,93 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
   const hours = (minutes: number): string => `${minutesToHoursLabel(minutes)} Std`
   const rate = formatCurrency(summary.hourlyRate)
 
-  const lines: Array<[string, string, string]> = [
-    [
-      'Geleistete Arbeitsstunden',
-      `${hours(summary.workMinutes)} × ${rate}`,
-      formatCurrency(summary.workAmount)
-    ],
-    ['Nicht abgerechnete Überstunden', hours(summary.openOvertimeMinutes), '—'],
-    [
-      'Verpflegungsmehraufwand',
-      `${summary.mealAllowanceDays} Tage × ${formatCurrency(summary.mealAllowanceRate)}`,
-      formatCurrency(summary.mealAllowanceAmount)
-    ],
-    [
-      'Urlaubsstunden',
-      `${hours(summary.vacationMinutes)} × ${rate}`,
-      formatCurrency(summary.vacationAmount)
-    ],
-    [
-      'Feiertagsstunden',
-      `${hours(summary.holidayMinutes)} × ${rate}`,
-      formatCurrency(summary.holidayAmount)
-    ],
-    [
-      'Krankheitstage',
-      `${summary.sickDays} Tage (${hours(summary.sickMinutes)}) × ${rate}`,
-      formatCurrency(summary.sickAmount)
-    ]
+  interface SummaryLine {
+    label: string
+    detail: string
+    amount: string
+    /** Summenzeile – hervorgehoben und mit Trennlinie darüber */
+    isTotal?: boolean
+    /** Nachrichtlich, gehört nicht zur Meldung an den Steuerberater */
+    isNote?: boolean
+  }
+
+  // Reihenfolge ist bewusst: erst alle lohnwirksamen Posten, dann der Bruttolohn.
+  // Steuerfreies und Arbeitgeberaufwand stehen darunter, damit die Meldesumme
+  // für den Steuerberater eindeutig bleibt.
+  const lines: SummaryLine[] = [
+    {
+      label: 'Geleistete Arbeitsstunden',
+      detail: `${hours(summary.workMinutes)} × ${rate}`,
+      amount: formatCurrency(summary.workAmount)
+    },
+    {
+      label: 'Urlaubsstunden',
+      detail: `${hours(summary.vacationMinutes)} × ${rate}`,
+      amount: formatCurrency(summary.vacationAmount)
+    },
+    {
+      label: 'Feiertagsstunden',
+      detail: `${hours(summary.holidayMinutes)} × ${rate}`,
+      amount: formatCurrency(summary.holidayAmount)
+    },
+    {
+      label: 'Krankheitstage',
+      detail: `${summary.sickDays} Tage (${hours(summary.sickMinutes)}) × ${rate}`,
+      amount: formatCurrency(summary.sickAmount)
+    },
+    {
+      label: 'Bruttolohn (steuer- und SV-pflichtig)',
+      detail: `${hours(summary.grossWageMinutes)} × ${rate} – ohne Lohnnebenkosten`,
+      amount: formatCurrency(summary.grossWageAmount),
+      isTotal: true
+    },
+    {
+      label: 'Verpflegungsmehraufwand (steuerfrei)',
+      detail: `${summary.mealAllowanceDays} Tage × ${formatCurrency(summary.mealAllowanceRate)}`,
+      amount: formatCurrency(summary.mealAllowanceAmount)
+    },
+    {
+      label: 'Auszahlung gesamt',
+      detail: 'Bruttolohn + steuerfreie Zuwendungen',
+      amount: formatCurrency(summary.totalPayoutAmount),
+      isTotal: true
+    },
+    {
+      label: 'Nicht abgerechnete Überstunden',
+      detail: hours(summary.openOvertimeMinutes),
+      amount: '—',
+      isNote: true
+    }
   ]
 
-  const rowsHtml = lines
-    .map(
-      ([label, detail, amount]) => `<tr>
-  <td>${escapeHtml(label)}</td>
-  <td>${escapeHtml(detail)}</td>
-  <td class="right">${escapeHtml(amount)}</td>
-</tr>`
+  if (summary.ancillaryWageCostRate > 0) {
+    lines.push(
+      {
+        label: 'Nachrichtlich: Lohnnebenkosten',
+        detail: `${hours(summary.grossWageMinutes)} × ${formatCurrency(summary.ancillaryWageCostRate)}`,
+        amount: formatCurrency(summary.ancillaryWageCostsAmount),
+        isNote: true
+      },
+      {
+        label: 'Nachrichtlich: Arbeitgeberaufwand gesamt',
+        detail: 'Bruttolohn + Lohnnebenkosten',
+        amount: formatCurrency(summary.employerTotalCost),
+        isNote: true
+      }
     )
+  }
+
+  const rowsHtml = lines
+    .map((line) => {
+      const classes = [line.isTotal ? 'summary-total' : '', line.isNote ? 'summary-note' : '']
+        .filter(Boolean)
+        .join(' ')
+      return `<tr${classes ? ` class="${classes}"` : ''}>
+  <td>${escapeHtml(line.label)}</td>
+  <td>${escapeHtml(line.detail)}</td>
+  <td class="right">${escapeHtml(line.amount)}</td>
+</tr>`
+    })
     .join('')
 
   return `<h2 class="summary-title">Abrechnung</h2>
@@ -204,7 +254,10 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
     <tr><th>Position</th><th>Berechnung</th><th class="right">Summe</th></tr>
   </thead>
   <tbody>${rowsHtml}</tbody>
-</table>`
+</table>
+<p class="summary-hint">An den Steuerberater zu melden ist der Bruttolohn von
+${escapeHtml(formatCurrency(summary.grossWageAmount))} – ohne Lohnnebenkosten und ohne den
+steuerfreien Verpflegungsmehraufwand.</p>`
 }
 
 /** Unterschriftenfelder – jeder Bericht muss von beiden Seiten gezeichnet sein. */
@@ -370,6 +423,18 @@ export const buildEmployeePrintHtml = (params: {
     }
     .summary-table tbody tr:last-child td {
       border-bottom: 1px solid #d6d6d6;
+    }
+    .summary-table tr.summary-total td {
+      font-weight: 700;
+      border-top: 2px solid #222;
+    }
+    .summary-table tr.summary-note td {
+      color: #555;
+    }
+    .summary-hint {
+      font-size: 11px;
+      color: #555;
+      margin-top: 6px;
     }
     .signatures {
       display: flex;

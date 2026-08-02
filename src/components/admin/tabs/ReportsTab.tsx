@@ -712,6 +712,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const selectedEmployeeRecord = employees.find(e => e.id === selectedEmployeeId)
   const employeeHourlyRate =
     selectedEmployeeRecord?.hourlyWage || selectedEmployeeRecord?.hourlyRate || 0
+  const employeeAncillaryWageCosts = selectedEmployeeRecord?.ancillaryWageCosts || 0
   const employeeOvertimeBalance =
     typeof selectedEmployeeRecord?.overtimeBalanceMinutes === 'number'
       ? selectedEmployeeRecord.overtimeBalanceMinutes
@@ -732,6 +733,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0,
         hourlyRate: employeeHourlyRate,
         mealAllowanceRate,
+        ancillaryWageCosts: employeeAncillaryWageCosts,
         overtimeBalanceMinutes: employeeOvertimeBalance
       }),
     [
@@ -742,6 +744,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       appliedPayoutMinutes,
       employeeHourlyRate,
       mealAllowanceRate,
+      employeeAncillaryWageCosts,
       employeeOvertimeBalance
     ]
   )
@@ -2055,21 +2058,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         </td>
                       </tr>
                       <tr>
-                        <td>Nicht abgerechnete Überstunden</td>
-                        <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
-                        <td className="number-cell">—</td>
-                      </tr>
-                      <tr>
-                        <td>Verpflegungsmehraufwand</td>
-                        <td>
-                          {adjustedReport.summary.mealAllowanceDays} Tage ×{' '}
-                          {formatCurrency(adjustedReport.summary.mealAllowanceRate)}
-                        </td>
-                        <td className="number-cell">
-                          {formatCurrency(adjustedReport.summary.mealAllowanceAmount)}
-                        </td>
-                      </tr>
-                      <tr>
                         <td>Urlaubsstunden</td>
                         <td>
                           {minutesToHoursLabel(adjustedReport.summary.vacationMinutes)} Std ×{' '}
@@ -2100,8 +2088,67 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                           {formatCurrency(adjustedReport.summary.sickAmount)}
                         </td>
                       </tr>
+                      <tr className="settlement-total">
+                        <td>Bruttolohn (steuer- und SV-pflichtig)</td>
+                        <td>
+                          {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
+                          {formatCurrency(adjustedReport.summary.hourlyRate)} – ohne
+                          Lohnnebenkosten
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.grossWageAmount)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Verpflegungsmehraufwand (steuerfrei)</td>
+                        <td>
+                          {adjustedReport.summary.mealAllowanceDays} Tage ×{' '}
+                          {formatCurrency(adjustedReport.summary.mealAllowanceRate)}
+                        </td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.mealAllowanceAmount)}
+                        </td>
+                      </tr>
+                      <tr className="settlement-total">
+                        <td>Auszahlung gesamt</td>
+                        <td>Bruttolohn + steuerfreie Zuwendungen</td>
+                        <td className="number-cell">
+                          {formatCurrency(adjustedReport.summary.totalPayoutAmount)}
+                        </td>
+                      </tr>
+                      <tr className="settlement-note">
+                        <td>Nicht abgerechnete Überstunden</td>
+                        <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
+                        <td className="number-cell">—</td>
+                      </tr>
+                      {adjustedReport.summary.ancillaryWageCostRate > 0 && (
+                        <>
+                          <tr className="settlement-note">
+                            <td>Nachrichtlich: Lohnnebenkosten</td>
+                            <td>
+                              {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
+                              {formatCurrency(adjustedReport.summary.ancillaryWageCostRate)}
+                            </td>
+                            <td className="number-cell">
+                              {formatCurrency(adjustedReport.summary.ancillaryWageCostsAmount)}
+                            </td>
+                          </tr>
+                          <tr className="settlement-note">
+                            <td>Nachrichtlich: Arbeitgeberaufwand gesamt</td>
+                            <td>Bruttolohn + Lohnnebenkosten</td>
+                            <td className="number-cell">
+                              {formatCurrency(adjustedReport.summary.employerTotalCost)}
+                            </td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                   </table>
+                  <p className="settlement-summary-hint">
+                    An den Steuerberater zu melden ist der Bruttolohn von{' '}
+                    <strong>{formatCurrency(adjustedReport.summary.grossWageAmount)}</strong> – ohne
+                    Lohnnebenkosten und ohne den steuerfreien Verpflegungsmehraufwand.
+                  </p>
                   {adjustedReport.summary.hourlyRate === 0 && (
                     <p className="settlement-summary-hint no-print">
                       Für {selectedEmployeeName} ist kein Stundenlohn hinterlegt – die Beträge bleiben

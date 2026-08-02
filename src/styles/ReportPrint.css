@@ -594,6 +594,24 @@
   color: var(--text-secondary);
 }
 
+/* Summenzeilen (Bruttolohn, Auszahlung) müssen sich vom Rest abheben – sie sind
+   die Zahlen, die an den Steuerberater gemeldet werden. */
+.settlement-summary-table tr.settlement-total td {
+  border-top: 2px solid var(--text-color);
+  font-weight: var(--font-weight-bold);
+}
+
+.settlement-summary-table tr.settlement-total td:nth-child(2) {
+  font-weight: 400;
+}
+
+/* Nachrichtliche Zeilen gehören nicht zur Meldesumme. */
+.settlement-summary-table tr.settlement-note td,
+.settlement-summary-table tr.settlement-note td:first-child {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 .settlement-summary-hint {
   margin: var(--spacing-sm) 0 0;
   color: var(--text-secondary);

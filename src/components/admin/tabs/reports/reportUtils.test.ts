@@ -388,4 +388,62 @@ describe('Abrechnungs-Summen für den Beleg', () => {
     expect(report.payoutMinutes).toBe(60)
     expect(report.summary.openOvertimeMinutes).toBe(240)
   })
+
+  it('meldet als Bruttolohn alle lohnwirksamen Stunden ohne steuerfreie Zuwendungen', () => {
+    const report = buildAdjustedReport(
+      [
+        workEntry(2, '07:00', '15:00'),
+        absenceEntry(3, 'vacation', 8 * 60),
+        absenceEntry(4, 'holiday', 8 * 60),
+        absenceEntry(5, 'sick', 8 * 60)
+      ],
+      { hourlyRate: 20, mealAllowanceRate: 14 }
+    )
+
+    // 4 × 8 Std × 20 € – der Verpflegungsmehraufwand bleibt draußen.
+    expect(report.summary.grossWageMinutes).toBe(32 * 60)
+    expect(report.summary.grossWageAmount).toBe(640)
+    expect(report.summary.taxFreeAmount).toBe(14)
+    expect(report.summary.totalPayoutAmount).toBe(654)
+  })
+
+  it('lässt Lohnnebenkosten aus dem Bruttolohn heraus und weist sie nachrichtlich aus', () => {
+    const report = buildAdjustedReport([workEntry(2, '07:00', '15:00')], {
+      hourlyRate: 20,
+      ancillaryWageCosts: 5,
+      mealAllowanceRate: 0
+    })
+
+    expect(report.summary.grossWageAmount).toBe(160)
+    expect(report.summary.ancillaryWageCostRate).toBe(5)
+    expect(report.summary.ancillaryWageCostsAmount).toBe(40)
+    expect(report.summary.employerTotalCost).toBe(200)
+    // Die Meldesumme an den Steuerberater bleibt unberührt.
+    expect(report.summary.totalPayoutAmount).toBe(160)
+  })
+
+  it('ohne hinterlegte Lohnnebenkosten bleibt der Arbeitgeberaufwand der Bruttolohn', () => {
+    const report = buildAdjustedReport([workEntry(2, '07:00', '15:00')], {
+      hourlyRate: 20,
+      mealAllowanceRate: 0
+    })
+
+    expect(report.summary.ancillaryWageCostRate).toBe(0)
+    expect(report.summary.ancillaryWageCostsAmount).toBe(0)
+    expect(report.summary.employerTotalCost).toBe(160)
+  })
+
+  it('summiert den Bruttolohn aus den gerundeten Einzelzeilen', () => {
+    // 20,01 €/Std auf krumme Stunden – Beleg und Summe müssen aufgehen.
+    const report = buildAdjustedReport(
+      [workEntry(2, '07:00', '14:20'), absenceEntry(3, 'vacation', 7 * 60 + 20)],
+      { hourlyRate: 20.01, mealAllowanceRate: 0 }
+    )
+
+    const { workAmount, vacationAmount, holidayAmount, sickAmount, grossWageAmount } =
+      report.summary
+    expect(grossWageAmount).toBe(
+      Math.round((workAmount + vacationAmount + holidayAmount + sickAmount) * 100) / 100
+    )
+  })
 })

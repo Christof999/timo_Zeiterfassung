@@ -384,6 +384,24 @@ export interface ReportSettlementSummary {
   sickMinutes: number
   sickAmount: number
   hourlyRate: number
+  /**
+   * Der Betrag, den der Steuerberater meldet: alle lohnwirksamen Stunden
+   * (Arbeit, Urlaub, Feiertag, Krankheit) × Stundenlohn. Enthält bewusst
+   * KEINE Lohnnebenkosten und keinen steuerfreien Verpflegungsmehraufwand.
+   */
+  grossWageAmount: number
+  /** Stunden, auf denen der Bruttolohn beruht */
+  grossWageMinutes: number
+  /** Steuerfreie Zuwendungen (aktuell nur Verpflegungsmehraufwand) */
+  taxFreeAmount: number
+  /** Bruttolohn + steuerfreie Zuwendungen = was tatsächlich überwiesen wird */
+  totalPayoutAmount: number
+  /** Nachrichtlich: Lohnnebenkosten-Satz des Mitarbeiters (EUR/Std) */
+  ancillaryWageCostRate: number
+  /** Nachrichtlich: Lohnnebenkosten auf die lohnwirksamen Stunden */
+  ancillaryWageCostsAmount: number
+  /** Nachrichtlich: Bruttolohn + Lohnnebenkosten = Arbeitgeberaufwand */
+  employerTotalCost: number
 }
 
 export interface AdjustedReport {
@@ -426,6 +444,8 @@ export const buildAdjustedReport = (
     hourlyRate?: number
     /** Satz je Tag Verpflegungsmehraufwand */
     mealAllowanceRate?: number
+    /** Lohnnebenkosten des Mitarbeiters (EUR/Std) – nur nachrichtlich, nie im Bruttolohn */
+    ancillaryWageCosts?: number
     /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
     overtimeBalanceMinutes?: number | null
   } = {}
@@ -435,6 +455,7 @@ export const buildAdjustedReport = (
     requestedPayoutMinutes = 0,
     hourlyRate = 0,
     mealAllowanceRate = DEFAULT_MEAL_ALLOWANCE_EUR,
+    ancillaryWageCosts = 0,
     overtimeBalanceMinutes = null
   } = options
 
@@ -516,6 +537,20 @@ export const buildAdjustedReport = (
       ? Math.max(0, overtimeBalanceMinutes - allocation.allocatedMinutes)
       : sum(base.days.map((day) => day.overtimeMinutes)) - allocation.allocatedMinutes
 
+  // Der Beleg muss aufgehen: die Summe entsteht aus den gerundeten Einzelzeilen,
+  // nicht aus einer zweiten Rechnung über die Gesamtminuten.
+  const round2 = (value: number): number => Math.round(value * 100) / 100
+  const workAmount = amountFor(workMinutes)
+  const vacationAmount = amountFor(vacationMinutes)
+  const holidayAmount = amountFor(holidayMinutes)
+  const sickAmount = amountFor(sickMinutes)
+  const mealAllowanceAmount = round2(mealAllowanceDays * mealAllowanceRate)
+
+  // Lohnwirksam ist jede bezahlte Stunde – Arbeit wie Lohnfortzahlung.
+  const grossWageMinutes = workMinutes + vacationMinutes + holidayMinutes + sickMinutes
+  const grossWageAmount = round2(workAmount + vacationAmount + holidayAmount + sickAmount)
+  const ancillaryWageCostsAmount = round2((grossWageMinutes / 60) * ancillaryWageCosts)
+
   return {
     entries: adjusted,
     days: base.days,
@@ -529,19 +564,26 @@ export const buildAdjustedReport = (
     mealAllowanceDays,
     summary: {
       workMinutes,
-      workAmount: amountFor(workMinutes),
+      workAmount,
       openOvertimeMinutes: Math.max(0, openOvertimeMinutes),
       mealAllowanceDays,
       mealAllowanceRate,
-      mealAllowanceAmount: Math.round(mealAllowanceDays * mealAllowanceRate * 100) / 100,
+      mealAllowanceAmount,
       vacationMinutes,
-      vacationAmount: amountFor(vacationMinutes),
+      vacationAmount,
       holidayMinutes,
-      holidayAmount: amountFor(holidayMinutes),
+      holidayAmount,
       sickDays,
       sickMinutes,
-      sickAmount: amountFor(sickMinutes),
-      hourlyRate
+      sickAmount,
+      hourlyRate,
+      grossWageMinutes,
+      grossWageAmount,
+      taxFreeAmount: mealAllowanceAmount,
+      totalPayoutAmount: round2(grossWageAmount + mealAllowanceAmount),
+      ancillaryWageCostRate: ancillaryWageCosts,
+      ancillaryWageCostsAmount,
+      employerTotalCost: round2(grossWageAmount + ancillaryWageCostsAmount)
     }
   }
 }
