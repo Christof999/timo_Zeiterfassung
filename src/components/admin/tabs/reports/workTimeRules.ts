@@ -381,18 +381,4 @@ export function allocateOvertimePayout(
 }
 
 /** "8:30", "8,5" oder "510" (Minuten-frei) → Minuten. Ungültig → null. */
-export const parseHoursMinutesInput = (value: string): number | null => {
-  const trimmed = (value || '').trim()
-  if (!trimmed) return null
-  if (trimmed.includes(':')) {
-    const [h, m] = trimmed.split(':')
-    const hours = Number(h)
-    const minutes = Number(m)
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
-    if (hours < 0 || minutes < 0 || minutes > 59) return null
-    return Math.round(hours * 60 + minutes)
-  }
-  const decimal = Number(trimmed.replace(',', '.'))
-  if (!Number.isFinite(decimal) || decimal < 0) return null
-  return Math.round(decimal * 60)
-}
+export { parseHoursMinutesInput } from '../../../../utils/hoursInput'

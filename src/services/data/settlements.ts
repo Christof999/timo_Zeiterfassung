@@ -7,8 +7,15 @@ export function settlementDocId(employeeId: string, periodStart: string, periodE
   return `${employeeId}_${periodStart}_${periodEnd}`.replace(/\//g, '-')
 }
 
+/**
+ * @param options.alreadyBookedMinutes Minuten, die der Mitarbeiter für diesen
+ *   Zeitraum bereits selbst zur Verrechnung angemeldet hat und die deshalb
+ *   schon vom Überstundenkonto abgezogen sind. Nur der Rest wird hier gebucht –
+ *   sonst würde derselbe Monat zweimal vom Konto gehen.
+ */
 export async function saveTimeReportSettlement(
-  data: Omit<TimeReportSettlement, 'id' | 'settledAt'>
+  data: Omit<TimeReportSettlement, 'id' | 'settledAt'>,
+  options: { alreadyBookedMinutes?: number } = {}
 ): Promise<void> {
   await authReady
   const id = settlementDocId(data.employeeId, data.periodStart, data.periodEnd)
@@ -36,8 +43,14 @@ export async function saveTimeReportSettlement(
     if (empSnap.exists()) {
       const emp = empSnap.data() as Employee
       const paid = Number(data.paidOutMinutes) || 0
-      if (emp.overtimeBalanceMinutes != null && typeof emp.overtimeBalanceMinutes === 'number') {
-        const next = Math.max(0, emp.overtimeBalanceMinutes - paid)
+      const alreadyBooked = Math.max(0, Number(options.alreadyBookedMinutes) || 0)
+      const toBook = Math.max(0, paid - alreadyBooked)
+      if (
+        toBook > 0 &&
+        emp.overtimeBalanceMinutes != null &&
+        typeof emp.overtimeBalanceMinutes === 'number'
+      ) {
+        const next = Math.max(0, emp.overtimeBalanceMinutes - toBook)
         await updateDoc(empRef, { overtimeBalanceMinutes: next })
       }
     }

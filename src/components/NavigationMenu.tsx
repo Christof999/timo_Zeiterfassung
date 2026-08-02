@@ -61,7 +61,14 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
         >
           Urlaubsanträge
         </Link>
-        <button 
+        <Link
+          to="/overtime"
+          className="nav-item btn primary-btn"
+          onClick={() => setIsOpen(false)}
+        >
+          Überstunden verrechnen
+        </Link>
+        <button
           onClick={() => {
             setIsOpen(false)
             onLogout()

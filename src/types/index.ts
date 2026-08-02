@@ -334,6 +334,22 @@ export interface TimeReportSettlement {
   }>
 }
 
+/**
+ * Überstunden, die der Mitarbeiter selbst für einen Kalendermonat zur
+ * Verrechnung angemeldet hat. Die Minuten sind bereits vom Überstundenkonto
+ * abgezogen – auch dann, wenn der Monat noch läuft.
+ */
+export interface OvertimeSettlement {
+  id?: string
+  employeeId: string
+  /** Abrechnungsmonat als "YYYY-MM" */
+  month: string
+  /** Im Monat verrechnete Überstunden in Minuten */
+  minutes: number
+  createdAt?: Date | any
+  updatedAt?: Date | any
+}
+
 export interface LeaveRequest {
   id?: string
   employeeId: string

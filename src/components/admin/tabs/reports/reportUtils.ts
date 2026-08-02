@@ -1,5 +1,6 @@
 import type { LeaveRequest, TimeEntry } from '../../../../types'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
+import { minutesToHoursLabel } from '../../../../utils/hoursInput'
 import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
 import {
   allocateOvertimePayout,
@@ -238,11 +239,7 @@ export const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMin
   return Math.max(0, grossMinutes - pauseMinutes)
 }
 
-export const minutesToHoursLabel = (totalMinutes: number): string => {
-  const h = Math.floor(totalMinutes / 60)
-  const m = Math.round(totalMinutes % 60)
-  return `${h}:${m.toString().padStart(2, '0')}`
-}
+export { minutesToHoursLabel } from '../../../../utils/hoursInput'
 
 export const workMinutesFromOriginalEntry = (entry: TimeEntry): number => {
   if (entry.isVacationDay) return VACATION_WORK_MINUTES

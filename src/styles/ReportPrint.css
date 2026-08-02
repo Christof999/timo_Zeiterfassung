@@ -519,6 +519,12 @@
   color: var(--text-secondary);
 }
 
+/* Vom Mitarbeiter selbst verrechnete Stunden – eigene Zeile, weil der Satz
+   erklärt, warum das Konto beim Speichern unberührt bleibt. */
+.overtime-selfbooked {
+  flex-basis: 100%;
+}
+
 .overtime-controls {
   display: flex;
   flex-wrap: wrap;

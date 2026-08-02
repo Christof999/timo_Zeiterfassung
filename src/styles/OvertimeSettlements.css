@@ -1,0 +1,170 @@
+/* Überstunden-Verrechnung (Mitarbeiter-Ansicht).
+   Aufbau und Maße bewusst wie bei den Urlaubsanträgen – beide Seiten hängen
+   am selben linken Menü und sollen sich gleich anfühlen. */
+
+.overtime-container {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--light-color);
+  padding: var(--spacing-md);
+  padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
+  padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
+}
+
+.overtime-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.overtime-header h1 {
+  font-size: clamp(1.375rem, 4vw, 1.625rem);
+  margin: 0;
+  flex: 1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-color);
+}
+
+.overtime-header-theme-toggle {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.overtime-container .card {
+  background: var(--card-background);
+  color: var(--text-color);
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  margin: 0 auto var(--spacing-lg);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  max-width: 600px;
+}
+
+.overtime-container .card h3 {
+  margin: 0 0 var(--spacing-lg);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.overtime-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--spacing-md);
+}
+
+.overtime-stats .stat {
+  text-align: center;
+}
+
+.overtime-stats .stat-value {
+  display: block;
+  font-size: clamp(2rem, 7vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-color);
+}
+
+.overtime-stats .stat-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.overtime-account-note {
+  margin: var(--spacing-lg) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.overtime-form .form-group {
+  margin-bottom: var(--spacing-lg);
+}
+
+.overtime-form label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-color);
+}
+
+.overtime-form input {
+  width: 100%;
+  min-height: var(--touch-target-min);
+  padding: 10px var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--card-background);
+  color: var(--text-color);
+  font-size: var(--font-size-base);
+}
+
+.overtime-form input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.overtime-form .form-hint {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.overtime-form .primary-btn {
+  width: 100%;
+}
+
+.overtime-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.overtime-history-table th,
+.overtime-history-table td {
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+}
+
+.overtime-history-table th {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.overtime-history-table .right {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.overtime-history-table tr.is-current td {
+  font-weight: var(--font-weight-semibold);
+}
+
+.overtime-current-badge {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.overtime-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.overtime-container .loading {
+  max-width: 600px;
+  margin: var(--spacing-2xl) auto;
+  text-align: center;
+  color: var(--text-secondary);
+}

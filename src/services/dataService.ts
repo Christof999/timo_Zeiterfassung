@@ -30,6 +30,7 @@ import * as employees from './data/employees'
 import * as projects from './data/projects'
 import * as leave from './data/leave'
 import * as settlements from './data/settlements'
+import * as overtimeSettlements from './data/overtimeSettlements'
 import * as hero from './data/hero'
 import * as dashboard from './data/dashboard'
 import type {
@@ -45,6 +46,7 @@ import type {
   MaterialType,
   MaterialCredit,
   TimeReportSettlement,
+  OvertimeSettlement,
   HeroIntegrationConfig,
   HeroSyncLogEntry,
   DashboardWidgetInstance
@@ -2336,8 +2338,11 @@ class DataServiceClass {
     return settlements.settlementDocId(employeeId, periodStart, periodEnd)
   }
 
-  saveTimeReportSettlement(data: Omit<TimeReportSettlement, 'id' | 'settledAt'>): Promise<void> {
-    return settlements.saveTimeReportSettlement(data)
+  saveTimeReportSettlement(
+    data: Omit<TimeReportSettlement, 'id' | 'settledAt'>,
+    options?: { alreadyBookedMinutes?: number }
+  ): Promise<void> {
+    return settlements.saveTimeReportSettlement(data, options)
   }
 
   getTimeReportSettlement(
@@ -2350,6 +2355,23 @@ class DataServiceClass {
 
   calculateWorkingDays(startDate: Date, endDate: Date): number {
     return settlements.calculateWorkingDays(startDate, endDate)
+  }
+
+  // ============ ÜBERSTUNDEN-VERRECHNUNG (data/overtimeSettlements.ts) ============
+  getOvertimeSettlements(employeeId: string): Promise<OvertimeSettlement[]> {
+    return overtimeSettlements.getOvertimeSettlements(employeeId)
+  }
+
+  getOvertimeSettlement(employeeId: string, month: string): Promise<OvertimeSettlement | null> {
+    return overtimeSettlements.getOvertimeSettlement(employeeId, month)
+  }
+
+  setOvertimeSettlementMinutes(
+    employeeId: string,
+    month: string,
+    minutes: number
+  ): Promise<number> {
+    return overtimeSettlements.setOvertimeSettlementMinutes(employeeId, month, minutes)
   }
 
   // Admin: Dashboard-Daten

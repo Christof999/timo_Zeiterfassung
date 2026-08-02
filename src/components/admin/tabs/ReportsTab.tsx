@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
-import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, MaterialCredit, MaterialType } from '../../../types'
+import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, OvertimeSettlement, MaterialCredit, MaterialType } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -35,6 +35,7 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
+import { monthKeyForPeriod, monthKeyLabel } from '../../../utils/overtimeMonth'
 import {
   DEFAULT_REGULAR_WORK_TIME,
   regularMinutesForDate,
@@ -127,6 +128,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [payoutInput, setPayoutInput] = useState('0:00')
   /** Übernommener Auszahlungsbetrag – erst ein Klick auf „In Zeilen übernehmen" setzt ihn. */
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
+  /** Vom Mitarbeiter selbst für den Monat angemeldete Überstunden (bereits vom Konto abgezogen). */
+  const [overtimeSettlement, setOvertimeSettlement] = useState<OvertimeSettlement | null>(null)
   const savedFlashTimeoutsRef = useRef<Map<string, number>>(new Map())
   /** Läuft bereits ein Speichervorgang für diese Zeile? (verhindert Doppel-Schreiben) */
   const savingGuardRef = useRef<Set<string>>(new Set())
@@ -445,6 +448,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
       const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, startDate, endDate)
       setEmployeeSettlement(settlement)
+
+      // Hat der Mitarbeiter für diesen Monat selbst Überstunden zur Verrechnung
+      // angemeldet, ist das der führende Wert: er ist bereits vom Konto
+      // abgezogen und wird hier nur noch als Vorgabe übernommen.
+      const monthKey = monthKeyForPeriod(startDate, endDate)
+      const monthSettlement = monthKey
+        ? await DataService.getOvertimeSettlement(selectedEmployeeId, monthKey)
+        : null
+      setOvertimeSettlement(monthSettlement)
+      if (monthSettlement && monthSettlement.minutes > 0) {
+        setOvertimeMode(true)
+        setPayoutInput(minutesToHoursLabel(monthSettlement.minutes))
+        setAppliedPayoutMinutes(monthSettlement.minutes)
+      }
     } catch (error) {
       console.error('Fehler:', error)
       toast.error('Fehler beim Laden der Zeiteinträge')
@@ -881,19 +898,28 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setIsSavingSettlement(true)
     try {
-      await DataService.saveTimeReportSettlement({
-        employeeId: selectedEmployeeId,
-        periodStart: startDate,
-        periodEnd: endDate,
-        paidOutMinutes,
-        rawTotalMinutes,
-        correctedTotalMinutes,
-        lines
-      })
+      // Was der Mitarbeiter für diesen Monat schon selbst verrechnet hat, ist
+      // bereits vom Konto abgezogen und darf hier nicht erneut gebucht werden.
+      const alreadyBookedMinutes = overtimeSettlement?.minutes || 0
+      await DataService.saveTimeReportSettlement(
+        {
+          employeeId: selectedEmployeeId,
+          periodStart: startDate,
+          periodEnd: endDate,
+          paidOutMinutes,
+          rawTotalMinutes,
+          correctedTotalMinutes,
+          lines
+        },
+        { alreadyBookedMinutes }
+      )
+      const newlyBookedMinutes = Math.max(0, paidOutMinutes - alreadyBookedMinutes)
       toast.success(
         overtimeMode
           ? paidOutMinutes > 0
-            ? `Abrechnung gespeichert. ${minutesToHoursLabel(paidOutMinutes)} Überstunden wurden vom Konto abgezogen.`
+            ? newlyBookedMinutes > 0
+              ? `Abrechnung gespeichert. ${minutesToHoursLabel(newlyBookedMinutes)} Überstunden wurden vom Konto abgezogen.`
+              : `Abrechnung gespeichert. Die ${minutesToHoursLabel(paidOutMinutes)} Überstunden hatte der Mitarbeiter bereits selbst verrechnet – das Konto bleibt unverändert.`
             : 'Abrechnung gespeichert (keine Überstunden zur Auszahlung eingetragen).'
           : paidOutMinutes > 0
             ? 'Abrechnung gespeichert. Differenz wurde als ausbezahlte/gekürzte Zeit erfasst.'
@@ -1672,6 +1698,13 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <span>
                           Im Zeitraum über Regelarbeitszeit:{' '}
                           <strong>{minutesToHoursLabel(adjustedReport.overtimeAvailableMinutes)}</strong>
+                        </span>
+                      )}
+                      {overtimeSettlement && overtimeSettlement.minutes > 0 && (
+                        <span className="overtime-selfbooked">
+                          Vom Mitarbeiter für {monthKeyLabel(overtimeSettlement.month)} verrechnet:{' '}
+                          <strong>{minutesToHoursLabel(overtimeSettlement.minutes)}</strong> – bereits
+                          vom Konto abgezogen, wird beim Speichern nicht erneut gebucht.
                         </span>
                       )}
                       <label className="meal-rate-field">
