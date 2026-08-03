@@ -37,6 +37,12 @@ import {
 import { parseHoursMinutesInput } from './reports/workTimeRules'
 import { monthKeyForPeriod, monthKeyLabel } from '../../../utils/overtimeMonth'
 import {
+  getReportMailConfig,
+  isValidEmail,
+  saveReportMailRecipient,
+  sendReportMail
+} from '../../../services/reportMailService'
+import {
   DEFAULT_REGULAR_WORK_TIME,
   regularMinutesForDate,
   regularMinutesForDateKey,
@@ -130,6 +136,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
   /** Vom Mitarbeiter selbst für den Monat angemeldete Überstunden (bereits vom Konto abgezogen). */
   const [overtimeSettlement, setOvertimeSettlement] = useState<OvertimeSettlement | null>(null)
+  /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
+  const [mailRecipient, setMailRecipient] = useState('')
+  const [mailNote, setMailNote] = useState('')
+  const [isSendingMail, setIsSendingMail] = useState(false)
   const savedFlashTimeoutsRef = useRef<Map<string, number>>(new Map())
   /** Läuft bereits ein Speichervorgang für diese Zeile? (verhindert Doppel-Schreiben) */
   const savingGuardRef = useRef<Set<string>>(new Set())
@@ -172,6 +182,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     setStartDate(formatDateForInputLocal(firstDay))
     setEndDate(formatDateForInputLocal(lastDay))
+    getReportMailConfig()
+      .then(config => setMailRecipient(config.recipient))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -1466,6 +1479,65 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
+  /** Baut dasselbe Druck-HTML wie „Drucken" – es geht als Datei an die Mail. */
+  const buildCurrentReportHtml = (): string =>
+    buildEmployeePrintHtml({
+      reportEntries: adjustedEntries,
+      startDate,
+      endDate,
+      employeeName: selectedEmployeeName,
+      periodLabel: formatPeriod(),
+      regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
+      payoutMinutes: adjustedReport.payoutMinutes,
+      hasLegalCorrection: hasLegalCorrection,
+      summary: adjustedReport.summary
+    })
+
+  const handleSaveRecipient = async () => {
+    try {
+      await saveReportMailRecipient(mailRecipient)
+      toast.success('Empfänger gespeichert.')
+    } catch (error: any) {
+      toast.error(error?.message || 'Empfänger konnte nicht gespeichert werden.')
+    }
+  }
+
+  const handleSendReportMail = async () => {
+    if (reportEntries.length === 0) {
+      toast.error('Kein Bericht zum Versenden vorhanden')
+      return
+    }
+    if (!isValidEmail(mailRecipient)) {
+      toast.error('Bitte eine gültige Empfängeradresse angeben.')
+      return
+    }
+
+    setIsSendingMail(true)
+    try {
+      const safeName = (selectedEmployeeName || 'mitarbeiter')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+      await sendReportMail({
+        to: mailRecipient.trim(),
+        employeeName: selectedEmployeeName,
+        periodLabel: formatPeriod(),
+        totalHours: minutesToHoursLabel(adjustedReport.shownTotalMinutes),
+        grossWage: formatCurrency(adjustedReport.summary.grossWageAmount),
+        note: mailNote.trim(),
+        senderName: COMPANY_NAME,
+        reportHtml: buildCurrentReportHtml(),
+        attachmentFilename: `zeiterfassungsbericht-${safeName}-${startDate}_${endDate}.html`
+      })
+      toast.success(`Bericht an ${mailRecipient.trim()} versendet.`)
+      setMailNote('')
+    } catch (error: any) {
+      toast.error(error?.message || 'Versand fehlgeschlagen')
+    } finally {
+      setIsSendingMail(false)
+    }
+  }
+
   const hasEdits = reportEntries.some(e => e.isEdited)
   const unsavedRowCount = reportEntries.filter(rowHasPersistableChange).length
 
@@ -1640,6 +1712,61 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
                     {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}
                   </button>
+                </div>
+              </div>
+
+              {/* Versand des Berichts. Der Empfänger wird gepflegt und gespeichert,
+                  damit er nicht bei jedem Versand neu eingetippt werden muss. */}
+              <div className="report-mail-panel no-print">
+                <div className="report-mail-head">
+                  <h4>Bericht per E-Mail senden</h4>
+                  <span className="report-mail-attachment">
+                    Anhang: Bericht als HTML-Datei (im Browser druckbar)
+                  </span>
+                </div>
+                <div className="report-mail-row">
+                  <label className="report-mail-field">
+                    Empfänger
+                    <input
+                      type="email"
+                      value={mailRecipient}
+                      onChange={e => setMailRecipient(e.target.value)}
+                      placeholder="name@kanzlei.de"
+                      className="inline-edit"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn secondary-btn"
+                    onClick={handleSaveRecipient}
+                    disabled={!isValidEmail(mailRecipient)}
+                  >
+                    Empfänger merken
+                  </button>
+                </div>
+                <label className="report-mail-field report-mail-note">
+                  Nachricht (optional)
+                  <textarea
+                    value={mailNote}
+                    onChange={e => setMailNote(e.target.value)}
+                    rows={2}
+                    placeholder="z. B. Bitte um Prüfung bis Monatsende."
+                    className="inline-edit"
+                  />
+                </label>
+                <div className="report-mail-actions">
+                  <button
+                    type="button"
+                    className="btn primary-btn"
+                    onClick={handleSendReportMail}
+                    disabled={isSendingMail || reportEntries.length === 0 || !isValidEmail(mailRecipient)}
+                  >
+                    {isSendingMail ? 'Sende…' : 'Bericht senden'}
+                  </button>
+                  <span className="report-mail-hint">
+                    Versendet wird der Bericht in der aktuell angezeigten Fassung – inklusive
+                    Abrechnungsblock mit dem Bruttolohn.
+                  </span>
                 </div>
               </div>
 

@@ -519,6 +519,74 @@
   color: var(--text-secondary);
 }
 
+/* E-Mail-Versand des Berichts */
+.report-mail-panel {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+}
+
+.report-mail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.report-mail-head h4 {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.report-mail-attachment {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.report-mail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.report-mail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 260px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.report-mail-field input,
+.report-mail-field textarea {
+  width: 100%;
+  font-family: inherit;
+}
+
+.report-mail-note {
+  margin-bottom: var(--spacing-md);
+}
+
+.report-mail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.report-mail-hint {
+  flex: 1 1 260px;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 /* Vom Mitarbeiter selbst verrechnete Stunden – eigene Zeile, weil der Satz
    erklärt, warum das Konto beim Speichern unberührt bleibt. */
 .overtime-selfbooked {
