@@ -20,6 +20,7 @@ import {
   enumerateDays,
   isWeekendDate,
   DEFAULT_MEAL_ALLOWANCE_EUR,
+  parseMealAllowanceInput,
   formatTimeForInput,
   formatHoursMinutes,
   calculateWorkHours,
@@ -127,10 +128,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     monThu: parseHoursMinutesInput(regularMonThuInput) ?? DEFAULT_REGULAR_WORK_TIME.monThu,
     fri: parseHoursMinutesInput(regularFriInput) ?? DEFAULT_REGULAR_WORK_TIME.fri
   }
-  const mealAllowanceRate = (() => {
-    const parsed = Number((mealAllowanceInput || '').replace(',', '.'))
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEAL_ALLOWANCE_EUR
-  })()
+  const mealAllowanceRate = parseMealAllowanceInput(mealAllowanceInput)
   const [payoutInput, setPayoutInput] = useState('0:00')
   /** Übernommener Auszahlungsbetrag – erst ein Klick auf „In Zeilen übernehmen" setzt ihn. */
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
@@ -1910,7 +1908,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                           value={mealAllowanceInput}
                           onChange={e => setMealAllowanceInput(e.target.value)}
                           className="inline-edit overtime-input"
-                          placeholder="14"
+                          placeholder="z. B. 14"
                         />
                       </label>
                     </div>

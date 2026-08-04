@@ -359,6 +359,25 @@ export const DEFAULT_MEAL_ALLOWANCE_EUR = 14
 export const MEAL_ALLOWANCE_FROM_MINUTES = 8 * 60
 
 /**
+ * Eingabefeld „Verpflegungsmehraufwand €/Tag" → Satz in EUR.
+ *
+ * 0 ist ausdrücklich erlaubt und bedeutet „kein Verpflegungsmehraufwand".
+ * Währungszeichen und Leerzeichen werden geschluckt: Das Feld ist mit „€/Tag"
+ * beschriftet, also tippt man dort erfahrungsgemäß auch „0 €" – das darf nicht
+ * als ungültig gelten und auf den Standardsatz zurückfallen.
+ *
+ * Leeres Feld = 0. Nur wirklich nicht deutbare Eingaben fallen auf 14 zurück.
+ */
+export const parseMealAllowanceInput = (raw: string): number => {
+  const cleaned = (raw || '')
+    .replace(/[€\s]/g, '')
+    .replace(/,/g, '.')
+  if (cleaned === '') return 0
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEAL_ALLOWANCE_EUR
+}
+
+/**
  * Die Summen, die Petra für die Lohnabrechnung meldet. Alle Beträge ergeben
  * sich aus Stunden × Stundenlohn; die Stunden kommen aus der ausgewiesenen
  * (gesetzlich korrigierten) Sicht, nicht aus den Rohzeiten.

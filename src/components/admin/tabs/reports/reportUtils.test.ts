@@ -12,6 +12,8 @@ import {
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
+  parseMealAllowanceInput,
+  DEFAULT_MEAL_ALLOWANCE_EUR,
   type ReportEntry
 } from './reportUtils'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
@@ -421,6 +423,18 @@ describe('Abrechnungs-Summen für den Beleg', () => {
     )
   })
 
+  it('rechnet mit 0 auch im Beleg – der Betrag bleibt 0', () => {
+    const report = buildAdjustedReport([workEntry(2, '07:00', '15:00')], {
+      hourlyRate: 20,
+      mealAllowanceRate: parseMealAllowanceInput('0 €')
+    })
+    expect(report.summary.mealAllowanceRate).toBe(0)
+    expect(report.summary.mealAllowanceAmount).toBe(0)
+    expect(report.summary.taxFreeAmount).toBe(0)
+    // Die Auszahlung ist dann exakt der Bruttolohn.
+    expect(report.summary.totalPayoutAmount).toBe(report.summary.grossWageAmount)
+  })
+
   describe('Azubi mit Fixlohn', () => {
     const entries = [
       workEntry(2, '07:00', '15:00'),
@@ -493,4 +507,36 @@ describe('Abrechnungs-Summen für den Beleg', () => {
       expect(report.summary.grossWageAmount).toBe(480)
     })
   })
+})
+
+describe('parseMealAllowanceInput', () => {
+  it('lässt 0 als gültigen Satz durch', () => {
+    expect(parseMealAllowanceInput('0')).toBe(0)
+    expect(parseMealAllowanceInput('0,00')).toBe(0)
+    expect(parseMealAllowanceInput('0.00')).toBe(0)
+  })
+
+  it('schluckt das Euro-Zeichen – das Feld ist mit €/Tag beschriftet', () => {
+    // Ohne diese Bereinigung wäre "0 €" ungültig und fiele auf 14 zurück:
+    // aus einer bewussten Null würde unbemerkt der Standardsatz.
+    expect(parseMealAllowanceInput('0 €')).toBe(0)
+    expect(parseMealAllowanceInput('0€')).toBe(0)
+    expect(parseMealAllowanceInput('14 €')).toBe(14)
+  })
+
+  it('behandelt ein leeres Feld als 0', () => {
+    expect(parseMealAllowanceInput('')).toBe(0)
+    expect(parseMealAllowanceInput('   ')).toBe(0)
+  })
+
+  it('nimmt Komma und Punkt als Dezimaltrenner', () => {
+    expect(parseMealAllowanceInput('13,5')).toBe(13.5)
+    expect(parseMealAllowanceInput('13.5')).toBe(13.5)
+  })
+
+  it('fällt nur bei wirklich unlesbaren Eingaben auf den Standardsatz zurück', () => {
+    expect(parseMealAllowanceInput('abc')).toBe(DEFAULT_MEAL_ALLOWANCE_EUR)
+    expect(parseMealAllowanceInput('-5')).toBe(DEFAULT_MEAL_ALLOWANCE_EUR)
+  })
+
 })
