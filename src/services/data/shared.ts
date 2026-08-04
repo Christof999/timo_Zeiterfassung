@@ -60,7 +60,11 @@ export function convertToDate(timestamp: unknown): Date {
 }
 
 /** POST an eine interne API-Route mit Firebase-ID-Token; wirft bei HTTP-Fehlern. */
-export async function postWithIdToken(path: string, body: unknown): Promise<void> {
+/** Gibt die Antwort der Function zurück; Aufrufer ohne Interesse daran ignorieren sie. */
+export async function postWithIdToken(
+  path: string,
+  body: unknown
+): Promise<Record<string, unknown> | null> {
   const currentAuthUser = auth.currentUser
   if (!currentAuthUser) {
     throw new Error('Kein Firebase Auth User vorhanden')
@@ -81,4 +85,6 @@ export async function postWithIdToken(path: string, body: unknown): Promise<void
     const errorMessage = errorPayload?.error || `HTTP ${response.status}`
     throw new Error(errorMessage)
   }
+
+  return response.json().catch(() => null)
 }

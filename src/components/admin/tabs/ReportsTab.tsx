@@ -35,7 +35,7 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
-import { monthKeyForPeriod, monthKeyLabel } from '../../../utils/overtimeMonth'
+import { currentMonthKey, monthKeyForPeriod, monthKeyLabel } from '../../../utils/overtimeMonth'
 import {
   getReportMailConfig,
   isValidEmail,
@@ -136,6 +136,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
   /** Vom Mitarbeiter selbst für den Monat angemeldete Überstunden (bereits vom Konto abgezogen). */
   const [overtimeSettlement, setOvertimeSettlement] = useState<OvertimeSettlement | null>(null)
+  /** Monatsend-Aufruf an alle Mitarbeiter (Popup in der App + Push aufs Handy). */
+  const [isBroadcasting, setIsBroadcasting] = useState(false)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
   const [mailRecipient, setMailRecipient] = useState('')
   const [mailNote, setMailNote] = useState('')
@@ -1512,6 +1514,31 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       summary: adjustedReport.summary
     })
 
+  const handleBroadcastOvertimeReminder = async () => {
+    const month = currentMonthKey()
+    const confirmed = window.confirm(
+      `Alle Mitarbeiter auffordern, ihre abzurechnenden Stunden für ${monthKeyLabel(month)} zu hinterlegen?\n\n` +
+        'Es erscheint ein Popup in der App und – sofern das Gerät angemeldet ist – ' +
+        'eine Benachrichtigung auf dem Handy.'
+    )
+    if (!confirmed) return
+
+    setIsBroadcasting(true)
+    try {
+      const result = await DataService.triggerOvertimeReminderBroadcast(month)
+      const pushInfo =
+        result.sent > 0
+          ? ` ${result.sent} Gerät${result.sent === 1 ? '' : 'e'} benachrichtigt.`
+          : ''
+      toast.success(`Erinnerung ausgelöst.${pushInfo}`)
+      if (result.message) toast.info(result.message)
+    } catch (error: any) {
+      toast.error(error?.message || 'Erinnerung konnte nicht ausgelöst werden.')
+    } finally {
+      setIsBroadcasting(false)
+    }
+  }
+
   const handleSaveRecipient = async () => {
     try {
       await saveReportMailRecipient(mailRecipient)
@@ -1611,6 +1638,27 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       {/* ==================== MITARBEITER-BERICHT ==================== */}
       {isEmployeeReportEnabled && reportType === 'employee' && (
         <>
+          {/* Monatsabschluss: betrifft alle Mitarbeiter, nicht den ausgewählten. */}
+          <div className="broadcast-panel no-print">
+            <div className="broadcast-text">
+              <h3>Monatsabschluss – alle Mitarbeiter erinnern</h3>
+              <p>
+                Löst bei allen Mitarbeitern ein Popup in der App aus und schickt eine
+                Benachrichtigung auf angemeldete Handys. Ein Klick darauf führt direkt zur
+                Überstunden-Verrechnung. Wer für {monthKeyLabel(currentMonthKey())} bereits etwas
+                eingetragen hat, wird nicht behelligt.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn primary-btn"
+              onClick={handleBroadcastOvertimeReminder}
+              disabled={isBroadcasting}
+            >
+              {isBroadcasting ? 'Sende…' : 'Jetzt alle erinnern'}
+            </button>
+          </div>
+
           <div className="report-filters no-print">
             <h3>Zeitauswertung erstellen</h3>
             <div className="filter-row">

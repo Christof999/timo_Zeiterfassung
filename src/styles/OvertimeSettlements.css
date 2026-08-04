@@ -121,6 +121,23 @@
   width: 100%;
 }
 
+.overtime-push-status {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.overtime-push .btn {
+  width: 100%;
+}
+
+.overtime-push .form-hint {
+  display: block;
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 .overtime-history-table {
   width: 100%;
   border-collapse: collapse;

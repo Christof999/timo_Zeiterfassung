@@ -15,8 +15,11 @@ import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import { currentMonthKey } from '../utils/overtimeMonth'
 import {
+  readDismissedBroadcastAt,
   readDismissedMonth,
+  shouldShowBroadcastReminder,
   shouldShowOvertimeReminder,
+  writeDismissedBroadcastAt,
   writeDismissedMonth
 } from '../utils/overtimeReminder'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
@@ -46,6 +49,8 @@ const TimeTracking: React.FC = () => {
   const [overtimeReminder, setOvertimeReminder] = useState<{
     month: string
     balanceMinutes: number
+    /** Vom Admin ausgelöst – dann wird beim Wegklicken der Aufruf quittiert. */
+    broadcastAt?: number
   } | null>(null)
   const navigate = useNavigate()
 
@@ -87,10 +92,53 @@ const TimeTracking: React.FC = () => {
 
   const handleDismissOvertimeReminder = () => {
     if (currentUser?.id && overtimeReminder) {
-      writeDismissedMonth(currentUser.id, overtimeReminder.month)
+      if (overtimeReminder.broadcastAt) {
+        writeDismissedBroadcastAt(currentUser.id, overtimeReminder.broadcastAt)
+      } else {
+        writeDismissedMonth(currentUser.id, overtimeReminder.month)
+      }
     }
     setOvertimeReminder(null)
   }
+
+  /**
+   * Der Admin kann die Erinnerung von Hand auslösen. Wir hören live mit, damit
+   * das Popup auch bei geöffneter App sofort erscheint – nicht erst beim
+   * nächsten Laden.
+   */
+  useEffect(() => {
+    if (!currentUser?.id) return
+    const employeeId = currentUser.id
+    const balanceMinutes = Math.max(0, Number(currentUser.overtimeBalanceMinutes) || 0)
+
+    const unsubscribe = DataService.subscribeToOvertimeReminderBroadcast(async broadcast => {
+      if (
+        !shouldShowBroadcastReminder({
+          broadcastAt: broadcast?.triggeredAt || null,
+          hasSettlementForMonth: false,
+          dismissedBroadcastAt: readDismissedBroadcastAt(employeeId)
+        })
+      ) {
+        return
+      }
+
+      // Wer für den Monat schon etwas eingetragen hat, wird nicht behelligt.
+      try {
+        const settlement = await DataService.getOvertimeSettlement(employeeId, broadcast!.month)
+        if (settlement) return
+      } catch (error) {
+        console.warn('Überstunden-Eintrag konnte nicht geprüft werden:', error)
+      }
+
+      setOvertimeReminder({
+        month: broadcast!.month,
+        balanceMinutes,
+        broadcastAt: broadcast!.triggeredAt.getTime()
+      })
+    })
+
+    return unsubscribe
+  }, [currentUser?.id, currentUser?.overtimeBalanceMinutes])
 
   useEffect(() => {
     const init = async () => {

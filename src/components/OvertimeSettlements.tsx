@@ -6,6 +6,7 @@ import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { minutesToHoursLabel, parseHoursMinutesInput } from '../utils/hoursInput'
 import { currentMonthKey, monthKeyLabel } from '../utils/overtimeMonth'
+import { pushNotificationService } from '../services/pushNotificationService'
 import '../styles/OvertimeSettlements.css'
 
 /**
@@ -23,6 +24,11 @@ const OvertimeSettlements: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [hoursInput, setHoursInput] = useState('')
+  /** Benachrichtigungen aufs Handy – ohne Anmeldung erreicht der Admin-Aufruf dieses Gerät nicht. */
+  const [pushState, setPushState] = useState<{ supported: boolean; reason?: string; active: boolean }>(
+    { supported: false, active: false }
+  )
+  const [isTogglingPush, setIsTogglingPush] = useState(false)
 
   const thisMonth = currentMonthKey()
 
@@ -56,11 +62,44 @@ const OvertimeSettlements: React.FC = () => {
       setSettlements(entries)
       const forThisMonth = entries.find((entry) => entry.month === thisMonth)
       setHoursInput(forThisMonth ? minutesToHoursLabel(forThisMonth.minutes) : '')
+      await refreshPushState()
     } catch (error) {
       console.error('Fehler beim Laden:', error)
       toast.error('Fehler beim Laden der Überstunden-Verrechnung')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const refreshPushState = async () => {
+    const support = pushNotificationService.getSupportState()
+    if (!support.isSupported) {
+      setPushState({ supported: false, reason: support.reason, active: false })
+      return
+    }
+    const existing = await pushNotificationService.getCurrentSubscription()
+    setPushState({ supported: true, active: !!existing })
+  }
+
+  const handleTogglePush = async () => {
+    if (!currentUser) return
+    setIsTogglingPush(true)
+    try {
+      if (pushState.active) {
+        await pushNotificationService.disableSubscription('employee')
+        toast.success('Benachrichtigungen ausgeschaltet.')
+      } else {
+        await pushNotificationService.requestAndSaveSubscription(
+          { id: currentUser.id, username: currentUser.username, name: currentUser.name },
+          'employee'
+        )
+        toast.success('Benachrichtigungen aktiviert.')
+      }
+      await refreshPushState()
+    } catch (error: any) {
+      toast.error(error?.message || 'Benachrichtigungen konnten nicht geändert werden.')
+    } finally {
+      setIsTogglingPush(false)
     }
   }
 
@@ -163,6 +202,35 @@ const OvertimeSettlements: React.FC = () => {
             {isSaving ? 'Speichere…' : 'Übernehmen'}
           </button>
         </form>
+      </div>
+
+      <div className="overtime-push card">
+        <h3>Erinnerung aufs Handy</h3>
+        {pushState.supported ? (
+          <>
+            <p className="overtime-push-status">
+              Status: <strong>{pushState.active ? 'aktiv' : 'nicht aktiv'}</strong>
+            </p>
+            <button
+              type="button"
+              className={`btn ${pushState.active ? 'secondary-btn' : 'primary-btn'}`}
+              onClick={handleTogglePush}
+              disabled={isTogglingPush}
+            >
+              {isTogglingPush
+                ? 'Einen Moment…'
+                : pushState.active
+                  ? 'Benachrichtigungen ausschalten'
+                  : 'Benachrichtigungen einschalten'}
+            </button>
+            <small className="form-hint">
+              Zum Monatsende erinnert dich die App dann auch auf dem Startbildschirm daran, deine
+              Stunden einzutragen.
+            </small>
+          </>
+        ) : (
+          <p className="overtime-push-status">{pushState.reason}</p>
+        )}
       </div>
 
       <div className="overtime-history card">

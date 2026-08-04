@@ -77,7 +77,14 @@ class PushNotificationService {
     return registration.pushManager.getSubscription()
   }
 
-  async requestAndSaveSubscription(admin: { id?: string; username?: string; name?: string }): Promise<void> {
+  /**
+   * @param scope 'admin' = Verwaltungs-Benachrichtigungen (Standard),
+   *              'employee' = Meldungen an Mitarbeiter-Geräte.
+   */
+  async requestAndSaveSubscription(
+    person: { id?: string; username?: string; name?: string },
+    scope: 'admin' | 'employee' = 'admin'
+  ): Promise<void> {
     const supportState = this.getSupportState()
     if (!supportState.isSupported) {
       throw new Error(supportState.reason || 'Push wird nicht unterstützt.')
@@ -99,16 +106,24 @@ class PushNotificationService {
       })
     }
 
-    await DataService.saveAdminPushSubscription(subscription.toJSON(), admin)
+    if (scope === 'employee') {
+      await DataService.saveEmployeePushSubscription(subscription.toJSON(), person)
+    } else {
+      await DataService.saveAdminPushSubscription(subscription.toJSON(), person)
+    }
   }
 
-  async disableSubscription(): Promise<void> {
+  async disableSubscription(scope: 'admin' | 'employee' = 'admin'): Promise<void> {
     const subscription = await this.getCurrentSubscription()
     if (!subscription) {
       return
     }
 
-    await DataService.removeAdminPushSubscription(subscription.endpoint)
+    if (scope === 'employee') {
+      await DataService.removeEmployeePushSubscription(subscription.endpoint)
+    } else {
+      await DataService.removeAdminPushSubscription(subscription.endpoint)
+    }
     await subscription.unsubscribe()
   }
 

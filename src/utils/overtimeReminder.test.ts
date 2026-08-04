@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   isOvertimeReminderDay,
   lastWorkingDayOfMonth,
+  shouldShowBroadcastReminder,
   shouldShowOvertimeReminder
 } from './overtimeReminder'
 
@@ -78,5 +79,50 @@ describe('shouldShowOvertimeReminder', () => {
 
   it('schweigt mitten im Monat, auch wenn alles andere passt', () => {
     expect(shouldShowOvertimeReminder({ ...base, today: new Date(2026, 4, 12) })).toBe(false)
+  })
+})
+
+describe('shouldShowBroadcastReminder', () => {
+  const broadcastAt = new Date(2026, 7, 4, 10, 0)
+  const base = {
+    broadcastAt,
+    hasSettlementForMonth: false,
+    dismissedBroadcastAt: null
+  }
+
+  it('zeigt den Aufruf des Admins an', () => {
+    expect(shouldShowBroadcastReminder(base)).toBe(true)
+  })
+
+  it('sticht das Datum – gilt auch mitten im Monat', () => {
+    // Der 04.08. ist weit vom Monatsende entfernt, der Aufruf zählt trotzdem.
+    expect(isOvertimeReminderDay(broadcastAt)).toBe(false)
+    expect(shouldShowBroadcastReminder(base)).toBe(true)
+  })
+
+  it('schweigt ohne Aufruf', () => {
+    expect(shouldShowBroadcastReminder({ ...base, broadcastAt: null })).toBe(false)
+  })
+
+  it('schweigt, wenn für den Monat schon etwas eingetragen wurde', () => {
+    expect(shouldShowBroadcastReminder({ ...base, hasSettlementForMonth: true })).toBe(false)
+  })
+
+  it('schweigt für einen bereits quittierten Aufruf', () => {
+    expect(
+      shouldShowBroadcastReminder({ ...base, dismissedBroadcastAt: broadcastAt.getTime() })
+    ).toBe(false)
+  })
+
+  it('erreicht auch, wer den letzten Aufruf weggeklickt hat', () => {
+    // Der Admin drückt erneut: neuer Zeitstempel schlägt die alte Quittung.
+    const zweiterAufruf = new Date(broadcastAt.getTime() + 60_000)
+    expect(
+      shouldShowBroadcastReminder({
+        ...base,
+        broadcastAt: zweiterAufruf,
+        dismissedBroadcastAt: broadcastAt.getTime()
+      })
+    ).toBe(true)
   })
 })

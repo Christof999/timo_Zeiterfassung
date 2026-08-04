@@ -66,22 +66,39 @@ module.exports = async function handler(req, res) {
     const action = payload.action
     const db = getFirestore()
 
+    // Admin- und Mitarbeiter-Geräte liegen getrennt: an Mitarbeiter gehen
+    // andere Benachrichtigungen als an die Verwaltung. Ohne scope bleibt es
+    // beim bisherigen Verhalten (Admin).
+    const isEmployeeScope = payload.scope === 'employee'
+    const collectionName = isEmployeeScope ? 'employeePushSubscriptions' : 'adminPushSubscriptions'
+
     if (action === 'upsert') {
       const subscription = payload.subscription || {}
       if (!subscription.endpoint) {
         return res.status(400).json({ success: false, error: 'subscription.endpoint fehlt' })
       }
 
+      const person = payload.employee || payload.admin || {}
+      const identity = isEmployeeScope
+        ? {
+            employeeId: person.id || null,
+            employeeUsername: person.username || null,
+            employeeName: person.name || null
+          }
+        : {
+            adminId: person.id || null,
+            adminUsername: person.username || null,
+            adminName: person.name || null
+          }
+
       const subscriptionId = createPushSubscriptionDocId(subscription.endpoint)
-      await db.collection('adminPushSubscriptions').doc(subscriptionId).set(
+      await db.collection(collectionName).doc(subscriptionId).set(
         {
           endpoint: subscription.endpoint,
           keys: subscription.keys || {},
           expirationTime: subscription.expirationTime ?? null,
           active: true,
-          adminId: payload.admin?.id || null,
-          adminUsername: payload.admin?.username || null,
-          adminName: payload.admin?.name || null,
+          ...identity,
           permission: payload.permission || null,
           isStandalone: !!payload.isStandalone,
           userAgent: payload.userAgent || null,
@@ -102,7 +119,7 @@ module.exports = async function handler(req, res) {
       }
 
       const subscriptionId = createPushSubscriptionDocId(endpoint)
-      await db.collection('adminPushSubscriptions').doc(subscriptionId).set(
+      await db.collection(collectionName).doc(subscriptionId).set(
         {
           active: false,
           disabledAt: new Date(),

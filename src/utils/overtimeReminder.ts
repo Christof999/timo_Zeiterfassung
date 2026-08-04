@@ -58,9 +58,54 @@ export const shouldShowOvertimeReminder = ({
   return isOvertimeReminderDay(today)
 }
 
+/**
+ * Der Admin kann die Erinnerung zusätzlich von Hand auslösen. Sie sticht die
+ * Tagesregel: gefragt ist dann jeder, unabhängig vom Datum. Ein früher
+ * weggeklickter Hinweis blockiert einen neuen Aufruf nicht – sonst könnte der
+ * Admin niemanden mehr erreichen, der schon einmal weggeklickt hat.
+ */
+export const shouldShowBroadcastReminder = ({
+  broadcastAt,
+  hasSettlementForMonth,
+  dismissedBroadcastAt
+}: {
+  /** Zeitpunkt des Admin-Aufrufs, null = kein Aufruf */
+  broadcastAt: Date | null
+  hasSettlementForMonth: boolean
+  /** Zuletzt weggeklickter Aufruf (ms seit Epoch) */
+  dismissedBroadcastAt: number | null
+}): boolean => {
+  if (!broadcastAt) return false
+  if (hasSettlementForMonth) return false
+  if (dismissedBroadcastAt !== null && broadcastAt.getTime() <= dismissedBroadcastAt) return false
+  return true
+}
+
 /** localStorage-Schlüssel je Mitarbeiter; gespeichert wird der weggeklickte Monat. */
 export const overtimeReminderDismissKey = (employeeId: string): string =>
   `overtimeReminderDismissed:${employeeId}`
+
+/** localStorage-Schlüssel für den zuletzt weggeklickten Admin-Aufruf. */
+export const broadcastDismissKey = (employeeId: string): string =>
+  `overtimeBroadcastDismissed:${employeeId}`
+
+export const readDismissedBroadcastAt = (employeeId: string): number | null => {
+  try {
+    const raw = localStorage.getItem(broadcastDismissKey(employeeId))
+    const parsed = raw ? Number(raw) : NaN
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+export const writeDismissedBroadcastAt = (employeeId: string, timestamp: number): void => {
+  try {
+    localStorage.setItem(broadcastDismissKey(employeeId), String(timestamp))
+  } catch {
+    // Kein localStorage – dann erscheint der Hinweis erneut.
+  }
+}
 
 export const readDismissedMonth = (employeeId: string): string | null => {
   try {

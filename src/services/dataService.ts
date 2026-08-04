@@ -31,6 +31,7 @@ import * as projects from './data/projects'
 import * as leave from './data/leave'
 import * as settlements from './data/settlements'
 import * as overtimeSettlements from './data/overtimeSettlements'
+import * as overtimeBroadcast from './data/overtimeBroadcast'
 import * as hero from './data/hero'
 import * as dashboard from './data/dashboard'
 import type {
@@ -2235,6 +2236,35 @@ class DataServiceClass {
 
   removeAdminPushSubscription(endpoint: string): Promise<void> {
     return session.removeAdminPushSubscription(endpoint)
+  }
+
+  saveEmployeePushSubscription(
+    subscription: PushSubscriptionJSON,
+    employee: { id?: string; username?: string; name?: string }
+  ): Promise<void> {
+    return session.saveEmployeePushSubscription(subscription, employee)
+  }
+
+  removeEmployeePushSubscription(endpoint: string): Promise<void> {
+    return session.removeEmployeePushSubscription(endpoint)
+  }
+
+  // ============ MONATSEND-ERINNERUNG (data/overtimeBroadcast.ts) ============
+  getOvertimeReminderBroadcast(): Promise<overtimeBroadcast.OvertimeReminderBroadcast | null> {
+    return overtimeBroadcast.getOvertimeReminderBroadcast()
+  }
+
+  subscribeToOvertimeReminderBroadcast(
+    onBroadcast: (broadcast: overtimeBroadcast.OvertimeReminderBroadcast | null) => void
+  ): () => void {
+    return overtimeBroadcast.subscribeToOvertimeReminderBroadcast(onBroadcast)
+  }
+
+  triggerOvertimeReminderBroadcast(
+    month: string,
+    triggeredByName?: string
+  ): Promise<overtimeBroadcast.TriggerBroadcastResult> {
+    return overtimeBroadcast.triggerOvertimeReminderBroadcast(month, triggeredByName)
   }
 
   authenticateAdmin(username: string, password: string): Promise<session.AdminSession | null> {

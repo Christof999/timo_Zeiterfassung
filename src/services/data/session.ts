@@ -161,6 +161,41 @@ export async function saveAdminPushSubscription(
   })
 }
 
+/** Wie oben, aber für Mitarbeiter-Geräte (eigene Collection, eigene Meldungen). */
+export async function saveEmployeePushSubscription(
+  subscription: PushSubscriptionJSON,
+  employee: { id?: string; username?: string; name?: string }
+): Promise<void> {
+  if (!subscription.endpoint) {
+    throw new Error('Push-Subscription enthält keinen Endpoint')
+  }
+
+  await authReady
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+
+  await postWithIdToken('/api/push/subscription', {
+    action: 'upsert',
+    scope: 'employee',
+    subscription,
+    employee,
+    permission: Notification.permission,
+    isStandalone,
+    userAgent: navigator.userAgent
+  })
+}
+
+export async function removeEmployeePushSubscription(endpoint: string): Promise<void> {
+  if (!endpoint) return
+  await authReady
+  await postWithIdToken('/api/push/subscription', {
+    action: 'disable',
+    scope: 'employee',
+    endpoint
+  })
+}
+
 export async function removeAdminPushSubscription(endpoint: string): Promise<void> {
   if (!endpoint) {
     return

@@ -519,6 +519,36 @@
   color: var(--text-secondary);
 }
 
+/* Monatsend-Aufruf an alle Mitarbeiter */
+.broadcast-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+}
+
+.broadcast-text {
+  flex: 1 1 320px;
+}
+
+.broadcast-text h3 {
+  margin: 0 0 4px;
+  font-size: var(--font-size-md);
+}
+
+.broadcast-text p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
 /* E-Mail-Versand des Berichts */
 .report-mail-panel {
   margin-top: var(--spacing-lg);
