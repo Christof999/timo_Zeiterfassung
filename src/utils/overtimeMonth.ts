@@ -22,6 +22,19 @@ export const monthKeyForDate = (date: Date): string =>
 /** Der Monat, in dem gerade gearbeitet wird. */
 export const currentMonthKey = (): string => monthKeyForDate(new Date())
 
+/**
+ * Der Vormonat – das ist der Monat, der abgerechnet wird. Anfang August wird
+ * der Juli gemeldet, nicht der laufende August.
+ */
+export const previousMonthKey = (from: Date = new Date()): string =>
+  monthKeyForDate(new Date(from.getFullYear(), from.getMonth() - 1, 1))
+
+/** Die Monate, für die noch eingetragen werden darf: Vormonat und laufender Monat. */
+export const settleableMonthKeys = (from: Date = new Date()): string[] => [
+  previousMonthKey(from),
+  monthKeyForDate(from)
+]
+
 /** "2026-03" → "März 2026". Unbekanntes Format bleibt unverändert. */
 export const monthKeyLabel = (monthKey: string): string => {
   const [year, month] = (monthKey || '').split('-')

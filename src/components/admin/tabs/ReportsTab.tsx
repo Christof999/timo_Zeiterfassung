@@ -35,7 +35,7 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
-import { currentMonthKey, monthKeyForPeriod, monthKeyLabel } from '../../../utils/overtimeMonth'
+import { monthKeyForPeriod, monthKeyLabel, previousMonthKey } from '../../../utils/overtimeMonth'
 import {
   getReportMailConfig,
   isValidEmail,
@@ -1515,9 +1515,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     })
 
   const handleBroadcastOvertimeReminder = async () => {
-    const month = currentMonthKey()
+    // Abgerechnet wird der Vormonat – Anfang August also der Juli.
+    const month = previousMonthKey()
     const confirmed = window.confirm(
-      `Alle Mitarbeiter auffordern, ihre abzurechnenden Stunden für ${monthKeyLabel(month)} zu hinterlegen?\n\n` +
+      `Alle Mitarbeiter fragen, wie viele Stunden für ${monthKeyLabel(month)} abgerechnet werden sollen?\n\n` +
         'Es erscheint ein Popup in der App und – sofern das Gerät angemeldet ist – ' +
         'eine Benachrichtigung auf dem Handy.'
     )
@@ -1641,12 +1642,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           {/* Monatsabschluss: betrifft alle Mitarbeiter, nicht den ausgewählten. */}
           <div className="broadcast-panel no-print">
             <div className="broadcast-text">
-              <h3>Monatsabschluss – alle Mitarbeiter erinnern</h3>
+              <h3>Monatsabschluss {monthKeyLabel(previousMonthKey())} – alle Mitarbeiter fragen</h3>
               <p>
-                Löst bei allen Mitarbeitern ein Popup in der App aus und schickt eine
-                Benachrichtigung auf angemeldete Handys. Ein Klick darauf führt direkt zur
-                Überstunden-Verrechnung. Wer für {monthKeyLabel(currentMonthKey())} bereits etwas
-                eingetragen hat, wird nicht behelligt.
+                Fragt alle Mitarbeiter, wie viele Stunden für{' '}
+                <strong>{monthKeyLabel(previousMonthKey())}</strong> abgerechnet werden sollen:
+                Popup in der App und Benachrichtigung auf angemeldete Handys, beides führt direkt
+                zur Eingabe. Wer für den Monat bereits etwas eingetragen hat, wird nicht behelligt.
               </p>
             </div>
             <button

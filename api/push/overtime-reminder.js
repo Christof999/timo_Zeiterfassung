@@ -112,12 +112,17 @@ module.exports = async function handler(req, res) {
       })
     }
 
-    // Klick auf die Benachrichtigung landet direkt auf der Verrechnungsseite –
+    // Klick auf die Benachrichtigung landet direkt beim richtigen Monat –
     // der Service Worker wertet `url` aus.
+    const month = typeof req.body?.month === 'string' ? req.body.month : ''
+    const monthLabel =
+      typeof req.body?.monthLabel === 'string' && req.body.monthLabel
+        ? req.body.monthLabel
+        : 'den letzten Monat'
     const payload = JSON.stringify({
       title: 'Stunden abrechnen',
-      body: 'Bitte hinterlege deine abzurechnenden Überstunden für diesen Monat.',
-      url: '/overtime',
+      body: `Wie viele Stunden sollen für ${monthLabel} abgerechnet werden?`,
+      url: month ? `/overtime?month=${encodeURIComponent(month)}` : '/overtime',
       icon: '/icon-192.png',
       badge: '/icon-192.png'
     })

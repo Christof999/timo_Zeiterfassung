@@ -1,24 +1,29 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, OvertimeSettlement } from '../types'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { minutesToHoursLabel, parseHoursMinutesInput } from '../utils/hoursInput'
-import { currentMonthKey, monthKeyLabel } from '../utils/overtimeMonth'
+import { monthKeyLabel, previousMonthKey, settleableMonthKeys } from '../utils/overtimeMonth'
 import { pushNotificationService } from '../services/pushNotificationService'
 import '../styles/OvertimeSettlements.css'
 
 /**
- * Überstunden-Verrechnung aus Sicht des Mitarbeiters.
+ * Überstunden-Abrechnung aus Sicht des Mitarbeiters.
  *
- * Der eingetragene Wert gilt für den laufenden Monat und ist sofort vom
- * Überstundenkonto abgezogen – auch mitten im Monat. Solange der Monat läuft,
- * lässt er sich beliebig oft korrigieren; abgeschlossene Monate stehen nur
- * noch als Verlauf da.
+ * Eintragen lässt sich für den Vormonat und den laufenden Monat: abgerechnet
+ * wird üblicherweise der Monat, der gerade zu Ende ist (Anfang August also der
+ * Juli), gebucht werden darf aber auch schon im laufenden Monat. Der Wert ist
+ * sofort vom Überstundenkonto abgezogen und bleibt änderbar; ältere Monate
+ * stehen nur noch als Verlauf da.
+ *
+ * Über `?month=YYYY-MM` lässt sich der Monat vorwählen – so landet der Klick
+ * aus der Erinnerung direkt beim richtigen.
  */
 const OvertimeSettlements: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
   const [settlements, setSettlements] = useState<OvertimeSettlement[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -30,11 +35,22 @@ const OvertimeSettlements: React.FC = () => {
   )
   const [isTogglingPush, setIsTogglingPush] = useState(false)
 
-  const thisMonth = currentMonthKey()
+  const monthOptions = settleableMonthKeys()
+  /** Vorwahl aus der Erinnerung, sonst der abzurechnende Vormonat. */
+  const requestedMonth = searchParams.get('month')
+  const [selectedMonth, setSelectedMonth] = useState(
+    requestedMonth && monthOptions.includes(requestedMonth) ? requestedMonth : previousMonthKey()
+  )
 
   useEffect(() => {
     loadData()
   }, [])
+
+  /** Beim Monatswechsel den gespeicherten Wert dieses Monats ins Feld holen. */
+  useEffect(() => {
+    const forMonth = settlements.find(entry => entry.month === selectedMonth)
+    setHoursInput(forMonth ? minutesToHoursLabel(forMonth.minutes) : '')
+  }, [selectedMonth, settlements])
 
   const loadData = async () => {
     try {
@@ -60,12 +76,10 @@ const OvertimeSettlements: React.FC = () => {
 
       const entries = await DataService.getOvertimeSettlements(record.id!)
       setSettlements(entries)
-      const forThisMonth = entries.find((entry) => entry.month === thisMonth)
-      setHoursInput(forThisMonth ? minutesToHoursLabel(forThisMonth.minutes) : '')
       await refreshPushState()
     } catch (error) {
       console.error('Fehler beim Laden:', error)
-      toast.error('Fehler beim Laden der Überstunden-Verrechnung')
+      toast.error('Fehler beim Laden der Überstunden-Abrechnung')
     } finally {
       setIsLoading(false)
     }
@@ -104,16 +118,17 @@ const OvertimeSettlements: React.FC = () => {
   }
 
   const balanceMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
-  const settledThisMonth = settlements.find((entry) => entry.month === thisMonth)?.minutes || 0
-  /** Bereits verrechnete Stunden sind abgezogen – für eine Korrektur nach oben zählen sie mit. */
-  const maxSettleableMinutes = balanceMinutes + settledThisMonth
+  const settledSelectedMonth =
+    settlements.find((entry) => entry.month === selectedMonth)?.minutes || 0
+  /** Bereits abgerechnete Stunden sind abgezogen – für eine Korrektur nach oben zählen sie mit. */
+  const maxSettleableMinutes = balanceMinutes + settledSelectedMonth
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentUser?.id) return
 
     const trimmed = hoursInput.trim()
-    // Leeres Feld = nichts verrechnen. Das gibt bereits gebuchte Stunden zurück.
+    // Leeres Feld = nichts abrechnen. Das gibt bereits gebuchte Stunden zurück.
     const minutes = trimmed === '' ? 0 : parseHoursMinutesInput(trimmed)
     if (minutes === null) {
       toast.error('Bitte Stunden als „8:30“ oder „8,5“ eingeben.')
@@ -128,11 +143,11 @@ const OvertimeSettlements: React.FC = () => {
 
     setIsSaving(true)
     try {
-      await DataService.setOvertimeSettlementMinutes(currentUser.id, thisMonth, minutes)
+      await DataService.setOvertimeSettlementMinutes(currentUser.id, selectedMonth, minutes)
       toast.success(
         minutes > 0
-          ? `${minutesToHoursLabel(minutes)} Std für ${monthKeyLabel(thisMonth)} verrechnet.`
-          : `Verrechnung für ${monthKeyLabel(thisMonth)} zurückgenommen.`
+          ? `${minutesToHoursLabel(minutes)} Std für ${monthKeyLabel(selectedMonth)} abgerechnet.`
+          : `Abrechnung für ${monthKeyLabel(selectedMonth)} zurückgenommen.`
       )
       await loadData()
     } catch (error: any) {
@@ -150,7 +165,9 @@ const OvertimeSettlements: React.FC = () => {
     )
   }
 
-  const history = settlements.filter((entry) => entry.minutes > 0 || entry.month === thisMonth)
+  const history = settlements.filter(
+    (entry) => entry.minutes > 0 || monthOptions.includes(entry.month)
+  )
 
   return (
     <div className="overtime-container">
@@ -158,7 +175,7 @@ const OvertimeSettlements: React.FC = () => {
         <button onClick={() => navigate('/time-tracking')} className="back-btn">
           Zurück
         </button>
-        <h1>Überstunden verrechnen</h1>
+        <h1>Stunden abrechnen</h1>
         <ThemeToggle variant="icon" className="overtime-header-theme-toggle" />
       </header>
 
@@ -170,20 +187,36 @@ const OvertimeSettlements: React.FC = () => {
             <span className="stat-label">Verfügbar</span>
           </div>
           <div className="stat">
-            <span className="stat-value">{minutesToHoursLabel(settledThisMonth)}</span>
-            <span className="stat-label">Diesen Monat verrechnet</span>
+            <span className="stat-value">{minutesToHoursLabel(settledSelectedMonth)}</span>
+            <span className="stat-label">Für {monthKeyLabel(selectedMonth)} abgerechnet</span>
           </div>
         </div>
         <p className="overtime-account-note">
-          Verrechnete Stunden sind sofort vom Konto abgezogen – auch wenn der Monat noch läuft.
+          Abgerechnete Stunden sind sofort vom Konto abgezogen und bleiben änderbar.
         </p>
       </div>
 
       <div className="overtime-form card">
-        <h3>{monthKeyLabel(thisMonth)} – laufender Monat</h3>
+        <h3>Wie viele Stunden sollen für {monthKeyLabel(selectedMonth)} abgerechnet werden?</h3>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="overtime-hours">Zu verrechnende Überstunden:</label>
+            <label htmlFor="overtime-month">Monat:</label>
+            <select
+              id="overtime-month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              disabled={isSaving}
+            >
+              {monthOptions.map((month) => (
+                <option key={month} value={month}>
+                  {monthKeyLabel(month)}
+                  {month === previousMonthKey() ? ' (abzurechnen)' : ' (läuft noch)'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="overtime-hours">Stunden:</label>
             <input
               id="overtime-hours"
               type="text"
@@ -194,8 +227,8 @@ const OvertimeSettlements: React.FC = () => {
               disabled={isSaving}
             />
             <small className="form-hint">
-              Maximal {minutesToHoursLabel(maxSettleableMinutes)} Std. Der Wert lässt sich bis zum
-              Monatsende jederzeit ändern; leer lassen nimmt die Verrechnung zurück.
+              Maximal {minutesToHoursLabel(maxSettleableMinutes)} Std. Der Wert lässt sich jederzeit
+              ändern; leer lassen nimmt die Abrechnung zurück.
             </small>
           </div>
           <button type="submit" className="btn primary-btn" disabled={isSaving}>
@@ -234,24 +267,27 @@ const OvertimeSettlements: React.FC = () => {
       </div>
 
       <div className="overtime-history card">
-        <h3>Verrechnete Monate</h3>
+        <h3>Abgerechnete Monate</h3>
         {history.length === 0 ? (
-          <p className="overtime-empty">Bisher wurden keine Überstunden verrechnet.</p>
+          <p className="overtime-empty">Bisher wurden keine Stunden abgerechnet.</p>
         ) : (
           <table className="overtime-history-table">
             <thead>
               <tr>
                 <th>Monat</th>
-                <th className="right">Verrechnet</th>
+                <th className="right">Abgerechnet</th>
               </tr>
             </thead>
             <tbody>
               {history.map((entry) => (
-                <tr key={entry.month} className={entry.month === thisMonth ? 'is-current' : ''}>
+                <tr
+                  key={entry.month}
+                  className={entry.month === selectedMonth ? 'is-current' : ''}
+                >
                   <td>
                     {monthKeyLabel(entry.month)}
-                    {entry.month === thisMonth && (
-                      <span className="overtime-current-badge">läuft noch · änderbar</span>
+                    {monthOptions.includes(entry.month) && (
+                      <span className="overtime-current-badge">änderbar</span>
                     )}
                   </td>
                   <td className="right">{minutesToHoursLabel(entry.minutes)} Std</td>

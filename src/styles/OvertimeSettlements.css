@@ -94,7 +94,8 @@
   color: var(--text-color);
 }
 
-.overtime-form input {
+.overtime-form input,
+.overtime-form select {
   width: 100%;
   min-height: var(--touch-target-min);
   padding: 10px var(--spacing-md);
@@ -103,9 +104,11 @@
   background: var(--card-background);
   color: var(--text-color);
   font-size: var(--font-size-base);
+  font-family: inherit;
 }
 
-.overtime-form input:focus {
+.overtime-form input:focus,
+.overtime-form select:focus {
   outline: none;
   border-color: var(--primary-color);
 }

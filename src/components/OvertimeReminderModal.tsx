@@ -28,7 +28,7 @@ const OvertimeReminderModal: React.FC<OvertimeReminderModalProps> = ({
     <div className="modal-overlay overtime-reminder-overlay" onClick={onDismiss}>
       <div className="modal-content overtime-reminder-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Überstunden für {monthKeyLabel(month)}</h3>
+          <h3>Stunden abrechnen – {monthKeyLabel(month)}</h3>
           <button
             type="button"
             className="close-modal-btn"
@@ -40,8 +40,8 @@ const OvertimeReminderModal: React.FC<OvertimeReminderModalProps> = ({
         </div>
         <div className="modal-body">
           <p>
-            Der Monat ist gleich vorbei. Bitte tragen Sie noch ein, wie viele Ihrer Überstunden
-            mit {monthKeyLabel(month)} verrechnet werden sollen.
+            Wie viele Stunden sollen für <strong>{monthKeyLabel(month)}</strong> abgerechnet
+            werden?
           </p>
           <p className="overtime-reminder-balance">
             Auf Ihrem Konto: <strong>{minutesToHoursLabel(balanceMinutes)} Std</strong>
@@ -50,7 +50,7 @@ const OvertimeReminderModal: React.FC<OvertimeReminderModalProps> = ({
             <button
               type="button"
               className="btn primary-btn"
-              onClick={() => navigate('/overtime')}
+              onClick={() => navigate(`/overtime?month=${month}`)}
             >
               Jetzt eintragen
             </button>

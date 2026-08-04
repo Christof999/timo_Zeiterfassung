@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { monthKeyForDate, monthKeyForPeriod, monthKeyLabel } from './overtimeMonth'
+import {
+  monthKeyForDate,
+  monthKeyForPeriod,
+  monthKeyLabel,
+  previousMonthKey,
+  settleableMonthKeys
+} from './overtimeMonth'
 
 describe('overtimeMonth', () => {
   it('bildet den Monatsschlüssel lokal, nicht über UTC', () => {
@@ -20,5 +26,27 @@ describe('overtimeMonth', () => {
     // Monatsübergreifend gibt es keinen Monat, dem die Verrechnung gehört.
     expect(monthKeyForPeriod('2026-02-24', '2026-03-05')).toBeNull()
     expect(monthKeyForPeriod('', '2026-03-05')).toBeNull()
+  })
+})
+
+describe('previousMonthKey', () => {
+  it('liefert den abzurechnenden Vormonat', () => {
+    // Anfang August wird der Juli gemeldet.
+    expect(previousMonthKey(new Date(2026, 7, 4))).toBe('2026-07')
+    expect(previousMonthKey(new Date(2026, 7, 31))).toBe('2026-07')
+  })
+
+  it('springt am Jahreswechsel korrekt zurück', () => {
+    expect(previousMonthKey(new Date(2026, 0, 3))).toBe('2025-12')
+  })
+})
+
+describe('settleableMonthKeys', () => {
+  it('gibt Vormonat und laufenden Monat zurück', () => {
+    expect(settleableMonthKeys(new Date(2026, 7, 4))).toEqual(['2026-07', '2026-08'])
+  })
+
+  it('funktioniert über den Jahreswechsel', () => {
+    expect(settleableMonthKeys(new Date(2026, 0, 15))).toEqual(['2025-12', '2026-01'])
   })
 })

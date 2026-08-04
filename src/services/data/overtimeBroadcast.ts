@@ -1,6 +1,7 @@
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebaseConfig'
 import { authReady, convertToDate, postWithIdToken } from './shared'
+import { monthKeyLabel } from '../../utils/overtimeMonth'
 
 /**
  * Monatsend-Aufruf des Admins an alle Mitarbeiter: „Bitte abzurechnende
@@ -95,7 +96,12 @@ export async function triggerOvertimeReminderBroadcast(
   })
 
   try {
-    const result = await postWithIdToken('/api/push/overtime-reminder', {})
+    // Monat und Beschriftung mitgeben: die Function soll keine eigenen
+    // Monatsnamen führen müssen.
+    const result = await postWithIdToken('/api/push/overtime-reminder', {
+      month,
+      monthLabel: monthKeyLabel(month)
+    })
     return {
       sent: Number(result?.sent) || 0,
       failed: Number(result?.failed) || 0,
