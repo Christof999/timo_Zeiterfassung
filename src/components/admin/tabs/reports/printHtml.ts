@@ -170,32 +170,38 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
   }
 
   // Reihenfolge ist bewusst: erst alle lohnwirksamen Posten, dann der Bruttolohn.
-  // Steuerfreies und Arbeitgeberaufwand stehen darunter, damit die Meldesumme
-  // für den Steuerberater eindeutig bleibt.
+  // Beim Fixlohn (Azubi) steht neben den Zeiten kein Stundensatz und kein
+  // Zeilenbetrag – vergütet wird pauschal, der Betrag steht erst in der Summe.
+  const fixed = summary.isFixedSalary
+  const amountOrDash = (value: number): string => (fixed ? '—' : formatCurrency(value))
+  const timesRate = (label: string): string => (fixed ? label : `${label} × ${rate}`)
+
   const lines: SummaryLine[] = [
     {
       label: 'Geleistete Arbeitsstunden',
-      detail: `${hours(summary.workMinutes)} × ${rate}`,
-      amount: formatCurrency(summary.workAmount)
+      detail: timesRate(hours(summary.workMinutes)),
+      amount: amountOrDash(summary.workAmount)
     },
     {
       label: 'Urlaubsstunden',
-      detail: `${hours(summary.vacationMinutes)} × ${rate}`,
-      amount: formatCurrency(summary.vacationAmount)
+      detail: timesRate(hours(summary.vacationMinutes)),
+      amount: amountOrDash(summary.vacationAmount)
     },
     {
       label: 'Feiertagsstunden',
-      detail: `${hours(summary.holidayMinutes)} × ${rate}`,
-      amount: formatCurrency(summary.holidayAmount)
+      detail: timesRate(hours(summary.holidayMinutes)),
+      amount: amountOrDash(summary.holidayAmount)
     },
     {
       label: 'Krankheitstage',
-      detail: `${summary.sickDays} Tage (${hours(summary.sickMinutes)}) × ${rate}`,
-      amount: formatCurrency(summary.sickAmount)
+      detail: timesRate(`${summary.sickDays} Tage (${hours(summary.sickMinutes)})`),
+      amount: amountOrDash(summary.sickAmount)
     },
     {
-      label: 'Bruttolohn (steuer- und SV-pflichtig)',
-      detail: `${hours(summary.grossWageMinutes)} × ${rate} – ohne Lohnnebenkosten`,
+      label: fixed ? 'Fixlohn (steuer- und SV-pflichtig)' : 'Bruttolohn (steuer- und SV-pflichtig)',
+      detail: fixed
+        ? 'Monatliche Ausbildungsvergütung'
+        : `${hours(summary.grossWageMinutes)} × ${rate}`,
       amount: formatCurrency(summary.grossWageAmount),
       isTotal: true
     },
@@ -206,7 +212,7 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
     },
     {
       label: 'Auszahlung gesamt',
-      detail: 'Bruttolohn + steuerfreie Zuwendungen',
+      detail: `${fixed ? 'Fixlohn' : 'Bruttolohn'} + steuerfreie Zuwendungen`,
       amount: formatCurrency(summary.totalPayoutAmount),
       isTotal: true
     },
@@ -217,23 +223,6 @@ const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string =>
       isNote: true
     }
   ]
-
-  if (summary.ancillaryWageCostRate > 0) {
-    lines.push(
-      {
-        label: 'Nachrichtlich: Lohnnebenkosten',
-        detail: `${hours(summary.grossWageMinutes)} × ${formatCurrency(summary.ancillaryWageCostRate)}`,
-        amount: formatCurrency(summary.ancillaryWageCostsAmount),
-        isNote: true
-      },
-      {
-        label: 'Nachrichtlich: Arbeitgeberaufwand gesamt',
-        detail: 'Bruttolohn + Lohnnebenkosten',
-        amount: formatCurrency(summary.employerTotalCost),
-        isNote: true
-      }
-    )
-  }
 
   const rowsHtml = lines
     .map((line) => {

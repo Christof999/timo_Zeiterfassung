@@ -382,23 +382,20 @@ export interface ReportSettlementSummary {
   sickAmount: number
   hourlyRate: number
   /**
-   * Der Betrag, den der Steuerberater meldet: alle lohnwirksamen Stunden
-   * (Arbeit, Urlaub, Feiertag, Krankheit) × Stundenlohn. Enthält bewusst
-   * KEINE Lohnnebenkosten und keinen steuerfreien Verpflegungsmehraufwand.
+   * Der Betrag, den der Steuerberater meldet. Bei Stundenlohn: alle
+   * lohnwirksamen Stunden (Arbeit, Urlaub, Feiertag, Krankheit) × Stundenlohn.
+   * Bei Azubis: der Fixlohn. Enthält nie den steuerfreien
+   * Verpflegungsmehraufwand.
    */
   grossWageAmount: number
-  /** Stunden, auf denen der Bruttolohn beruht */
+  /** Stunden, auf denen der Bruttolohn beruht (bei Fixlohn nur nachrichtlich) */
   grossWageMinutes: number
   /** Steuerfreie Zuwendungen (aktuell nur Verpflegungsmehraufwand) */
   taxFreeAmount: number
   /** Bruttolohn + steuerfreie Zuwendungen = was tatsächlich überwiesen wird */
   totalPayoutAmount: number
-  /** Nachrichtlich: Lohnnebenkosten-Satz des Mitarbeiters (EUR/Std) */
-  ancillaryWageCostRate: number
-  /** Nachrichtlich: Lohnnebenkosten auf die lohnwirksamen Stunden */
-  ancillaryWageCostsAmount: number
-  /** Nachrichtlich: Bruttolohn + Lohnnebenkosten = Arbeitgeberaufwand */
-  employerTotalCost: number
+  /** true = Azubi mit Fixlohn; dann steht neben den Zeiten kein Stundensatz. */
+  isFixedSalary: boolean
 }
 
 export interface AdjustedReport {
@@ -441,8 +438,10 @@ export const buildAdjustedReport = (
     hourlyRate?: number
     /** Satz je Tag Verpflegungsmehraufwand */
     mealAllowanceRate?: number
-    /** Lohnnebenkosten des Mitarbeiters (EUR/Std) – nur nachrichtlich, nie im Bruttolohn */
-    ancillaryWageCosts?: number
+    /** Azubi: Vergütung über Fixlohn statt Stundensatz */
+    isApprentice?: boolean
+    /** Monatlicher Fixlohn (EUR) – nur bei Azubis */
+    fixedMonthlySalary?: number
     /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
     overtimeBalanceMinutes?: number | null
   } = {}
@@ -452,9 +451,13 @@ export const buildAdjustedReport = (
     requestedPayoutMinutes = 0,
     hourlyRate = 0,
     mealAllowanceRate = DEFAULT_MEAL_ALLOWANCE_EUR,
-    ancillaryWageCosts = 0,
+    isApprentice = false,
+    fixedMonthlySalary = 0,
     overtimeBalanceMinutes = null
   } = options
+
+  // Beim Fixlohn gibt es keinen Stundensatz – die Zeilen weisen nur Zeiten aus.
+  const useFixedSalary = isApprentice === true
 
   const orderByDate = new Map<string, number>()
   const rowInputs: WorkTimeRowInput[] = entries.map((entry) => {
@@ -537,16 +540,19 @@ export const buildAdjustedReport = (
   // Der Beleg muss aufgehen: die Summe entsteht aus den gerundeten Einzelzeilen,
   // nicht aus einer zweiten Rechnung über die Gesamtminuten.
   const round2 = (value: number): number => Math.round(value * 100) / 100
-  const workAmount = amountFor(workMinutes)
-  const vacationAmount = amountFor(vacationMinutes)
-  const holidayAmount = amountFor(holidayMinutes)
-  const sickAmount = amountFor(sickMinutes)
+  // Beim Fixlohn bleiben die Zeilenbeträge leer: die Zeiten werden ausgewiesen,
+  // vergütet wird aber pauschal.
+  const workAmount = useFixedSalary ? 0 : amountFor(workMinutes)
+  const vacationAmount = useFixedSalary ? 0 : amountFor(vacationMinutes)
+  const holidayAmount = useFixedSalary ? 0 : amountFor(holidayMinutes)
+  const sickAmount = useFixedSalary ? 0 : amountFor(sickMinutes)
   const mealAllowanceAmount = round2(mealAllowanceDays * mealAllowanceRate)
 
   // Lohnwirksam ist jede bezahlte Stunde – Arbeit wie Lohnfortzahlung.
   const grossWageMinutes = workMinutes + vacationMinutes + holidayMinutes + sickMinutes
-  const grossWageAmount = round2(workAmount + vacationAmount + holidayAmount + sickAmount)
-  const ancillaryWageCostsAmount = round2((grossWageMinutes / 60) * ancillaryWageCosts)
+  const grossWageAmount = useFixedSalary
+    ? round2(Math.max(0, fixedMonthlySalary))
+    : round2(workAmount + vacationAmount + holidayAmount + sickAmount)
 
   return {
     entries: adjusted,
@@ -573,14 +579,12 @@ export const buildAdjustedReport = (
       sickDays,
       sickMinutes,
       sickAmount,
-      hourlyRate,
+      hourlyRate: useFixedSalary ? 0 : hourlyRate,
       grossWageMinutes,
       grossWageAmount,
       taxFreeAmount: mealAllowanceAmount,
       totalPayoutAmount: round2(grossWageAmount + mealAllowanceAmount),
-      ancillaryWageCostRate: ancillaryWageCosts,
-      ancillaryWageCostsAmount,
-      employerTotalCost: round2(grossWageAmount + ancillaryWageCostsAmount)
+      isFixedSalary: useFixedSalary
     }
   }
 }

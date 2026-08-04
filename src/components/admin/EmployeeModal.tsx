@@ -25,6 +25,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     hourlyRate: 0,
     hourlyCostRate: 0,
     ancillaryWageCosts: 0,
+    isApprentice: false,
+    fixedMonthlySalary: 0,
     overtimeBalanceHours: '' as string,
     heroEmployeeId: '',
     isAdmin: false,
@@ -86,6 +88,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
         hourlyCostRate: employee.hourlyCostRate || 0,
         ancillaryWageCosts: employee.ancillaryWageCosts || 0,
+        isApprentice: employee.isApprentice === true,
+        fixedMonthlySalary: employee.fixedMonthlySalary || 0,
         overtimeBalanceHours,
         heroEmployeeId: employee.heroEmployeeId || '',
         isAdmin: (employee as any).isAdmin === true,
@@ -104,6 +108,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: 0,
         hourlyCostRate: 0,
         ancillaryWageCosts: 0,
+        isApprentice: false,
+        fixedMonthlySalary: 0,
         overtimeBalanceHours: '',
         heroEmployeeId: '',
         isAdmin: false,
@@ -127,6 +133,10 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: formData.hourlyRate,
         hourlyCostRate: formData.hourlyCostRate,
         ancillaryWageCosts: formData.ancillaryWageCosts,
+        isApprentice: formData.isApprentice,
+        // Ohne Azubi-Kennzeichen darf kein Fixlohn stehen bleiben – sonst
+        // rechnet der Bericht später mit einem Wert, den niemand mehr sieht.
+        fixedMonthlySalary: formData.isApprentice ? formData.fixedMonthlySalary : 0,
         heroEmployeeId: formData.heroEmployeeId.trim() || undefined,
         isAdmin: formData.isAdmin,
         adminRole: formData.adminRole
@@ -254,8 +264,38 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             />
             <small className="form-hint">
               Frei befüllbar – z. B. Sozialabgaben, Umlagen und sonstige Zuschläge zum Lohn.
+              Reines Stammdatum, erscheint nicht im Zeiterfassungsbericht.
             </small>
           </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={formData.isApprentice}
+                onChange={(e) => setFormData({ ...formData, isApprentice: e.target.checked })}
+                style={{ width: 'auto', minHeight: 0 }}
+              />
+              Azubi (Vergütung als Fixlohn statt nach Stunden)
+            </label>
+          </div>
+          {formData.isApprentice && (
+            <div className="form-group">
+              <label>Fixlohn (€/Monat):</label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.fixedMonthlySalary}
+                onChange={(e) =>
+                  setFormData({ ...formData, fixedMonthlySalary: parseFloat(e.target.value) || 0 })
+                }
+              />
+              <small className="form-hint">
+                Monatliche Ausbildungsvergütung. Im Zeiterfassungsbericht werden dann nur die
+                abgerechneten Zeiten ausgewiesen – ohne Stundensatz – und der Fixlohn als
+                Bruttolohn.
+              </small>
+            </div>
+          )}
           <div className="form-group">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input

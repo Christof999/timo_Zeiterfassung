@@ -37,6 +37,10 @@ export interface Employee {
   hourlyCostRate?: number
   /** Lohnnebenkosten (EUR/Std) – frei befüllbares Stammdatenfeld, analog zum Stundenlohn. */
   ancillaryWageCosts?: number
+  /** Auszubildender: wird nicht nach Stunden, sondern über einen Fixlohn vergütet. */
+  isApprentice?: boolean
+  /** Fixe monatliche Vergütung (EUR) – gilt nur für Auszubildende. */
+  fixedMonthlySalary?: number
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'

@@ -742,7 +742,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const selectedEmployeeRecord = employees.find(e => e.id === selectedEmployeeId)
   const employeeHourlyRate =
     selectedEmployeeRecord?.hourlyWage || selectedEmployeeRecord?.hourlyRate || 0
-  const employeeAncillaryWageCosts = selectedEmployeeRecord?.ancillaryWageCosts || 0
+  /** Azubis werden pauschal vergütet – im Bericht steht dann kein Stundensatz. */
+  const employeeIsApprentice = selectedEmployeeRecord?.isApprentice === true
+  const employeeFixedSalary = selectedEmployeeRecord?.fixedMonthlySalary || 0
   const employeeOvertimeBalance =
     typeof selectedEmployeeRecord?.overtimeBalanceMinutes === 'number'
       ? selectedEmployeeRecord.overtimeBalanceMinutes
@@ -763,7 +765,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0,
         hourlyRate: employeeHourlyRate,
         mealAllowanceRate,
-        ancillaryWageCosts: employeeAncillaryWageCosts,
+        isApprentice: employeeIsApprentice,
+        fixedMonthlySalary: employeeFixedSalary,
         overtimeBalanceMinutes: employeeOvertimeBalance
       }),
     [
@@ -774,10 +777,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       appliedPayoutMinutes,
       employeeHourlyRate,
       mealAllowanceRate,
-      employeeAncillaryWageCosts,
+      employeeIsApprentice,
+      employeeFixedSalary,
       employeeOvertimeBalance
     ]
   )
+
+  /**
+   * Deckt der Zeitraum genau einen vollen Kalendermonat ab? Nur dann passt ein
+   * monatlicher Fixlohn ungekürzt auf den Beleg. Bewusst über die Datums-
+   * Strings gerechnet – `new Date('2026-03-01')` wäre UTC und könnte in
+   * unserer Zeitzone auf den 29.02. rutschen.
+   */
+  const isFullCalendarMonth = (() => {
+    const [sy, sm, sd] = (startDate || '').split('-').map(Number)
+    const [ey, em, ed] = (endDate || '').split('-').map(Number)
+    if (!sy || !sm || !sd || !ey || !em || !ed) return false
+    if (sy !== ey || sm !== em) return false
+    const lastDayOfMonth = new Date(ey, em, 0).getDate()
+    return sd === 1 && ed === lastDayOfMonth
+  })()
 
   const adjustedEntries = adjustedReport.entries
   const regularWorkTimeLabel = `Mo–Do ${minutesToHoursLabel(regularWorkTimeConfig.monThu)} · Fr ${minutesToHoursLabel(regularWorkTimeConfig.fri)}`
@@ -2210,50 +2229,70 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr>
                         <td>Geleistete Arbeitsstunden</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std ×{' '}
-                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                          {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std
+                          {!adjustedReport.summary.isFixedSalary &&
+                            ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
                         <td className="number-cell">
-                          {formatCurrency(adjustedReport.summary.workAmount)}
+                          {adjustedReport.summary.isFixedSalary
+                            ? '—'
+                            : formatCurrency(adjustedReport.summary.workAmount)}
                         </td>
                       </tr>
                       <tr>
                         <td>Urlaubsstunden</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.vacationMinutes)} Std ×{' '}
-                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                          {minutesToHoursLabel(adjustedReport.summary.vacationMinutes)} Std
+                          {!adjustedReport.summary.isFixedSalary &&
+                            ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
                         <td className="number-cell">
-                          {formatCurrency(adjustedReport.summary.vacationAmount)}
+                          {adjustedReport.summary.isFixedSalary
+                            ? '—'
+                            : formatCurrency(adjustedReport.summary.vacationAmount)}
                         </td>
                       </tr>
                       <tr>
                         <td>Feiertagsstunden</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.holidayMinutes)} Std ×{' '}
-                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                          {minutesToHoursLabel(adjustedReport.summary.holidayMinutes)} Std
+                          {!adjustedReport.summary.isFixedSalary &&
+                            ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
                         <td className="number-cell">
-                          {formatCurrency(adjustedReport.summary.holidayAmount)}
+                          {adjustedReport.summary.isFixedSalary
+                            ? '—'
+                            : formatCurrency(adjustedReport.summary.holidayAmount)}
                         </td>
                       </tr>
                       <tr>
                         <td>Krankheitstage</td>
                         <td>
                           {adjustedReport.summary.sickDays} Tage (
-                          {minutesToHoursLabel(adjustedReport.summary.sickMinutes)} Std) ×{' '}
-                          {formatCurrency(adjustedReport.summary.hourlyRate)}
+                          {minutesToHoursLabel(adjustedReport.summary.sickMinutes)} Std)
+                          {!adjustedReport.summary.isFixedSalary &&
+                            ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
                         <td className="number-cell">
-                          {formatCurrency(adjustedReport.summary.sickAmount)}
+                          {adjustedReport.summary.isFixedSalary
+                            ? '—'
+                            : formatCurrency(adjustedReport.summary.sickAmount)}
                         </td>
                       </tr>
                       <tr className="settlement-total">
-                        <td>Bruttolohn (steuer- und SV-pflichtig)</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
-                          {formatCurrency(adjustedReport.summary.hourlyRate)} – ohne
-                          Lohnnebenkosten
+                          {adjustedReport.summary.isFixedSalary ? 'Fixlohn' : 'Bruttolohn'} (steuer-
+                          und SV-pflichtig)
+                        </td>
+                        <td>
+                          {adjustedReport.summary.isFixedSalary ? (
+                            'Monatliche Ausbildungsvergütung'
+                          ) : (
+                            <>
+                              {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
+                              {formatCurrency(adjustedReport.summary.hourlyRate)}
+                            </>
+                          )}
                         </td>
                         <td className="number-cell">
                           {formatCurrency(adjustedReport.summary.grossWageAmount)}
@@ -2271,7 +2310,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       </tr>
                       <tr className="settlement-total">
                         <td>Auszahlung gesamt</td>
-                        <td>Bruttolohn + steuerfreie Zuwendungen</td>
+                        <td>
+                          {adjustedReport.summary.isFixedSalary ? 'Fixlohn' : 'Bruttolohn'} +
+                          steuerfreie Zuwendungen
+                        </td>
                         <td className="number-cell">
                           {formatCurrency(adjustedReport.summary.totalPayoutAmount)}
                         </td>
@@ -2281,39 +2323,38 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
                         <td className="number-cell">—</td>
                       </tr>
-                      {adjustedReport.summary.ancillaryWageCostRate > 0 && (
-                        <>
-                          <tr className="settlement-note">
-                            <td>Nachrichtlich: Lohnnebenkosten</td>
-                            <td>
-                              {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
-                              {formatCurrency(adjustedReport.summary.ancillaryWageCostRate)}
-                            </td>
-                            <td className="number-cell">
-                              {formatCurrency(adjustedReport.summary.ancillaryWageCostsAmount)}
-                            </td>
-                          </tr>
-                          <tr className="settlement-note">
-                            <td>Nachrichtlich: Arbeitgeberaufwand gesamt</td>
-                            <td>Bruttolohn + Lohnnebenkosten</td>
-                            <td className="number-cell">
-                              {formatCurrency(adjustedReport.summary.employerTotalCost)}
-                            </td>
-                          </tr>
-                        </>
-                      )}
                     </tbody>
                   </table>
                   <p className="settlement-summary-hint no-print">
-                    An den Steuerberater zu melden ist der Bruttolohn von{' '}
+                    An den Steuerberater zu melden ist{' '}
+                    {adjustedReport.summary.isFixedSalary ? 'der Fixlohn' : 'der Bruttolohn'} von{' '}
                     <strong>{formatCurrency(adjustedReport.summary.grossWageAmount)}</strong> – ohne
-                    Lohnnebenkosten und ohne den steuerfreien Verpflegungsmehraufwand.
+                    den steuerfreien Verpflegungsmehraufwand.
                   </p>
-                  {adjustedReport.summary.hourlyRate === 0 && (
-                    <p className="settlement-summary-hint no-print">
-                      Für {selectedEmployeeName} ist kein Stundenlohn hinterlegt – die Beträge bleiben
-                      deshalb bei 0,00 €. Der Satz lässt sich im Mitarbeiter-Profil setzen.
-                    </p>
+                  {adjustedReport.summary.isFixedSalary ? (
+                    <>
+                      {adjustedReport.summary.grossWageAmount === 0 && (
+                        <p className="settlement-summary-hint no-print">
+                          Für {selectedEmployeeName} ist als Azubi kein Fixlohn hinterlegt – der
+                          Betrag bleibt deshalb bei 0,00 €. Er lässt sich im Mitarbeiter-Profil
+                          setzen.
+                        </p>
+                      )}
+                      {!isFullCalendarMonth && (
+                        <p className="settlement-summary-hint no-print">
+                          Der gewählte Zeitraum ist kein voller Kalendermonat. Der Fixlohn wird
+                          trotzdem in voller Höhe ausgewiesen – bitte prüfen, ob das so gemeldet
+                          werden soll.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    adjustedReport.summary.hourlyRate === 0 && (
+                      <p className="settlement-summary-hint no-print">
+                        Für {selectedEmployeeName} ist kein Stundenlohn hinterlegt – die Beträge
+                        bleiben deshalb bei 0,00 €. Der Satz lässt sich im Mitarbeiter-Profil setzen.
+                      </p>
+                    )
                   )}
                 </div>
               )}
