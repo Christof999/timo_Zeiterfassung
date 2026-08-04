@@ -2063,6 +2063,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   )}
                 </div>
               ) : (
+                <>
+                <p className="report-scroll-hint no-print">
+                  Tabelle seitlich scrollbar – der Tag bleibt dabei stehen.
+                </p>
                 <div className="report-table-container">
                   <table className="report-table">
                     <thead>
@@ -2266,6 +2270,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     </tfoot>
                   </table>
                 </div>
+                </>
               )}
 
               {reportEntries.length > 0 && (

@@ -227,6 +227,14 @@
   color: var(--text-secondary);
 }
 
+/* Nur auf schmalen Schirmen sichtbar (siehe Media Query weiter unten). */
+.report-scroll-hint {
+  display: none;
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 .report-table-container {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1359,24 +1367,178 @@
     flex-direction: column;
   }
   
+  /* Die Aktionsleiste hat bis zu sechs Buttons. Als Flex-Zeile mit flex:1
+     schrumpfen sie auf Handybreite so weit, dass die Beschriftung umbricht und
+     die letzten beiden ganz aus dem Container fallen. Als Raster bekommt jeder
+     eine feste Spalte und bleibt lesbar und tippbar. */
   .actions-right {
     width: 100%;
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-sm);
   }
-  
+
   .actions-right .btn {
-    flex: 1;
+    width: 100%;
+    min-width: 0;
+    padding-left: var(--spacing-sm);
+    padding-right: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    /* Lange Beschriftungen dürfen umbrechen, statt den Button zu sprengen. */
+    white-space: normal;
+    line-height: 1.25;
   }
-  
+
   .report-table {
     font-size: 0.85rem;
   }
-  
+
   .report-table th,
   .report-table td {
     padding: var(--spacing-xs) var(--spacing-sm);
   }
-  
+
+  /* Die Tabelle ist mit acht Spalten breiter als jedes Handy. Sie scrollt
+     waagerecht in ihrem Container – damit man dabei nicht die Orientierung
+     verliert, bleibt die Tag-Spalte stehen. */
+  .report-table th:first-child,
+  .report-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--card-background);
+    box-shadow: 1px 0 0 var(--border-light);
+  }
+
+  /* Muss über den übrigen Kopfzellen liegen: die haben aus der Basisregel
+     bereits z-index 10 und würden die feststehende Spalte sonst übermalen. */
+  .report-table thead th:first-child {
+    z-index: 12;
+    background: var(--light-color);
+  }
+
+  .report-table tfoot td:first-child {
+    background: var(--card-background);
+  }
+
+  /* Der Container soll als scrollbar erkennbar sein. */
+  .report-table-container {
+    border-radius: var(--radius-md);
+  }
+
+  .report-scroll-hint {
+    display: block;
+  }
+
+  /* Abrechnungsblock: drei Spalten passen nicht nebeneinander. Position und
+     Rechenweg stehen untereinander, der Betrag rechts daneben. */
+  .settlement-summary-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--spacing-md);
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .settlement-summary-table td {
+    border: none;
+    padding: 0;
+  }
+
+  .settlement-summary-table td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .settlement-summary-table td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: var(--font-size-xs);
+  }
+
+  .settlement-summary-table td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Panels: Text und Knopf untereinander, Knopf über die volle Breite. */
+  .broadcast-panel,
+  .report-mail-actions,
+  .report-mail-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* In der Spalte wirkt flex-basis als HÖHE: aus „mindestens 320px breit"
+     würde „mindestens 320px hoch" und damit eine riesige Lücke vor dem Knopf. */
+  .broadcast-text,
+  .report-mail-field,
+  .report-mail-hint {
+    flex: 0 0 auto;
+  }
+
+  .broadcast-panel > .btn,
+  .report-mail-row > .btn,
+  .report-mail-actions > .btn {
+    width: 100%;
+  }
+
+  .overtime-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Basis ist flex-direction: column – ohne das Zurücksetzen verteilt
+     space-between Beschriftung und Eingabe senkrecht über die halbe Seite. */
+  .overtime-controls label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+  }
+
+  /* 0 1 statt 0 0: das Feld darf unter 96px schrumpfen, sonst schiebt eine
+     lange Beschriftung es auf schmalen Schirmen aus dem Container. */
+  .overtime-controls .overtime-input {
+    width: auto;
+    flex: 0 1 96px;
+    max-width: 96px;
+  }
+
+  .overtime-controls .btn {
+    width: 100%;
+  }
+
+  /* Flex-Kinder haben min-width:auto und schrumpfen sonst nicht unter ihren
+     Inhalt – schon ein langes Wort schiebt den Container über den Rand. */
+  .overtime-panel-head > *,
+  .overtime-facts > * {
+    min-width: 0;
+  }
+
+  .overtime-facts {
+    width: 100%;
+  }
+
+  .meal-rate-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .meal-rate-field .overtime-input {
+    width: auto;
+    flex: 0 1 96px;
+    max-width: 96px;
+  }
+
   .time-input {
     width: 75px;
   }
