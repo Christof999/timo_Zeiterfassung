@@ -1328,12 +1328,17 @@
     display: table-row-group !important;
   }
   
+  /* Nicht table-footer-group: die Gesamt-Zeile ist die Summe des ganzen
+     Berichts und würde sonst unter jeder Seite als Fuß wiederholt. */
   .report-table tfoot {
-    display: table-footer-group !important;
+    display: table-row-group !important;
   }
   
   .report-table tr {
     display: table-row !important;
+    /* Wie im Druckfenster: keine Zeile darf der Seitenumbruch zerschneiden. */
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   
   .report-table th,

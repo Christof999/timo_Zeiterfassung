@@ -356,6 +356,21 @@ export const buildEmployeePrintHtml = (params: {
       border-collapse: collapse;
       font-size: 13px;
     }
+    /* Ohne diese Regel zerschneidet der Seitenumbruch einzelne Zeilen: die
+       obere Hälfte steht auf der einen, die untere auf der nächsten Seite. */
+    tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    /* Spaltenköpfe auf jeder Folgeseite wiederholen, sonst weiß niemand mehr,
+       welche Spalte welche ist. */
+    thead {
+      display: table-header-group;
+    }
+    /* Die Gesamt-Zeile gehört ans Ende des Berichts, nicht unter jede Seite. */
+    tfoot {
+      display: table-row-group;
+    }
     th, td {
       border: 1px solid #d6d6d6;
       padding: 8px 10px;
@@ -400,12 +415,16 @@ export const buildEmployeePrintHtml = (params: {
       font-size: 15px;
       font-weight: 600;
     }
+    /* Überschrift darf nicht allein am Seitenfuß stehenbleiben. */
     .summary-title {
       font-size: 15px;
       margin: 22px 0 8px;
+      page-break-after: avoid;
+      break-after: avoid;
     }
     .summary-table {
       page-break-inside: avoid;
+      break-inside: avoid;
     }
     .summary-table tbody tr:last-child td {
       border-bottom: 1px solid #d6d6d6;
@@ -417,10 +436,19 @@ export const buildEmployeePrintHtml = (params: {
     .summary-table tr.summary-note td {
       color: #555;
     }
+    /* Abrechnung, Fußnote und Unterschriften bleiben zusammen. Sonst rutschen
+       die zwei Unterschriftszeilen allein auf eine sonst leere letzte Seite –
+       und ein Nachweis, der auf einem Blatt ohne Inhalt gezeichnet wird, taugt
+       nichts. Der Block ist deutlich kleiner als eine Seite, wandert also
+       notfalls komplett. */
+    .closing {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
     .signatures {
       display: flex;
       gap: 48px;
-      margin-top: 42px;
+      margin-top: 32px;
       page-break-inside: avoid;
     }
     .signatures .signature-box {
@@ -499,9 +527,11 @@ export const buildEmployeePrintHtml = (params: {
       </tr>
     </tfoot>
   </table>
-  ${summaryHtml}
-  ${footnoteHtml}
-  ${buildSignatureHtml(params.employeeName, company)}
+  <div class="closing">
+    ${summaryHtml}
+    ${footnoteHtml}
+    ${buildSignatureHtml(params.employeeName, company)}
+  </div>
 </body>
 </html>`
 }
