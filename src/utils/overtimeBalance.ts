@@ -8,12 +8,15 @@ export const overtimeSettlementDocId = (employeeId: string, month: string): stri
   `${employeeId}_${month}`
 
 /**
- * Was ein Monat zum Überstundenkonto beiträgt: die geleisteten Stunden, die
- * nicht abgerechnet wurden. Wer 180 Std leistet und 170 abrechnen lässt,
- * sammelt 10 Std an.
+ * Was ein Monat zum Überstundenkonto beiträgt: geleistete minus abgerechnete
+ * Stunden.
+ *
+ * Bewusst ohne Untergrenze – der Wert darf negativ werden. Wer 180 Std leistet
+ * und 190 abrechnen lässt, holt sich die fehlenden 10 Std aus dem
+ * Überstundenkonto, lässt sie sich also auszahlen.
  */
 export const contributionForMonth = (workedMinutes: number, settledMinutes: number): number =>
-  Math.max(0, workedMinutes - settledMinutes)
+  workedMinutes - settledMinutes
 
 /**
  * Beitrag eines bereits gespeicherten Eintrags zum Konto.
@@ -32,6 +35,17 @@ export const previousContribution = (
   }
   return -settled
 }
+
+/**
+ * Höchstens abrechenbare Minuten: geleistete Stunden plus das, was auf dem
+ * Konto liegt. Ein bereits gespeicherter Beitrag desselben Monats steckt schon
+ * im Kontostand und wird deshalb herausgerechnet.
+ */
+export const maxSettleableMinutes = (
+  balanceMinutes: number,
+  previous: { minutes: number; workedMinutes?: number } | null,
+  workedMinutes: number
+): number => Math.max(0, workedMinutes + balanceMinutes - previousContribution(previous))
 
 /**
  * Neuer Kontostand nach dem Speichern eines Monatswerts. Verrechnet wird nur

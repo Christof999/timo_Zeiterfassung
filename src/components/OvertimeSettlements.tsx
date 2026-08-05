@@ -5,6 +5,7 @@ import type { Employee, OvertimeSettlement } from '../types'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { minutesToHoursLabel, parseHoursMinutesInput } from '../utils/hoursInput'
+import { maxSettleableMinutes } from '../utils/overtimeBalance'
 import { monthKeyLabel, previousMonthKey, settleableMonthKeys } from '../utils/overtimeMonth'
 import { pushNotificationService } from '../services/pushNotificationService'
 import '../styles/OvertimeSettlements.css'
@@ -138,15 +139,19 @@ const OvertimeSettlements: React.FC = () => {
   }
 
   const balanceMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
-  const settledSelectedMonth =
-    settlements.find((entry) => entry.month === selectedMonth)?.minutes || 0
-  /** Mehr als geleistet lässt sich nicht abrechnen. */
-  const maxSettleableMinutes = workedMinutes ?? 0
+  const eintragDesMonats = settlements.find((entry) => entry.month === selectedMonth) ?? null
+  const settledSelectedMonth = eintragDesMonats?.minutes || 0
+  /**
+   * Abrechenbar sind die geleisteten Stunden plus das Überstundenkonto – wer
+   * mehr abrechnet als er geleistet hat, lässt sich Überstunden auszahlen.
+   */
+  const maxSettleable =
+    workedMinutes === null ? 0 : maxSettleableMinutes(balanceMinutes, eintragDesMonats, workedMinutes)
   const eingegebeneMinuten = hoursInput.trim() === '' ? 0 : parseHoursMinutesInput(hoursInput.trim())
-  /** Was nicht abgerechnet wird, wandert aufs Überstundenkonto. */
-  const restAufsKonto =
+  /** Positiv = geht aufs Konto, negativ = wird vom Konto ausgezahlt. */
+  const kontoBewegung =
     workedMinutes !== null && eingegebeneMinuten !== null
-      ? Math.max(0, workedMinutes - eingegebeneMinuten)
+      ? workedMinutes - eingegebeneMinuten
       : null
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -165,9 +170,9 @@ const OvertimeSettlements: React.FC = () => {
       toast.error('Bitte Stunden als „8:30“ oder „8,5“ eingeben.')
       return
     }
-    if (minutes > maxSettleableMinutes) {
+    if (minutes > maxSettleable) {
       toast.error(
-        `Im Monat wurden ${minutesToHoursLabel(maxSettleableMinutes)} Std geleistet – mehr lässt sich nicht abrechnen.`
+        `Höchstens ${minutesToHoursLabel(maxSettleable)} Std möglich: ${minutesToHoursLabel(workedMinutes)} Std geleistet plus Überstundenkonto.`
       )
       return
     }
@@ -180,10 +185,14 @@ const OvertimeSettlements: React.FC = () => {
         minutes,
         workedMinutes
       )
-      const rest = Math.max(0, workedMinutes - minutes)
+      const bewegung = workedMinutes - minutes
       toast.success(
         `${minutesToHoursLabel(minutes)} Std für ${monthKeyLabel(selectedMonth)} zur Abrechnung gemeldet.` +
-          (rest > 0 ? ` ${minutesToHoursLabel(rest)} Std gehen aufs Überstundenkonto.` : '')
+          (bewegung > 0
+            ? ` ${minutesToHoursLabel(bewegung)} Std gehen aufs Überstundenkonto.`
+            : bewegung < 0
+              ? ` ${minutesToHoursLabel(-bewegung)} Std kommen vom Überstundenkonto.`
+              : '')
       )
       await loadData()
     } catch (error: any) {
@@ -235,7 +244,8 @@ const OvertimeSettlements: React.FC = () => {
         </div>
         <p className="overtime-account-note">
           Grundlage sind Ihre gestempelten Stunden des Monats. Was Sie davon nicht abrechnen
-          lassen, wird dem Überstundenkonto gutgeschrieben.
+          lassen, wird dem Überstundenkonto gutgeschrieben. Sie können auch mehr abrechnen als
+          geleistet – dann werden Überstunden vom Konto ausgezahlt.
         </p>
       </div>
 
@@ -270,13 +280,24 @@ const OvertimeSettlements: React.FC = () => {
               disabled={isSaving || workedMinutes === null}
             />
             <small className="form-hint">
-              Höchstens {minutesToHoursLabel(maxSettleableMinutes)} Std – so viel wurde in{' '}
-              {monthKeyLabel(selectedMonth)} geleistet. Der Wert lässt sich jederzeit ändern.
+              Höchstens {minutesToHoursLabel(maxSettleable)} Std:{' '}
+              {workedMinutes === null ? '…' : minutesToHoursLabel(workedMinutes)} Std geleistet plus
+              Ihr Überstundenkonto. Der Wert lässt sich jederzeit ändern.
             </small>
           </div>
-          {restAufsKonto !== null && (
+          {kontoBewegung !== null && (
             <p className="overtime-rest">
-              Aufs Überstundenkonto: <strong>{minutesToHoursLabel(restAufsKonto)} Std</strong>
+              {kontoBewegung >= 0 ? (
+                <>
+                  Aufs Überstundenkonto:{' '}
+                  <strong>{minutesToHoursLabel(kontoBewegung)} Std</strong>
+                </>
+              ) : (
+                <>
+                  Vom Überstundenkonto ausgezahlt:{' '}
+                  <strong>{minutesToHoursLabel(-kontoBewegung)} Std</strong>
+                </>
+              )}
             </p>
           )}
           <button

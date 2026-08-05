@@ -3,7 +3,11 @@ import { db } from '../firebaseConfig'
 import type { Employee, OvertimeSettlement } from '../../types'
 import { authReady } from './shared'
 import { minutesToHoursLabel } from '../../utils/hoursInput'
-import { nextBalanceForSettlement, overtimeSettlementDocId } from '../../utils/overtimeBalance'
+import {
+  maxSettleableMinutes,
+  nextBalanceForSettlement,
+  overtimeSettlementDocId
+} from '../../utils/overtimeBalance'
 
 const COLLECTION = 'overtimeSettlements'
 
@@ -71,12 +75,6 @@ export async function setOvertimeSettlementMinutes(
   if (!Number.isFinite(workedMinutes) || workedMinutes < 0) {
     throw new Error('Die geleisteten Stunden konnten nicht ermittelt werden.')
   }
-  if (minutes > workedMinutes) {
-    throw new Error(
-      `Es können höchstens die geleisteten ${minutesToHoursLabel(Math.round(workedMinutes))} Std abgerechnet werden.`
-    )
-  }
-
   const wanted = Math.round(minutes)
   const worked = Math.round(workedMinutes)
 
@@ -103,10 +101,11 @@ export async function setOvertimeSettlementMinutes(
 
       const nextBalance = nextBalanceForSettlement(balance, previous, worked, wanted)
       if (nextBalance === null) {
-        // Kann nur passieren, wenn eine frühere Gutschrift dieses Monats
-        // inzwischen anderweitig verbraucht wurde (z. B. Urlaub auf Überstunden).
+        // Mehr als geleistete Stunden plus Überstundenkonto geht nicht – der
+        // Kontostand wird hier verbindlich geprüft, nicht im Browser.
+        const moeglich = maxSettleableMinutes(balance, previous, worked)
         throw new Error(
-          'Die Änderung würde das Überstundenkonto ins Minus bringen. Bitte im Büro melden.'
+          `Höchstens ${minutesToHoursLabel(moeglich)} Std möglich: ${minutesToHoursLabel(worked)} Std geleistet plus Überstundenkonto.`
         )
       }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   contributionForMonth,
+  maxSettleableMinutes,
   nextBalanceForSettlement,
   overtimeSettlementDocId,
   previousContribution
@@ -22,8 +23,10 @@ describe('contributionForMonth', () => {
     expect(contributionForMonth(STD(180), 0)).toBe(STD(180))
   })
 
-  it('wird nie negativ', () => {
-    expect(contributionForMonth(STD(180), STD(200))).toBe(0)
+  it('wird negativ, wenn mehr abgerechnet als geleistet wurde', () => {
+    // Die fehlenden 20 Std kommen aus dem Ueberstundenkonto – so lassen sich
+    // Ueberstunden auszahlen.
+    expect(contributionForMonth(STD(180), STD(200))).toBe(-STD(20))
   })
 })
 
@@ -106,5 +109,49 @@ describe('overtimeSettlementDocId', () => {
     expect(overtimeSettlementDocId('emp2', '2026-07')).not.toBe(
       overtimeSettlementDocId('emp1', '2026-07')
     )
+  })
+})
+
+describe('maxSettleableMinutes', () => {
+  it('erlaubt geleistete Stunden plus Überstundenkonto', () => {
+    // 180 Std geleistet, 12 Std auf dem Konto → bis zu 192 Std abrechenbar
+    expect(maxSettleableMinutes(STD(12), null, STD(180))).toBe(STD(192))
+  })
+
+  it('rechnet einen bereits gebuchten Monat heraus', () => {
+    // Bisher 170 von 180 gemeldet, die 10 Std Gutschrift stecken schon im
+    // Kontostand von 22. Ohne Herausrechnen käme man auf 202 statt 192.
+    const vorher = { minutes: STD(170), workedMinutes: STD(180) }
+    expect(maxSettleableMinutes(STD(22), vorher, STD(180))).toBe(STD(192))
+  })
+
+  it('ist ohne Stunden und ohne Konto null', () => {
+    expect(maxSettleableMinutes(0, null, 0)).toBe(0)
+  })
+})
+
+describe('Überstunden auszahlen lassen', () => {
+  it('nimmt die Differenz vom Konto, wenn mehr abgerechnet wird als geleistet', () => {
+    // Konto 12 Std, 180 geleistet, 190 abgerechnet → 10 Std vom Konto, bleiben 2
+    expect(nextBalanceForSettlement(STD(12), null, STD(180), STD(190))).toBe(STD(2))
+  })
+
+  it('erlaubt genau das Leerräumen des Kontos', () => {
+    expect(nextBalanceForSettlement(STD(12), null, STD(180), STD(192))).toBe(0)
+  })
+
+  it('verweigert eine Minute mehr als geleistet plus Konto', () => {
+    expect(nextBalanceForSettlement(STD(12), null, STD(180), STD(192) + 1)).toBeNull()
+  })
+
+  it('lässt den Wechsel von Ansparen auf Auszahlen zu', () => {
+    // Erst 170 von 180 gemeldet (Konto 12 → 22), dann auf 200 erhöhen:
+    // 20 Std vom Konto, also 22 − 10 (Gutschrift zurück) − 20 = 2 … präzise:
+    // Beitrag vorher +10, jetzt −20, Delta −30 → 22 − 30 = −8 → nicht erlaubt.
+    const vorher = { minutes: STD(170), workedMinutes: STD(180) }
+    expect(nextBalanceForSettlement(STD(22), vorher, STD(180), STD(200))).toBeNull()
+    // Bis zur Obergrenze geht es aber:
+    const grenze = maxSettleableMinutes(STD(22), vorher, STD(180))
+    expect(nextBalanceForSettlement(STD(22), vorher, STD(180), grenze)).toBe(0)
   })
 })
