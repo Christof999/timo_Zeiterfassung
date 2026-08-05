@@ -34,6 +34,8 @@ const OvertimeSettlements: React.FC = () => {
     { supported: false, active: false }
   )
   const [isTogglingPush, setIsTogglingPush] = useState(false)
+  /** Im gewählten Monat geleistete Arbeitszeit – die Grundlage der Meldung. */
+  const [workedMinutes, setWorkedMinutes] = useState<number | null>(null)
 
   const monthOptions = settleableMonthKeys()
   /** Vorwahl aus der Erinnerung, sonst der abzurechnende Vormonat. */
@@ -51,6 +53,24 @@ const OvertimeSettlements: React.FC = () => {
     const forMonth = settlements.find(entry => entry.month === selectedMonth)
     setHoursInput(forMonth ? minutesToHoursLabel(forMonth.minutes) : '')
   }, [selectedMonth, settlements])
+
+  /** Geleistete Stunden des gewählten Monats frisch aus den Stempelzeiten. */
+  useEffect(() => {
+    if (!currentUser?.id) return
+    let abgebrochen = false
+    setWorkedMinutes(null)
+    DataService.getWorkedMinutesForMonth(currentUser.id, selectedMonth)
+      .then(minutes => {
+        if (!abgebrochen) setWorkedMinutes(minutes)
+      })
+      .catch(error => {
+        console.error('Geleistete Stunden konnten nicht geladen werden:', error)
+        if (!abgebrochen) setWorkedMinutes(0)
+      })
+    return () => {
+      abgebrochen = true
+    }
+  }, [currentUser?.id, selectedMonth])
 
   const loadData = async () => {
     try {
@@ -120,15 +140,26 @@ const OvertimeSettlements: React.FC = () => {
   const balanceMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
   const settledSelectedMonth =
     settlements.find((entry) => entry.month === selectedMonth)?.minutes || 0
-  /** Bereits abgerechnete Stunden sind abgezogen – für eine Korrektur nach oben zählen sie mit. */
-  const maxSettleableMinutes = balanceMinutes + settledSelectedMonth
+  /** Mehr als geleistet lässt sich nicht abrechnen. */
+  const maxSettleableMinutes = workedMinutes ?? 0
+  const eingegebeneMinuten = hoursInput.trim() === '' ? 0 : parseHoursMinutesInput(hoursInput.trim())
+  /** Was nicht abgerechnet wird, wandert aufs Überstundenkonto. */
+  const restAufsKonto =
+    workedMinutes !== null && eingegebeneMinuten !== null
+      ? Math.max(0, workedMinutes - eingegebeneMinuten)
+      : null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentUser?.id) return
 
+    if (workedMinutes === null) {
+      toast.error('Die geleisteten Stunden werden noch geladen.')
+      return
+    }
+
     const trimmed = hoursInput.trim()
-    // Leeres Feld = nichts abrechnen. Das gibt bereits gebuchte Stunden zurück.
+    // Leeres Feld = nichts abrechnen, alle Stunden bleiben auf dem Konto.
     const minutes = trimmed === '' ? 0 : parseHoursMinutesInput(trimmed)
     if (minutes === null) {
       toast.error('Bitte Stunden als „8:30“ oder „8,5“ eingeben.')
@@ -136,18 +167,23 @@ const OvertimeSettlements: React.FC = () => {
     }
     if (minutes > maxSettleableMinutes) {
       toast.error(
-        `Nicht genügend Überstunden: verfügbar sind ${minutesToHoursLabel(maxSettleableMinutes)} Std.`
+        `Im Monat wurden ${minutesToHoursLabel(maxSettleableMinutes)} Std geleistet – mehr lässt sich nicht abrechnen.`
       )
       return
     }
 
     setIsSaving(true)
     try {
-      await DataService.setOvertimeSettlementMinutes(currentUser.id, selectedMonth, minutes)
+      await DataService.setOvertimeSettlementMinutes(
+        currentUser.id,
+        selectedMonth,
+        minutes,
+        workedMinutes
+      )
+      const rest = Math.max(0, workedMinutes - minutes)
       toast.success(
-        minutes > 0
-          ? `${minutesToHoursLabel(minutes)} Std für ${monthKeyLabel(selectedMonth)} abgerechnet.`
-          : `Abrechnung für ${monthKeyLabel(selectedMonth)} zurückgenommen.`
+        `${minutesToHoursLabel(minutes)} Std für ${monthKeyLabel(selectedMonth)} zur Abrechnung gemeldet.` +
+          (rest > 0 ? ` ${minutesToHoursLabel(rest)} Std gehen aufs Überstundenkonto.` : '')
       )
       await loadData()
     } catch (error: any) {
@@ -180,19 +216,26 @@ const OvertimeSettlements: React.FC = () => {
       </header>
 
       <div className="overtime-account card">
-        <h3>Ihr Überstundenkonto</h3>
+        <h3>{monthKeyLabel(selectedMonth)}</h3>
         <div className="overtime-stats">
           <div className="stat">
-            <span className="stat-value">{minutesToHoursLabel(balanceMinutes)}</span>
-            <span className="stat-label">Verfügbar</span>
+            <span className="stat-value">
+              {workedMinutes === null ? '…' : minutesToHoursLabel(workedMinutes)}
+            </span>
+            <span className="stat-label">Geleistet</span>
           </div>
           <div className="stat">
             <span className="stat-value">{minutesToHoursLabel(settledSelectedMonth)}</span>
-            <span className="stat-label">Für {monthKeyLabel(selectedMonth)} abgerechnet</span>
+            <span className="stat-label">Abgerechnet</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{minutesToHoursLabel(balanceMinutes)}</span>
+            <span className="stat-label">Überstundenkonto</span>
           </div>
         </div>
         <p className="overtime-account-note">
-          Abgerechnete Stunden sind sofort vom Konto abgezogen und bleiben änderbar.
+          Grundlage sind Ihre gestempelten Stunden des Monats. Was Sie davon nicht abrechnen
+          lassen, wird dem Überstundenkonto gutgeschrieben.
         </p>
       </div>
 
@@ -216,7 +259,7 @@ const OvertimeSettlements: React.FC = () => {
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="overtime-hours">Stunden:</label>
+            <label htmlFor="overtime-hours">Davon abrechnen:</label>
             <input
               id="overtime-hours"
               type="text"
@@ -224,14 +267,23 @@ const OvertimeSettlements: React.FC = () => {
               value={hoursInput}
               onChange={(e) => setHoursInput(e.target.value)}
               placeholder="z. B. 8:30 oder 8,5"
-              disabled={isSaving}
+              disabled={isSaving || workedMinutes === null}
             />
             <small className="form-hint">
-              Maximal {minutesToHoursLabel(maxSettleableMinutes)} Std. Der Wert lässt sich jederzeit
-              ändern; leer lassen nimmt die Abrechnung zurück.
+              Höchstens {minutesToHoursLabel(maxSettleableMinutes)} Std – so viel wurde in{' '}
+              {monthKeyLabel(selectedMonth)} geleistet. Der Wert lässt sich jederzeit ändern.
             </small>
           </div>
-          <button type="submit" className="btn primary-btn" disabled={isSaving}>
+          {restAufsKonto !== null && (
+            <p className="overtime-rest">
+              Aufs Überstundenkonto: <strong>{minutesToHoursLabel(restAufsKonto)} Std</strong>
+            </p>
+          )}
+          <button
+            type="submit"
+            className="btn primary-btn"
+            disabled={isSaving || workedMinutes === null}
+          >
             {isSaving ? 'Speichere…' : 'Übernehmen'}
           </button>
         </form>

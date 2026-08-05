@@ -44,19 +44,23 @@ export async function getOvertimeSettlement(
 }
 
 /**
- * Setzt die für einen Monat verrechneten Überstunden auf `minutes` und bucht
- * ausschließlich die Differenz zum bisherigen Wert gegen das Überstundenkonto.
- * Dadurch bleibt der Eintrag den ganzen Monat über änderbar, ohne dass das
- * Konto bei jeder Korrektur erneut belastet wird.
+ * Meldet für einen Monat, wie viele der geleisteten Stunden abgerechnet werden
+ * sollen. Der nicht abgerechnete Rest wird dem Überstundenkonto gutgeschrieben.
+ *
+ * Gebucht wird nur die Differenz zum bisherigen Beitrag desselben Monats –
+ * dadurch bleibt der Eintrag änderbar, ohne dass das Konto mehrfach wandert.
  *
  * Läuft als Transaktion: Kontostand und Monatswert dürfen nie auseinanderlaufen.
  *
+ * @param workedMinutes im Monat geleistete Arbeitszeit
+ * @param minutes davon abzurechnen
  * @returns der neue Kontostand in Minuten
  */
 export async function setOvertimeSettlementMinutes(
   employeeId: string,
   month: string,
-  minutes: number
+  minutes: number,
+  workedMinutes: number
 ): Promise<number> {
   await authReady
   if (!employeeId) throw new Error('Kein Mitarbeiter angegeben.')
@@ -64,8 +68,17 @@ export async function setOvertimeSettlementMinutes(
   if (!Number.isFinite(minutes) || minutes < 0) {
     throw new Error('Die Stundenangabe ist ungültig.')
   }
+  if (!Number.isFinite(workedMinutes) || workedMinutes < 0) {
+    throw new Error('Die geleisteten Stunden konnten nicht ermittelt werden.')
+  }
+  if (minutes > workedMinutes) {
+    throw new Error(
+      `Es können höchstens die geleisteten ${minutesToHoursLabel(Math.round(workedMinutes))} Std abgerechnet werden.`
+    )
+  }
 
   const wanted = Math.round(minutes)
+  const worked = Math.round(workedMinutes)
 
   try {
     return await runTransaction(db, async (transaction) => {
@@ -85,33 +98,36 @@ export async function setOvertimeSettlementMinutes(
           ? employee.overtimeBalanceMinutes
           : 0
       const previous = settlementSnap.exists()
-        ? Number((settlementSnap.data() as OvertimeSettlement).minutes) || 0
-        : 0
+        ? (settlementSnap.data() as OvertimeSettlement)
+        : null
 
-      const delta = wanted - previous
-      const nextBalance = nextBalanceForSettlement(balance, previous, wanted)
+      const nextBalance = nextBalanceForSettlement(balance, previous, worked, wanted)
       if (nextBalance === null) {
-        // Bereits verrechnete Stunden dieses Monats stehen weiter zur
-        // Verfügung – sie wurden ja schon abgezogen.
-        const available = balance + previous
+        // Kann nur passieren, wenn eine frühere Gutschrift dieses Monats
+        // inzwischen anderweitig verbraucht wurde (z. B. Urlaub auf Überstunden).
         throw new Error(
-          `Nicht genügend Überstunden: verfügbar sind ${minutesToHoursLabel(available)} Std.`
+          'Die Änderung würde das Überstundenkonto ins Minus bringen. Bitte im Büro melden.'
         )
       }
 
       if (settlementSnap.exists()) {
-        transaction.update(settlementRef, { minutes: wanted, updatedAt: new Date() })
+        transaction.update(settlementRef, {
+          minutes: wanted,
+          workedMinutes: worked,
+          updatedAt: new Date()
+        })
       } else {
         transaction.set(settlementRef, {
           employeeId,
           month,
           minutes: wanted,
+          workedMinutes: worked,
           createdAt: new Date(),
           updatedAt: new Date()
         })
       }
 
-      if (delta !== 0) {
+      if (nextBalance !== balance) {
         transaction.update(employeeRef, { overtimeBalanceMinutes: nextBalance })
       }
 

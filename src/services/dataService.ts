@@ -53,6 +53,7 @@ import type {
   DashboardWidgetInstance
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
+import { workedMinutesForMonth } from '../utils/monthlyWorkedMinutes'
 import { withTimeout } from '../utils/withTimeout'
 import { getFileImageSrc } from '../utils/fileImageSrc'
 import { toFileUploadRef } from '../utils/fileUploadRef'
@@ -955,13 +956,25 @@ class DataServiceClass {
       minutesByDay.set(dateKey, (minutesByDay.get(dateKey) || 0) + this.overtimeWorkedMinutesForEntry(entry))
     }
 
+    // Monate, für die der Mitarbeiter selbst gemeldet hat, wie viel abgerechnet
+    // werden soll, folgen NICHT der Tagesregel: dort gilt der nicht
+    // abgerechnete Rest. Sonst zählte derselbe Monat zweimal – einmal über die
+    // Tages-Überstunden, einmal über die Meldung.
+    const settlements = await overtimeSettlements.getOvertimeSettlements(employeeId)
+    const settledMonths = new Map<string, number>()
+    for (const s of settlements) {
+      if (typeof s.workedMinutes !== 'number') continue
+      settledMonths.set(s.month, Math.max(0, s.workedMinutes - (Number(s.minutes) || 0)))
+    }
+
     let earned = 0
     const dayOvertimes: Array<{ dateKey: string; minutes: number }> = []
     for (const [dateKey, mins] of minutesByDay) {
       const ot = Math.max(0, Math.round(mins - DataServiceClass.regularMinutesForDay(dateKey)))
       dayOvertimes.push({ dateKey, minutes: ot })
-      earned += ot
+      if (!settledMonths.has(dateKey.slice(0, 7))) earned += ot
     }
+    for (const rest of settledMonths.values()) earned += rest
 
     // Bereits als „Urlaub auf Überstunden" genehmigte Stunden abziehen
     const leaveRequests = await this.getLeaveRequestsByEmployee(employeeId)
@@ -2399,9 +2412,28 @@ class DataServiceClass {
   setOvertimeSettlementMinutes(
     employeeId: string,
     month: string,
-    minutes: number
+    minutes: number,
+    workedMinutes: number
   ): Promise<number> {
-    return overtimeSettlements.setOvertimeSettlementMinutes(employeeId, month, minutes)
+    return overtimeSettlements.setOvertimeSettlementMinutes(
+      employeeId,
+      month,
+      minutes,
+      workedMinutes
+    )
+  }
+
+  /** Im Monat geleistete Arbeitszeit – Grundlage der Abrechnungsmeldung. */
+  async getWorkedMinutesForMonth(employeeId: string, month: string): Promise<number> {
+    await this.authReadyPromise
+    if (!employeeId || !month) return 0
+    const [year, mon] = month.split('-').map(Number)
+    if (!year || !mon) return 0
+    const entries = await this.getTimeEntriesByEmployeeId(employeeId, {
+      from: new Date(year, mon - 1, 1),
+      to: new Date(year, mon, 0, 23, 59, 59, 999)
+    })
+    return workedMinutesForMonth(entries, month)
   }
 
   // Admin: Dashboard-Daten
