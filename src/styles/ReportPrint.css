@@ -527,6 +527,40 @@
   color: var(--text-secondary);
 }
 
+/* Meldung des Mitarbeiters zur Abrechnung des Monats */
+.employee-report-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+}
+
+.employee-report-note-text {
+  flex: 1 1 320px;
+}
+
+.employee-report-note-text h4 {
+  margin: 0 0 4px;
+  font-size: var(--font-size-md);
+}
+
+.employee-report-note-text p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.employee-report-note-state {
+  margin-top: 4px !important;
+}
+
 /* Monatsend-Aufruf an alle Mitarbeiter */
 .broadcast-panel {
   display: flex;

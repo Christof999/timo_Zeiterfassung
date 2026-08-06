@@ -540,3 +540,92 @@ describe('parseMealAllowanceInput', () => {
   })
 
 })
+
+describe('Gemeldete Stunden in die Zeilen übernehmen', () => {
+  // Nachbildung dessen, was der „Übernehmen"-Knopf im Zeiterfassungsbericht
+  // rechnet: auf Regelarbeitszeit deckeln und genau so viele Überstunden
+  // zurückverteilen, dass die Arbeitszeit die Meldung trifft.
+  const REGULAR = (dateKey: string): number => {
+    const wochentag = new Date(dateKey + 'T12:00:00').getDay()
+    return wochentag === 5 ? 6 * 60 : 8 * 60 // Freitag 6:00, sonst 8:00
+  }
+
+  /** Mo–Fr der Woche ab 06.07.2026, jeweils 07:00–17:00 = 10 Std. */
+  const woche = (): ReportEntry[] =>
+    [6, 7, 8, 9, 10].map((tag) => {
+      const original: TimeEntry = {
+        id: `w${tag}`,
+        employeeId: 'm1',
+        projectId: 'p1',
+        clockInTime: new Date(2026, 6, tag, 7, 0),
+        clockOutTime: new Date(2026, 6, tag, 17, 0),
+        pauseTotalTime: 0
+      }
+      return {
+        id: `w${tag}`,
+        originalEntry: original,
+        source: 'time-entry',
+        date: `${tag}.07.2026`,
+        dateRaw: new Date(2026, 6, tag),
+        dateKey: `2026-07-${String(tag).padStart(2, '0')}`,
+        projectId: 'p1',
+        projectName: 'Projekt',
+        clockIn: '07:00',
+        clockOut: '17:00',
+        pauseMinutes: 0,
+        pauseMs: 0,
+        workHours: '10:00',
+        notes: '',
+        originalNotes: '',
+        isEdited: false
+      } as ReportEntry
+    })
+
+  const uebernehmen = (entries: ReportEntry[], zielMinuten: number) => {
+    const basis = buildAdjustedReport(entries, {
+      regularDayMinutes: REGULAR,
+      requestedPayoutMinutes: 0
+    })
+    const noetig = zielMinuten - basis.summary.workMinutes
+    const ergebnis = buildAdjustedReport(entries, {
+      regularDayMinutes: REGULAR,
+      requestedPayoutMinutes: Math.max(0, noetig)
+    })
+    return { basis, noetig, ergebnis }
+  }
+
+  it('deckelt ohne Auszahlung auf die Regelarbeitszeit', () => {
+    // 4 × 8:00 + Freitag 6:00 = 38:00, obwohl 50:00 gestempelt sind
+    const { basis } = uebernehmen(woche(), 0)
+    expect(basis.summary.workMinutes).toBe(38 * 60)
+  })
+
+  it('trifft die gemeldete Stundenzahl exakt', () => {
+    const ziel = 45 * 60
+    const { noetig, ergebnis } = uebernehmen(woche(), ziel)
+    expect(noetig).toBe(7 * 60) // 45:00 − 38:00
+    expect(ergebnis.summary.workMinutes).toBe(ziel)
+  })
+
+  it('trifft auch die volle gestempelte Zeit', () => {
+    const ziel = 50 * 60
+    const { ergebnis } = uebernehmen(woche(), ziel)
+    expect(ergebnis.summary.workMinutes).toBe(ziel)
+    expect(ergebnis.payoutUnallocatedMinutes).toBe(0)
+  })
+
+  it('erkennt, wenn die Meldung unter der Regelarbeitszeit liegt', () => {
+    // 30:00 gemeldet, aber schon die Regelarbeitszeit ergibt 38:00 – die
+    // Mechanik kann nicht nach unten, der Bericht muss das melden statt still
+    // eine falsche Zahl auszuweisen.
+    const { noetig } = uebernehmen(woche(), 30 * 60)
+    expect(noetig).toBeLessThan(0)
+  })
+
+  it('verteilt nicht mehr, als tatsächlich gestempelt wurde', () => {
+    // 60:00 gefordert, gestempelt sind nur 50:00
+    const { ergebnis } = uebernehmen(woche(), 60 * 60)
+    expect(ergebnis.summary.workMinutes).toBe(50 * 60)
+    expect(ergebnis.payoutUnallocatedMinutes).toBeGreaterThan(0)
+  })
+})

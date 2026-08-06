@@ -462,19 +462,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, startDate, endDate)
       setEmployeeSettlement(settlement)
 
-      // Hat der Mitarbeiter für diesen Monat selbst Überstunden zur Verrechnung
-      // angemeldet, ist das der führende Wert: er ist bereits vom Konto
-      // abgezogen und wird hier nur noch als Vorgabe übernommen.
+      // Meldung des Mitarbeiters für diesen Monat laden. Bewusst NICHT
+      // automatisch anwenden: welche Stunden im Bericht stehen, entscheidet
+      // die Lohnbuchhaltung per Klick auf „Übernehmen".
       const monthKey = monthKeyForPeriod(startDate, endDate)
       const monthSettlement = monthKey
         ? await DataService.getOvertimeSettlement(selectedEmployeeId, monthKey)
         : null
       setOvertimeSettlement(monthSettlement)
-      if (monthSettlement && monthSettlement.minutes > 0) {
-        setOvertimeMode(true)
-        setPayoutInput(minutesToHoursLabel(monthSettlement.minutes))
-        setAppliedPayoutMinutes(monthSettlement.minutes)
-      }
     } catch (error) {
       console.error('Fehler:', error)
       toast.error('Fehler beim Laden der Zeiteinträge')
@@ -930,9 +925,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setIsSavingSettlement(true)
     try {
-      // Was der Mitarbeiter für diesen Monat schon selbst verrechnet hat, ist
-      // bereits vom Konto abgezogen und darf hier nicht erneut gebucht werden.
-      const alreadyBookedMinutes = overtimeSettlement?.minutes || 0
+      // Liegt eine Meldung des Mitarbeiters vor, hat sie das Überstundenkonto
+      // bereits vollständig bewegt (nicht abgerechnete Stunden gutgeschrieben
+      // bzw. ausgezahlte abgezogen). Dann darf hier gar nichts mehr gebucht
+      // werden – deshalb gilt der volle Betrag als bereits gebucht.
+      const alreadyBookedMinutes = overtimeSettlement ? paidOutMinutes : 0
       await DataService.saveTimeReportSettlement(
         {
           employeeId: selectedEmployeeId,
@@ -1512,6 +1509,40 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       summary: adjustedReport.summary
     })
 
+  /**
+   * Übernimmt die vom Mitarbeiter gemeldete Stundenzahl in die Zeilen.
+   *
+   * Die Meldung nennt die Gesamtstunden, die abgerechnet werden sollen. Der
+   * Bericht erreicht das über die vorhandene Mechanik: auf Regelarbeitszeit
+   * deckeln und genau so viele Überstunden wieder verteilen, dass die Summe
+   * der Arbeitszeit die Meldung trifft. Verglichen wird nur die Arbeitszeit –
+   * Urlaub, Feiertag und Krankheit stehen fest und sind in der Meldung nicht
+   * enthalten.
+   */
+  const handleApplyReportedHours = () => {
+    if (!overtimeSettlement) return
+    const ziel = overtimeSettlement.minutes
+
+    const basis = buildAdjustedReport(reportEntries, {
+      regularDayMinutes: (dateKey: string) =>
+        regularMinutesForDateKey(dateKey, regularWorkTimeConfig),
+      requestedPayoutMinutes: 0
+    })
+    const noetig = ziel - basis.summary.workMinutes
+
+    if (noetig < 0) {
+      toast.error(
+        `Gemeldet sind ${minutesToHoursLabel(ziel)} Std, die Regelarbeitszeit im Zeitraum ergibt aber schon ${minutesToHoursLabel(basis.summary.workMinutes)} Std. Bitte die Zeilen von Hand anpassen.`
+      )
+      return
+    }
+
+    setOvertimeMode(true)
+    setPayoutInput(minutesToHoursLabel(noetig))
+    setAppliedPayoutMinutes(noetig)
+    toast.success(`${minutesToHoursLabel(ziel)} Std in die Zeilen übernommen.`)
+  }
+
   const handleBroadcastOvertimeReminder = async () => {
     // Abgerechnet wird der Vormonat – Anfang August also der Juli.
     const month = previousMonthKey()
@@ -1864,6 +1895,53 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 )}
               </div>
 
+              {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
+                  haben möchte. Angewendet wird sie erst auf Klick. */}
+              {overtimeSettlement && reportEntries.length > 0 && (
+                <div className="employee-report-note no-print">
+                  <div className="employee-report-note-text">
+                    <h4>
+                      Meldung von {selectedEmployeeName || 'dem Mitarbeiter'} für{' '}
+                      {monthKeyLabel(overtimeSettlement.month)}
+                    </h4>
+                    <p>
+                      Abzurechnen: <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>
+                      {typeof overtimeSettlement.workedMinutes === 'number' && (
+                        <>
+                          {' '}von {minutesToHoursLabel(overtimeSettlement.workedMinutes)} Std
+                          geleistet
+                          {(() => {
+                            const diff =
+                              overtimeSettlement.workedMinutes - overtimeSettlement.minutes
+                            if (diff > 0)
+                              return ` – ${minutesToHoursLabel(diff)} Std gehen aufs Überstundenkonto.`
+                            if (diff < 0)
+                              return ` – ${minutesToHoursLabel(-diff)} Std kommen vom Überstundenkonto.`
+                            return ' – nichts bleibt auf dem Überstundenkonto.'
+                          })()}
+                        </>
+                      )}
+                    </p>
+                    <p className="employee-report-note-state">
+                      In der Liste stehen aktuell{' '}
+                      <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
+                      Arbeitszeit
+                      {adjustedReport.summary.workMinutes === overtimeSettlement.minutes
+                        ? ' – die Meldung ist übernommen.'
+                        : ' – weicht von der Meldung ab.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn primary-btn"
+                    onClick={handleApplyReportedHours}
+                    disabled={adjustedReport.summary.workMinutes === overtimeSettlement.minutes}
+                  >
+                    Übernehmen
+                  </button>
+                </div>
+              )}
+
               {reportEntries.length > 0 && (
                 <div className="overtime-panel no-print">
                   <div className="overtime-panel-head">
@@ -1891,13 +1969,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <span>
                           Im Zeitraum über Regelarbeitszeit:{' '}
                           <strong>{minutesToHoursLabel(adjustedReport.overtimeAvailableMinutes)}</strong>
-                        </span>
-                      )}
-                      {overtimeSettlement && overtimeSettlement.minutes > 0 && (
-                        <span className="overtime-selfbooked">
-                          Vom Mitarbeiter für {monthKeyLabel(overtimeSettlement.month)} verrechnet:{' '}
-                          <strong>{minutesToHoursLabel(overtimeSettlement.minutes)}</strong> – bereits
-                          vom Konto abgezogen, wird beim Speichern nicht erneut gebucht.
                         </span>
                       )}
                       <label className="meal-rate-field">
