@@ -5,6 +5,7 @@ import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
 import {
   allocateOvertimePayout,
   applyWorkTimeRules,
+  MAX_DAILY_WORK_MINUTES,
   type WorkTimeAdjustment,
   type WorkTimeDaySummary,
   type WorkTimeRowInput
@@ -415,6 +416,42 @@ export interface ReportSettlementSummary {
   totalPayoutAmount: number
   /** true = Azubi mit Fixlohn; dann steht neben den Zeiten kein Stundensatz. */
   isFixedSalary: boolean
+}
+
+/**
+ * Plant, wie eine gemeldete Gesamtstundenzahl auf die Tage verteilt wird.
+ *
+ * Gesucht ist der höchste einheitliche Tagesdeckel, mit dem die Summe das Ziel
+ * noch nicht überschreitet; der verbleibende Rest wird anschließend über die
+ * vorhandene Überstunden-Verteilung ergänzt. Damit trifft die Ausweisung das
+ * Ziel exakt – und zwar in beide Richtungen:
+ *
+ * - Ziel unter der gestempelten Zeit → die längsten Tage werden zuerst gekürzt
+ * - Ziel über der gestempelten Zeit → die Differenz wird als ausbezahlte
+ *   Überstunden auf die Tage verteilt (bis zur 10-Std-Grenze)
+ *
+ * @param dayMinutes geleistete Minuten je Tag
+ * @param targetMinutes gemeldete Gesamtminuten
+ */
+export const planSettlementTarget = (
+  dayMinutes: number[],
+  targetMinutes: number
+): { dailyCapMinutes: number; payoutMinutes: number } => {
+  const ziel = Math.max(0, Math.round(targetMinutes))
+  const summeBei = (deckel: number): number =>
+    dayMinutes.reduce((sum, minutes) => sum + Math.min(minutes, deckel), 0)
+
+  // Binäre Suche über den Tagesdeckel. Die Summe wächst monoton mit dem
+  // Deckel, deshalb ist der größte Deckel mit Summe ≤ Ziel eindeutig.
+  let unten = 0
+  let oben = MAX_DAILY_WORK_MINUTES
+  while (unten < oben) {
+    const mitte = Math.floor((unten + oben + 1) / 2)
+    if (summeBei(mitte) <= ziel) unten = mitte
+    else oben = mitte - 1
+  }
+
+  return { dailyCapMinutes: unten, payoutMinutes: Math.max(0, ziel - summeBei(unten)) }
 }
 
 export interface AdjustedReport {

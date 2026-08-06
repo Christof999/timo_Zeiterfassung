@@ -33,6 +33,7 @@ import {
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
+  planSettlementTarget,
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
@@ -139,6 +140,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
   /** Alle Abrechnungs-Meldungen des gewählten Mitarbeiters (neueste zuerst). */
   const [employeeSettlements, setEmployeeSettlements] = useState<OvertimeSettlement[]>([])
+  /** Übernommene Meldung: Zielsumme, auf die die Zeilen gebracht werden. */
+  const [appliedSettlementTarget, setAppliedSettlementTarget] = useState<number | null>(null)
   /** Monatsend-Aufruf an alle Mitarbeiter (Popup in der App + Push aufs Handy). */
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
@@ -270,6 +273,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setIsLoading(true)
     setHasSearched(true)
+    // Eine übernommene Meldung gilt immer nur für den geladenen Zeitraum.
+    setAppliedSettlementTarget(null)
 
     try {
       const start = new Date(von)
@@ -761,24 +766,46 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
    * Zeilenänderung automatisch neu greift und nie in die Speicherlogik gerät.
    */
   const adjustedReport = useMemo(
-    () =>
-      buildAdjustedReport(reportEntries, {
-        regularDayMinutes: overtimeMode
-          ? (dateKey: string) => regularMinutesForDateKey(dateKey, regularWorkTimeConfig)
-          : null,
-        requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0,
+    () => {
+      const gemeinsam = {
         hourlyRate: employeeHourlyRate,
         mealAllowanceRate,
         isApprentice: employeeIsApprentice,
         fixedMonthlySalary: employeeFixedSalary,
         overtimeBalanceMinutes: employeeOvertimeBalance
-      }),
+      }
+
+      // Übernommene Meldung schlägt die manuelle Regelarbeitszeit-Sicht: die
+      // Zeilen werden so gedeckelt bzw. aufgefüllt, dass die Summe die
+      // gemeldete Stundenzahl exakt trifft.
+      if (appliedSettlementTarget !== null) {
+        const ungedeckelt = buildAdjustedReport(reportEntries, gemeinsam)
+        const plan = planSettlementTarget(
+          ungedeckelt.days.map((day) => day.legalWorkMinutes),
+          appliedSettlementTarget
+        )
+        return buildAdjustedReport(reportEntries, {
+          ...gemeinsam,
+          regularDayMinutes: plan.dailyCapMinutes,
+          requestedPayoutMinutes: plan.payoutMinutes
+        })
+      }
+
+      return buildAdjustedReport(reportEntries, {
+        ...gemeinsam,
+        regularDayMinutes: overtimeMode
+          ? (dateKey: string) => regularMinutesForDateKey(dateKey, regularWorkTimeConfig)
+          : null,
+        requestedPayoutMinutes: overtimeMode ? appliedPayoutMinutes : 0
+      })
+    },
     [
       reportEntries,
       overtimeMode,
       regularWorkTimeConfig.monThu,
       regularWorkTimeConfig.fri,
       appliedPayoutMinutes,
+      appliedSettlementTarget,
       employeeHourlyRate,
       mealAllowanceRate,
       employeeIsApprentice,
@@ -1532,35 +1559,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   /**
    * Übernimmt die vom Mitarbeiter gemeldete Stundenzahl in die Zeilen.
    *
-   * Die Meldung nennt die Gesamtstunden, die abgerechnet werden sollen. Der
-   * Bericht erreicht das über die vorhandene Mechanik: auf Regelarbeitszeit
-   * deckeln und genau so viele Überstunden wieder verteilen, dass die Summe
-   * der Arbeitszeit die Meldung trifft. Verglichen wird nur die Arbeitszeit –
-   * Urlaub, Feiertag und Krankheit stehen fest und sind in der Meldung nicht
-   * enthalten.
+   * Die Zeiten werden so gedeckelt bzw. aufgefüllt, dass die ausgewiesene
+   * Arbeitszeit die Meldung exakt trifft – nach unten wie nach oben. Verglichen
+   * wird nur die Arbeitszeit; Urlaub, Feiertag und Krankheit stehen fest und
+   * sind in der Meldung nicht enthalten.
    */
   const handleApplyReportedHours = () => {
     if (!overtimeSettlement) return
     const ziel = overtimeSettlement.minutes
 
-    const basis = buildAdjustedReport(reportEntries, {
-      regularDayMinutes: (dateKey: string) =>
-        regularMinutesForDateKey(dateKey, regularWorkTimeConfig),
-      requestedPayoutMinutes: 0
-    })
-    const noetig = ziel - basis.summary.workMinutes
-
-    if (noetig < 0) {
-      toast.error(
-        `Gemeldet sind ${minutesToHoursLabel(ziel)} Std, die Regelarbeitszeit im Zeitraum ergibt aber schon ${minutesToHoursLabel(basis.summary.workMinutes)} Std. Bitte die Zeilen von Hand anpassen.`
-      )
-      return
-    }
-
-    setOvertimeMode(true)
-    setPayoutInput(minutesToHoursLabel(noetig))
-    setAppliedPayoutMinutes(noetig)
+    // Die manuelle Überstunden-Sicht würde sonst mit der Meldung konkurrieren.
+    setOvertimeMode(false)
+    setPayoutInput('0:00')
+    setAppliedPayoutMinutes(0)
+    setAppliedSettlementTarget(ziel)
     toast.success(`${minutesToHoursLabel(ziel)} Std in die Zeilen übernommen.`)
+  }
+
+  const handleResetReportedHours = () => {
+    setAppliedSettlementTarget(null)
+    toast.info('Gemeldete Stunden verworfen – es gelten wieder die gestempelten Zeiten.')
   }
 
   const handleBroadcastOvertimeReminder = async () => {
@@ -1992,14 +2010,25 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         : ' – weicht von der Meldung ab.'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="btn primary-btn"
-                    onClick={handleApplyReportedHours}
-                    disabled={adjustedReport.summary.workMinutes === overtimeSettlement.minutes}
-                  >
-                    Übernehmen
-                  </button>
+                  <div className="employee-report-note-actions">
+                    <button
+                      type="button"
+                      className="btn primary-btn"
+                      onClick={handleApplyReportedHours}
+                      disabled={appliedSettlementTarget === overtimeSettlement.minutes}
+                    >
+                      Übernehmen
+                    </button>
+                    {appliedSettlementTarget !== null && (
+                      <button
+                        type="button"
+                        className="btn secondary-btn"
+                        onClick={handleResetReportedHours}
+                      >
+                        Zurücksetzen
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
