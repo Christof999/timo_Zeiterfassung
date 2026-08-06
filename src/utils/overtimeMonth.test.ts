@@ -3,6 +3,7 @@ import {
   monthKeyForDate,
   monthKeyForPeriod,
   monthKeyLabel,
+  monthRange,
   previousMonthKey,
   settleableMonthKeys
 } from './overtimeMonth'
@@ -48,5 +49,25 @@ describe('settleableMonthKeys', () => {
 
   it('funktioniert über den Jahreswechsel', () => {
     expect(settleableMonthKeys(new Date(2026, 0, 15))).toEqual(['2025-12', '2026-01'])
+  })
+})
+
+describe('monthRange', () => {
+  it('liefert ersten und letzten Tag des Monats', () => {
+    expect(monthRange('2026-07')).toEqual({ start: '2026-07-01', end: '2026-07-31' })
+    expect(monthRange('2026-02')).toEqual({ start: '2026-02-01', end: '2026-02-28' })
+    // Schaltjahr
+    expect(monthRange('2028-02')).toEqual({ start: '2028-02-01', end: '2028-02-29' })
+  })
+
+  it('passt zu monthKeyForPeriod – der Bericht findet die Meldung wieder', () => {
+    const r = monthRange('2026-07')!
+    expect(monthKeyForPeriod(r.start, r.end)).toBe('2026-07')
+  })
+
+  it('gibt null bei unsinnigem Monat', () => {
+    expect(monthRange('kaputt')).toBeNull()
+    expect(monthRange('2026-13')).toBeNull()
+    expect(monthRange('')).toBeNull()
   })
 })

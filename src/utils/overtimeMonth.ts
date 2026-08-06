@@ -43,6 +43,15 @@ export const monthKeyLabel = (monthKey: string): string => {
   return `${MONTH_NAMES[index]} ${year}`
 }
 
+/** Erster und letzter Tag eines Monats als "YYYY-MM-DD" (für Datumsfelder). */
+export const monthRange = (monthKey: string): { start: string; end: string } | null => {
+  const [year, month] = (monthKey || '').split('-').map(Number)
+  if (!year || !month || month < 1 || month > 12) return null
+  const letzterTag = new Date(year, month, 0).getDate()
+  const mm = String(month).padStart(2, '0')
+  return { start: `${year}-${mm}-01`, end: `${year}-${mm}-${String(letzterTag).padStart(2, '0')}` }
+}
+
 /**
  * Monatsschlüssel eines Auswertungszeitraums – aber nur, wenn Start und Ende
  * im selben Kalendermonat liegen. Sonst gibt es keinen eindeutigen Monat, dem

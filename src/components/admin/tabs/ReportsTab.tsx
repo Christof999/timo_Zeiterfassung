@@ -36,7 +36,12 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
-import { monthKeyForPeriod, monthKeyLabel, previousMonthKey } from '../../../utils/overtimeMonth'
+import {
+  monthKeyForPeriod,
+  monthKeyLabel,
+  monthRange,
+  previousMonthKey
+} from '../../../utils/overtimeMonth'
 import {
   getReportMailConfig,
   isValidEmail,
@@ -132,8 +137,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [payoutInput, setPayoutInput] = useState('0:00')
   /** Übernommener Auszahlungsbetrag – erst ein Klick auf „In Zeilen übernehmen" setzt ihn. */
   const [appliedPayoutMinutes, setAppliedPayoutMinutes] = useState(0)
-  /** Vom Mitarbeiter selbst für den Monat angemeldete Überstunden (bereits vom Konto abgezogen). */
-  const [overtimeSettlement, setOvertimeSettlement] = useState<OvertimeSettlement | null>(null)
+  /** Alle Abrechnungs-Meldungen des gewählten Mitarbeiters (neueste zuerst). */
+  const [employeeSettlements, setEmployeeSettlements] = useState<OvertimeSettlement[]>([])
   /** Monatsend-Aufruf an alle Mitarbeiter (Popup in der App + Push aufs Handy). */
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
@@ -246,12 +251,19 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   // ==================== MITARBEITER-BERICHT ====================
-  const handleEmployeeSearch = async () => {
+  /**
+   * @param range optionaler Zeitraum, der die Datumsfelder überschreibt. Nötig,
+   *   weil State-Änderungen erst beim nächsten Rendern greifen – ein direkt
+   *   nach setStartDate ausgelöster Suchlauf liefe sonst auf den alten Daten.
+   */
+  const handleEmployeeSearch = async (range?: { start: string; end: string }) => {
     if (!selectedEmployeeId) {
       toast.error('Bitte wählen Sie einen Mitarbeiter aus')
       return
     }
-    if (!startDate || !endDate) {
+    const von = range?.start ?? startDate
+    const bis = range?.end ?? endDate
+    if (!von || !bis) {
       toast.error('Bitte wählen Sie einen Zeitraum aus')
       return
     }
@@ -260,9 +272,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setHasSearched(true)
 
     try {
-      const start = new Date(startDate)
+      const start = new Date(von)
       start.setHours(0, 0, 0, 0)
-      const end = new Date(endDate)
+      const end = new Date(bis)
       end.setHours(23, 59, 59, 999)
 
       // Zeitraum serverseitig vorfiltern; der Filter unten bleibt als
@@ -459,17 +471,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : ''
       )
 
-      const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, startDate, endDate)
+      const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, von, bis)
       setEmployeeSettlement(settlement)
 
-      // Meldung des Mitarbeiters für diesen Monat laden. Bewusst NICHT
-      // automatisch anwenden: welche Stunden im Bericht stehen, entscheidet
-      // die Lohnbuchhaltung per Klick auf „Übernehmen".
-      const monthKey = monthKeyForPeriod(startDate, endDate)
-      const monthSettlement = monthKey
-        ? await DataService.getOvertimeSettlement(selectedEmployeeId, monthKey)
-        : null
-      setOvertimeSettlement(monthSettlement)
+      // Alle Meldungen des Mitarbeiters laden, nicht nur die des gewählten
+      // Zeitraums: Der Bericht startet im laufenden Monat, gemeldet wird aber
+      // der Vormonat. Ohne die übrigen Meldungen bliebe der Hinweis unsichtbar.
+      // Angewendet wird nichts automatisch – das entscheidet die Lohnbuchhaltung.
+      setEmployeeSettlements(await DataService.getOvertimeSettlements(selectedEmployeeId))
     } catch (error) {
       console.error('Fehler:', error)
       toast.error('Fehler beim Laden der Zeiteinträge')
@@ -792,6 +801,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     const lastDayOfMonth = new Date(ey, em, 0).getDate()
     return sd === 1 && ed === lastDayOfMonth
   })()
+
+  /** Meldung, die zum aktuell gewählten Zeitraum gehört (nur bei ganzem Monat). */
+  const periodMonthKey = monthKeyForPeriod(startDate, endDate)
+  const overtimeSettlement =
+    employeeSettlements.find(entry => entry.month === periodMonthKey) ?? null
+  /**
+   * Meldungen anderer Monate. Der Bericht steht standardmäßig im laufenden
+   * Monat, gemeldet wird aber der Vormonat – ohne diesen Hinweis würde die
+   * Meldung schlicht übersehen.
+   */
+  const otherSettlements = employeeSettlements.filter(entry => entry.month !== periodMonthKey)
 
   const adjustedEntries = adjustedReport.entries
   const regularWorkTimeLabel = `Mo–Do ${minutesToHoursLabel(regularWorkTimeConfig.monThu)} · Fr ${minutesToHoursLabel(regularWorkTimeConfig.fri)}`
@@ -1714,7 +1734,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
-            <button onClick={handleEmployeeSearch} className="btn primary-btn search-btn" disabled={isLoading}>
+            <button onClick={() => void handleEmployeeSearch()} className="btn primary-btn search-btn" disabled={isLoading}>
               {isLoading ? 'Lädt...' : 'Auswertung laden'}
             </button>
           </div>
@@ -1802,7 +1822,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     {isSavingSettlement ? 'Speichert…' : 'Korrektur abrechnen & speichern'}
                   </button>
                   {hasEdits && (
-                    <button onClick={handleEmployeeSearch} className="btn secondary-btn">
+                    <button onClick={() => void handleEmployeeSearch()} className="btn secondary-btn">
                       Zurücksetzen
                     </button>
                   )}
@@ -1894,6 +1914,47 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </p>
                 )}
               </div>
+
+              {/* Meldungen aus anderen Monaten sichtbar machen: der Bericht
+                  startet im laufenden Monat, gemeldet wird der Vormonat. */}
+              {!overtimeSettlement && otherSettlements.length > 0 && (
+                <div className="employee-report-note employee-report-note-other no-print">
+                  <div className="employee-report-note-text">
+                    <h4>Meldung aus einem anderen Monat</h4>
+                    <p>
+                      {selectedEmployeeName || 'Der Mitarbeiter'} hat{' '}
+                      {otherSettlements.length === 1 ? 'eine Meldung' : 'Meldungen'} abgegeben, die
+                      nicht zum gewählten Zeitraum passt
+                      {otherSettlements.length === 1 ? '' : 'en'}:{' '}
+                      {otherSettlements
+                        .slice(0, 3)
+                        .map(
+                          (entry) =>
+                            `${monthKeyLabel(entry.month)} – ${minutesToHoursLabel(entry.minutes)} Std`
+                        )
+                        .join(' · ')}
+                    </p>
+                  </div>
+                  <div className="employee-report-note-actions">
+                    {otherSettlements.slice(0, 3).map((entry) => (
+                      <button
+                        key={entry.month}
+                        type="button"
+                        className="btn secondary-btn"
+                        onClick={() => {
+                          const range = monthRange(entry.month)
+                          if (!range) return
+                          setStartDate(range.start)
+                          setEndDate(range.end)
+                          void handleEmployeeSearch(range)
+                        }}
+                      >
+                        {monthKeyLabel(entry.month)} anzeigen
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
                   haben möchte. Angewendet wird sie erst auf Klick. */}

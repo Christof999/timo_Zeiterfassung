@@ -561,6 +561,17 @@
   margin-top: 4px !important;
 }
 
+/* Meldung passt nicht zum Zeitraum – zurückhaltender als die eigentliche. */
+.employee-report-note-other {
+  border-left-color: var(--text-muted, #9CA3AF);
+}
+
+.employee-report-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
 /* Monatsend-Aufruf an alle Mitarbeiter */
 .broadcast-panel {
   display: flex;
