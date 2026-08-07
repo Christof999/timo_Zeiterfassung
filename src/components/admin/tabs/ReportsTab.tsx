@@ -2150,8 +2150,31 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
+  /**
+   * Versendbarer Stand des gerade offenen Berichts. DATEV-Nachweis und
+   * Mitarbeiter-Zeitauswertung gehen über dieselbe Function raus – nur Anhang,
+   * Dateiname und die Kennzahlen in der Mail unterscheiden sich.
+   */
+  const buildMailPayload = () => {
+    const istDatev = reportType === 'datev'
+    const safeName = (selectedEmployeeName || 'mitarbeiter')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+    return {
+      hasContent: istDatev ? datevRows.length > 0 : reportEntries.length > 0,
+      periodLabel: istDatev && periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
+      totalHours: minutesToHoursLabel(
+        istDatev ? datevTotalMinutes(datevRows) : adjustedReport.shownTotalMinutes
+      ),
+      reportHtml: istDatev ? buildCurrentDatevHtml() : buildCurrentReportHtml(),
+      attachmentFilename: `${istDatev ? 'datev-nachweis' : 'zeiterfassungsbericht'}-${safeName}-${startDate}_${endDate}.html`
+    }
+  }
+
   const handleSendReportMail = async () => {
-    if (reportEntries.length === 0) {
+    const mail = buildMailPayload()
+    if (!mail.hasContent) {
       toast.error('Kein Bericht zum Versenden vorhanden')
       return
     }
@@ -2162,20 +2185,16 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setIsSendingMail(true)
     try {
-      const safeName = (selectedEmployeeName || 'mitarbeiter')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
       await sendReportMail({
         to: mailRecipient.trim(),
         employeeName: selectedEmployeeName,
-        periodLabel: formatPeriod(),
-        totalHours: minutesToHoursLabel(adjustedReport.shownTotalMinutes),
+        periodLabel: mail.periodLabel,
+        totalHours: mail.totalHours,
         grossWage: formatCurrency(adjustedReport.summary.grossWageAmount),
         note: mailNote.trim(),
         senderName: COMPANY_NAME,
-        reportHtml: buildCurrentReportHtml(),
-        attachmentFilename: `zeiterfassungsbericht-${safeName}-${startDate}_${endDate}.html`
+        reportHtml: mail.reportHtml,
+        attachmentFilename: mail.attachmentFilename
       })
       toast.success(`Bericht an ${mailRecipient.trim()} versendet.`)
       setMailNote('')
@@ -2184,6 +2203,72 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     } finally {
       setIsSendingMail(false)
     }
+  }
+
+  /**
+   * Versand-Panel – identisch in der Mitarbeiter-Zeitauswertung und im
+   * DATEV-Nachweis. Der Empfänger wird gepflegt und gespeichert, damit er nicht
+   * bei jedem Versand neu eingetippt werden muss.
+   */
+  const renderMailPanel = () => {
+    const istDatev = reportType === 'datev'
+    const hatInhalt = istDatev ? datevRows.length > 0 : reportEntries.length > 0
+
+    return (
+      <div className="report-mail-panel no-print">
+        <div className="report-mail-head">
+          <h4>{istDatev ? 'Nachweis per E-Mail senden' : 'Bericht per E-Mail senden'}</h4>
+          <span className="report-mail-attachment">
+            Anhang: {istDatev ? 'Nachweis' : 'Bericht'} als HTML-Datei (im Browser druckbar)
+          </span>
+        </div>
+        <div className="report-mail-row">
+          <label className="report-mail-field">
+            Empfänger
+            <input
+              type="email"
+              value={mailRecipient}
+              onChange={e => setMailRecipient(e.target.value)}
+              placeholder="name@kanzlei.de"
+              className="inline-edit"
+            />
+          </label>
+          <button
+            type="button"
+            className="btn secondary-btn"
+            onClick={handleSaveRecipient}
+            disabled={!isValidEmail(mailRecipient)}
+          >
+            Empfänger merken
+          </button>
+        </div>
+        <label className="report-mail-field report-mail-note">
+          Nachricht (optional)
+          <textarea
+            value={mailNote}
+            onChange={e => setMailNote(e.target.value)}
+            rows={2}
+            placeholder="z. B. Bitte um Prüfung bis Monatsende."
+            className="inline-edit"
+          />
+        </label>
+        <div className="report-mail-actions">
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={handleSendReportMail}
+            disabled={isSendingMail || !hatInhalt || !isValidEmail(mailRecipient)}
+          >
+            {isSendingMail ? 'Sende…' : istDatev ? 'Nachweis senden' : 'Bericht senden'}
+          </button>
+          <span className="report-mail-hint">
+            {istDatev
+              ? 'Versendet wird der Nachweis in der aktuell angezeigten Fassung – inklusive Abrechnungsblatt auf Seite 2.'
+              : 'Versendet wird der Bericht in der aktuell angezeigten Fassung – inklusive Abrechnungsblock mit dem Bruttolohn.'}
+          </span>
+        </div>
+      </div>
+    )
   }
 
   const hasEdits = reportEntries.some(e => e.isEdited)
@@ -2407,60 +2492,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 </div>
               </div>
 
-              {/* Versand des Berichts. Der Empfänger wird gepflegt und gespeichert,
-                  damit er nicht bei jedem Versand neu eingetippt werden muss. */}
-              <div className="report-mail-panel no-print">
-                <div className="report-mail-head">
-                  <h4>Bericht per E-Mail senden</h4>
-                  <span className="report-mail-attachment">
-                    Anhang: Bericht als HTML-Datei (im Browser druckbar)
-                  </span>
-                </div>
-                <div className="report-mail-row">
-                  <label className="report-mail-field">
-                    Empfänger
-                    <input
-                      type="email"
-                      value={mailRecipient}
-                      onChange={e => setMailRecipient(e.target.value)}
-                      placeholder="name@kanzlei.de"
-                      className="inline-edit"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn secondary-btn"
-                    onClick={handleSaveRecipient}
-                    disabled={!isValidEmail(mailRecipient)}
-                  >
-                    Empfänger merken
-                  </button>
-                </div>
-                <label className="report-mail-field report-mail-note">
-                  Nachricht (optional)
-                  <textarea
-                    value={mailNote}
-                    onChange={e => setMailNote(e.target.value)}
-                    rows={2}
-                    placeholder="z. B. Bitte um Prüfung bis Monatsende."
-                    className="inline-edit"
-                  />
-                </label>
-                <div className="report-mail-actions">
-                  <button
-                    type="button"
-                    className="btn primary-btn"
-                    onClick={handleSendReportMail}
-                    disabled={isSendingMail || reportEntries.length === 0 || !isValidEmail(mailRecipient)}
-                  >
-                    {isSendingMail ? 'Sende…' : 'Bericht senden'}
-                  </button>
-                  <span className="report-mail-hint">
-                    Versendet wird der Bericht in der aktuell angezeigten Fassung – inklusive
-                    Abrechnungsblock mit dem Bruttolohn.
-                  </span>
-                </div>
-              </div>
+              {renderMailPanel()}
 
               <div className="edit-notice no-print">
                 <label className="direct-save-toggle">
@@ -3123,6 +3155,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </button>
                 </div>
               </div>
+
+              {renderMailPanel()}
 
               <p className="report-scroll-hint no-print">
                 Tabelle seitlich scrollbar – der Tag bleibt dabei stehen.
