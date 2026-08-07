@@ -54,7 +54,8 @@ import {
   getReportMailConfig,
   isValidEmail,
   saveReportMailRecipient,
-  sendReportMail
+  sendReportMail,
+  type ReportMailAttachment
 } from '../../../services/reportMailService'
 import {
   DEFAULT_REGULAR_WORK_TIME,
@@ -1593,18 +1594,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     try {
       printWindow.document.open()
-      printWindow.document.write(
-        buildEmployeePrintHtml({
-          reportEntries: adjustedEntries,
-          startDate,
-          endDate,
-          employeeName: selectedEmployeeName,
-          periodLabel: formatPeriod(),
-          regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
-          payoutMinutes: adjustedReport.payoutMinutes,
-          summary: adjustedReport.summary
-        })
-      )
+      printWindow.document.write(buildEmployeePrintHtml(currentEmployeeParams()))
       printWindow.document.close()
 
       printWindow.addEventListener('afterprint', cleanup, { once: true })
@@ -1739,14 +1729,16 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     [reportType, adjustedEntries, startDate, endDate]
   )
 
-  const buildCurrentDatevHtml = (): string =>
-    buildDatevPrintHtml({
-      rows: datevRows,
-      employeeName: selectedEmployeeName,
-      personnelNumber: selectedEmployeeRecord?.heroEmployeeId || '',
-      periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
-      summary: adjustedReport.summary
-    })
+  /** Der DATEV-Nachweis in der aktuell angezeigten Fassung – für Druck und PDF. */
+  const currentDatevParams = (): DatevPrintParams => ({
+    rows: datevRows,
+    employeeName: selectedEmployeeName,
+    personnelNumber: selectedEmployeeRecord?.heroEmployeeId || '',
+    periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
+    summary: adjustedReport.summary
+  })
+
+  const buildCurrentDatevHtml = (): string => buildDatevPrintHtml(currentDatevParams())
 
   const handleDatevPrint = () => {
     if (datevRows.length === 0) {
@@ -1788,18 +1780,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
-  /** Baut dasselbe Druck-HTML wie „Drucken" – es geht als Datei an die Mail. */
-  const buildCurrentReportHtml = (): string =>
-    buildEmployeePrintHtml({
-      reportEntries: adjustedEntries,
-      startDate,
-      endDate,
-      employeeName: selectedEmployeeName,
-      periodLabel: formatPeriod(),
-      regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
-      payoutMinutes: adjustedReport.payoutMinutes,
-      summary: adjustedReport.summary
-    })
+  /** Der Bericht in der aktuell angezeigten Fassung – für Druck und PDF. */
+  const currentEmployeeParams = (): EmployeePrintParams => ({
+    reportEntries: adjustedEntries,
+    startDate,
+    endDate,
+    employeeName: selectedEmployeeName,
+    periodLabel: formatPeriod(),
+    regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
+    payoutMinutes: adjustedReport.payoutMinutes,
+    summary: adjustedReport.summary
+  })
 
   /**
    * Übernimmt die vom Mitarbeiter gemeldete Stundenzahl in die Zeilen.
@@ -2107,7 +2098,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   /**
-   * Die ausgewählten Mitarbeiter in EINER Mail – eine Datei je Mitarbeiter.
+   * Die ausgewählten Mitarbeiter in EINER Mail – ein PDF je Mitarbeiter.
    *
    * Bewusst nicht eine Mail pro Mitarbeiter: die Lohnbuchhaltung bekommt zum
    * Monatsabschluss eine Sendung, kann die Berichte aber einzeln ablegen und
@@ -2133,22 +2124,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         (anzahl < batchEmployeeIds.length
           ? `${batchEmployeeIds.length - anzahl} von ${batchEmployeeIds.length} Mitarbeitern sind abgewählt und gehen nicht mit raus.\n\n`
           : '') +
-        'Es geht eine Mail raus, mit einer Datei je Mitarbeiter.'
+        'Es geht eine Mail raus, mit einem PDF je Mitarbeiter.'
     )
     if (!bestaetigt) return
 
     setBatchMailProgress(0)
     try {
       const gesammelt = await collectBatchReports(range, fertig => setBatchMailProgress(fertig))
-      const reports = istDatev
-        ? gesammelt.datevReports.map(bericht => ({
-            filename: reportFilename('datev-nachweis', bericht.employeeName, range),
-            html: buildDatevPrintHtml(bericht)
-          }))
-        : gesammelt.employeeReports.map(bericht => ({
-            filename: reportFilename('zeiterfassungsbericht', bericht.employeeName, range),
-            html: buildEmployeePrintHtml(bericht)
-          }))
+      const berichte = istDatev ? gesammelt.datevReports : gesammelt.employeeReports
+      const reports: ReportMailAttachment[] = []
+      for (const bericht of berichte) {
+        reports.push(await buildReportAttachment(istDatev ? 'datev' : 'employee', bericht, range))
+      }
 
       await sendReportMail({
         to: empfaenger,
@@ -2242,7 +2229,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
             disabled={busy || anzahlGewaehlt === 0 || !isValidEmail(mailRecipient)}
             title={
               isValidEmail(mailRecipient)
-                ? `Eine Mail an ${mailRecipient.trim()} – eine Datei je Mitarbeiter`
+                ? `Eine Mail an ${mailRecipient.trim()} – ein PDF je Mitarbeiter`
                 : 'Bitte unten einen gültigen Empfänger eintragen'
             }
           >
@@ -2333,30 +2320,34 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   /**
-   * Versendbarer Stand des gerade offenen Berichts. DATEV-Nachweis und
-   * Mitarbeiter-Zeitauswertung gehen über dieselbe Function raus – nur Anhang,
-   * Dateiname und die Kennzahlen in der Mail unterscheiden sich.
+   * Erzeugt den PDF-Anhang eines Berichts. Die PDF-Bibliothek wird erst hier
+   * geladen – sie gehört nicht in das Bundle, das beim Öffnen der App zieht.
    */
-  const buildMailPayload = () => {
-    const istDatev = reportType === 'datev'
+  const buildReportAttachment = async (
+    art: 'employee' | 'datev',
+    daten: EmployeePrintParams | DatevPrintParams,
+    range: { start: string; end: string }
+  ): Promise<ReportMailAttachment> => {
+    const { buildEmployeeReportPdf, buildDatevReportPdf, pdfToBase64 } = await import(
+      './reports/reportPdf'
+    )
+    const bytes =
+      art === 'datev'
+        ? await buildDatevReportPdf(daten as DatevPrintParams)
+        : await buildEmployeeReportPdf(daten as EmployeePrintParams)
     return {
-      hasContent: istDatev ? datevRows.length > 0 : reportEntries.length > 0,
-      periodLabel: istDatev && periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
-      totalHours: minutesToHoursLabel(
-        istDatev ? datevTotalMinutes(datevRows) : adjustedReport.shownTotalMinutes
+      filename: reportFilename(
+        art === 'datev' ? 'datev-nachweis' : 'zeiterfassungsbericht',
+        daten.employeeName,
+        range
       ),
-      reportHtml: istDatev ? buildCurrentDatevHtml() : buildCurrentReportHtml(),
-      attachmentFilename: reportFilename(
-        istDatev ? 'datev-nachweis' : 'zeiterfassungsbericht',
-        selectedEmployeeName,
-        { start: startDate, end: endDate }
-      )
+      contentBase64: pdfToBase64(bytes)
     }
   }
 
   const handleSendReportMail = async () => {
-    const mail = buildMailPayload()
-    if (!mail.hasContent) {
+    const istDatev = reportType === 'datev'
+    if (istDatev ? datevRows.length === 0 : reportEntries.length === 0) {
       toast.error('Kein Bericht zum Versenden vorhanden')
       return
     }
@@ -2367,16 +2358,22 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setIsSendingMail(true)
     try {
+      const range = { start: startDate, end: endDate }
+      const anhang = istDatev
+        ? await buildReportAttachment('datev', currentDatevParams(), range)
+        : await buildReportAttachment('employee', currentEmployeeParams(), range)
+
       await sendReportMail({
         to: mailRecipient.trim(),
         employeeName: selectedEmployeeName,
-        periodLabel: mail.periodLabel,
-        totalHours: mail.totalHours,
+        periodLabel: istDatev && periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
+        totalHours: minutesToHoursLabel(
+          istDatev ? datevTotalMinutes(datevRows) : adjustedReport.shownTotalMinutes
+        ),
         grossWage: formatCurrency(adjustedReport.summary.grossWageAmount),
         note: mailNote.trim(),
         senderName: COMPANY_NAME,
-        reportHtml: mail.reportHtml,
-        attachmentFilename: mail.attachmentFilename
+        reports: [anhang]
       })
       toast.success(`Bericht an ${mailRecipient.trim()} versendet.`)
       setMailNote('')
@@ -2401,7 +2398,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         <div className="report-mail-head">
           <h4>{istDatev ? 'Nachweis per E-Mail senden' : 'Bericht per E-Mail senden'}</h4>
           <span className="report-mail-attachment">
-            Anhang: {istDatev ? 'Nachweis' : 'Bericht'} als HTML-Datei (im Browser druckbar)
+            Anhang: {istDatev ? 'Nachweis' : 'Bericht'} als PDF
           </span>
         </div>
         <div className="report-mail-row">

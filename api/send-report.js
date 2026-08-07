@@ -8,9 +8,9 @@ const { getAuth } = require('firebase-admin/auth')
 // suchen) und verifiziert, dass die Anfrage von einem angemeldeten App-Nutzer
 // kommt — dasselbe Muster wie /api/agent.
 //
-// Der Bericht selbst wird im Client erzeugt (buildEmployeePrintHtml) und hier
-// nur als Anhang durchgereicht. Für den Sammelversand kommt statt `reportHtml`
-// ein `reports`-Array — ein Anhang je Mitarbeiter, alles in einer Mail.
+// Der Bericht selbst wird im Client erzeugt (als PDF) und hier nur als Anhang
+// durchgereicht. Für den Sammelversand kommt ein `reports`-Array — ein Anhang
+// je Mitarbeiter, alles in einer Mail.
 
 const requiredEnv = [
   'FIREBASE_PROJECT_ID',
@@ -119,25 +119,42 @@ module.exports = async (req, res) => {
 
   // Einzelversand und Sammelversand landen auf derselben Liste: ein Anhang je
   // Bericht. `reportHtml` bleibt der Einzelfall, `reports` der Sammellauf.
+  // Ein Bericht kommt entweder als fertiges PDF (base64) oder als HTML.
   const berichte = Array.isArray(reports) && reports.length > 0
     ? reports
     : [{ filename: attachmentFilename, html: reportHtml }]
 
-  if (berichte.some((bericht) => !bericht || typeof bericht.html !== 'string' || !bericht.html)) {
+  const istLeer = (bericht) =>
+    !bericht ||
+    (typeof bericht.contentBase64 !== 'string' || !bericht.contentBase64) &&
+      (typeof bericht.html !== 'string' || !bericht.html)
+
+  if (berichte.some(istLeer)) {
     res.status(400).json({ error: 'Der Bericht fehlt.' })
     return
   }
 
-  const attachments = berichte.map((bericht, index) => ({
-    filename: bericht.filename || `zeiterfassungsbericht${index > 0 ? `-${index + 1}` : ''}.html`,
-    content: Buffer.from(bericht.html, 'utf8').toString('base64'),
-    contentType: 'text/html; charset=utf-8'
-  }))
+  const attachments = berichte.map((bericht, index) => {
+    const nummer = index > 0 ? `-${index + 1}` : ''
+    if (bericht.contentBase64) {
+      return {
+        filename: bericht.filename || `zeiterfassungsbericht${nummer}.pdf`,
+        content: bericht.contentBase64,
+        contentType: bericht.contentType || 'application/pdf'
+      }
+    }
+    return {
+      filename: bericht.filename || `zeiterfassungsbericht${nummer}.html`,
+      content: Buffer.from(bericht.html, 'utf8').toString('base64'),
+      contentType: 'text/html; charset=utf-8'
+    }
+  })
 
   // Die Größe zählt über alle Anhänge zusammen — der Proxy nimmt den ganzen
-  // Request entgegen, nicht die Dateien einzeln.
-  const gesamtBytes = berichte.reduce(
-    (summe, bericht) => summe + Buffer.byteLength(bericht.html, 'utf8'),
+  // Request entgegen, nicht die Dateien einzeln. Gemessen wird die tatsächliche
+  // Dateigröße, base64 bläht sie um ein Drittel auf.
+  const gesamtBytes = attachments.reduce(
+    (summe, anhang) => summe + Math.floor((anhang.content.length * 3) / 4),
     0
   )
   if (gesamtBytes > MAX_ATTACHMENT_BYTES) {

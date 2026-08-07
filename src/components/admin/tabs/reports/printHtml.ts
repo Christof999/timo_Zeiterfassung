@@ -151,23 +151,24 @@ export const buildEmployeePrintRows = (
 export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): string =>
   minutesToHoursLabel(rows.reduce((sum, row) => sum + row.workMinutes, 0))
 
+export interface SummaryLine {
+  label: string
+  detail: string
+  amount: string
+  /** Summenzeile – hervorgehoben und mit Trennlinie darüber */
+  isTotal?: boolean
+  /** Nachrichtlich, gehört nicht zur Meldung an den Steuerberater */
+  isNote?: boolean
+}
+
 /**
- * Der Abrechnungsblock, den Petra an die Lohnbuchhaltung meldet. Bewusst als
- * eigene Tabelle unter dem Nachweis, damit beides auf einem Blatt steht.
+ * Zeilen des Abrechnungsblocks, den Petra an die Lohnbuchhaltung meldet.
+ * Getrennt von der Darstellung, damit HTML-Ausdruck und PDF-Anhang garantiert
+ * dieselben Posten zeigen.
  */
-export const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string => {
+export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): SummaryLine[] => {
   const hours = (minutes: number): string => `${minutesToHoursLabel(minutes)} Std`
   const rate = formatCurrency(summary.hourlyRate)
-
-  interface SummaryLine {
-    label: string
-    detail: string
-    amount: string
-    /** Summenzeile – hervorgehoben und mit Trennlinie darüber */
-    isTotal?: boolean
-    /** Nachrichtlich, gehört nicht zur Meldung an den Steuerberater */
-    isNote?: boolean
-  }
 
   // Reihenfolge ist bewusst: erst alle lohnwirksamen Posten, dann der Bruttolohn.
   // Beim Fixlohn (Azubi) steht neben den Zeiten kein Stundensatz und kein
@@ -224,7 +225,15 @@ export const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): st
     }
   ]
 
-  const rowsHtml = lines
+  return lines
+}
+
+/**
+ * Der Abrechnungsblock als HTML – bewusst als eigene Tabelle unter dem
+ * Nachweis, damit beides auf einem Blatt steht.
+ */
+export const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string => {
+  const rowsHtml = buildSettlementSummaryLines(summary)
     .map((line) => {
       const classes = [line.isTotal ? 'summary-total' : '', line.isNote ? 'summary-note' : '']
         .filter(Boolean)

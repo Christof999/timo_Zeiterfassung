@@ -42,8 +42,10 @@ export async function saveReportMailRecipient(recipient: string): Promise<void> 
 
 export interface ReportMailAttachment {
   filename: string
-  /** Vollständiges Druck-HTML eines Berichts */
-  html: string
+  /** Fertiges PDF des Berichts als base64 */
+  contentBase64: string
+  /** Standard: application/pdf */
+  contentType?: string
 }
 
 export interface SendReportMailInput {
@@ -54,14 +56,11 @@ export interface SendReportMailInput {
   grossWage: string
   note?: string
   senderName?: string
-  /** Vollständiges Druck-HTML des Berichts – wird als Datei angehängt. */
-  reportHtml?: string
-  attachmentFilename?: string
   /**
-   * Sammelversand: ein Anhang je Mitarbeiter in EINER Mail. Ist die Liste
-   * gesetzt, ersetzt sie `reportHtml`.
+   * Die Berichte als PDF – ein Anhang je Mitarbeiter, alle in EINER Mail.
+   * Beim Einzelversand steht genau ein Eintrag drin.
    */
-  reports?: ReportMailAttachment[]
+  reports: ReportMailAttachment[]
   /** true = nur rendern, es geht nichts raus */
   dryRun?: boolean
 }
