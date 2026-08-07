@@ -1671,23 +1671,39 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       toast.error('Kein Nachweis zum Drucken vorhanden')
       return
     }
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1024,height=768')
+    // Ohne Fenster-Optionen öffnen: mit "noopener" liefert window.open laut
+    // Spezifikation null, das Fenster bliebe als leeres about:blank stehen und
+    // es ließe sich nichts hineinschreiben.
+    const printWindow = window.open('', '_blank')
     if (!printWindow) {
-      toast.error('Bitte Pop-ups für diese Seite erlauben')
+      toast.error('Popup blockiert. Bitte Popups für diese Seite erlauben.')
       return
     }
-    printWindow.document.open()
-    printWindow.document.write(buildCurrentDatevHtml())
-    printWindow.document.close()
-    printWindow.onload = () => window.setTimeout(() => printWindow.print(), 80)
-    window.setTimeout(() => {
+
+    let hasTriggeredPrint = false
+    const triggerPrint = () => {
+      if (hasTriggeredPrint) return
+      hasTriggeredPrint = true
       try {
         printWindow.focus()
         printWindow.print()
-      } catch {
-        /* onload hat bereits gedruckt */
+      } catch (error) {
+        console.error('Druckvorschau konnte nicht geöffnet werden:', error)
+        toast.error('Druckvorschau konnte nicht geöffnet werden')
       }
-    }, 350)
+    }
+
+    try {
+      printWindow.document.open()
+      printWindow.document.write(buildCurrentDatevHtml())
+      printWindow.document.close()
+      printWindow.onload = () => window.setTimeout(triggerPrint, 80)
+      // Fallback, falls onload in einzelnen Browsern nicht feuert.
+      window.setTimeout(triggerPrint, 350)
+    } catch (error) {
+      console.error('Druckdokument konnte nicht erstellt werden:', error)
+      toast.error('Druckdokument konnte nicht erstellt werden')
+    }
   }
 
   /** Baut dasselbe Druck-HTML wie „Drucken" – es geht als Datei an die Mail. */
