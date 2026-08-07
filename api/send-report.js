@@ -9,7 +9,8 @@ const { getAuth } = require('firebase-admin/auth')
 // kommt — dasselbe Muster wie /api/agent.
 //
 // Der Bericht selbst wird im Client erzeugt (buildEmployeePrintHtml) und hier
-// nur als Anhang durchgereicht.
+// nur als Anhang durchgereicht. Für den Sammelversand kommt statt `reportHtml`
+// ein `reports`-Array — ein Anhang je Mitarbeiter, alles in einer Mail.
 
 const requiredEnv = [
   'FIREBASE_PROJECT_ID',
@@ -107,6 +108,7 @@ module.exports = async (req, res) => {
     senderName,
     reportHtml,
     attachmentFilename,
+    reports,
     dryRun
   } = req.body || {}
 
@@ -114,26 +116,39 @@ module.exports = async (req, res) => {
     res.status(400).json({ error: 'Bitte eine gültige Empfängeradresse angeben.' })
     return
   }
-  if (!reportHtml || typeof reportHtml !== 'string') {
+
+  // Einzelversand und Sammelversand landen auf derselben Liste: ein Anhang je
+  // Bericht. `reportHtml` bleibt der Einzelfall, `reports` der Sammellauf.
+  const berichte = Array.isArray(reports) && reports.length > 0
+    ? reports
+    : [{ filename: attachmentFilename, html: reportHtml }]
+
+  if (berichte.some((bericht) => !bericht || typeof bericht.html !== 'string' || !bericht.html)) {
     res.status(400).json({ error: 'Der Bericht fehlt.' })
     return
   }
 
-  const reportBuffer = Buffer.from(reportHtml, 'utf8')
-  if (reportBuffer.length > MAX_ATTACHMENT_BYTES) {
+  const attachments = berichte.map((bericht, index) => ({
+    filename: bericht.filename || `zeiterfassungsbericht${index > 0 ? `-${index + 1}` : ''}.html`,
+    content: Buffer.from(bericht.html, 'utf8').toString('base64'),
+    contentType: 'text/html; charset=utf-8'
+  }))
+
+  // Die Größe zählt über alle Anhänge zusammen — der Proxy nimmt den ganzen
+  // Request entgegen, nicht die Dateien einzeln.
+  const gesamtBytes = berichte.reduce(
+    (summe, bericht) => summe + Buffer.byteLength(bericht.html, 'utf8'),
+    0
+  )
+  if (gesamtBytes > MAX_ATTACHMENT_BYTES) {
     res.status(413).json({
-      error: 'Der Bericht ist zu groß für den Mailversand. Bitte den Zeitraum verkleinern.'
+      error:
+        berichte.length > 1
+          ? 'Die Berichte sind zusammen zu groß für den Mailversand. Bitte den Zeitraum verkleinern oder einzeln versenden.'
+          : 'Der Bericht ist zu groß für den Mailversand. Bitte den Zeitraum verkleinern.'
     })
     return
   }
-
-  const attachments = [
-    {
-      filename: attachmentFilename || 'zeiterfassungsbericht.html',
-      content: reportBuffer.toString('base64'),
-      contentType: 'text/html; charset=utf-8'
-    }
-  ]
 
   const logo = await loadBrandLogo(req)
   if (logo) attachments.push(logo)

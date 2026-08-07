@@ -1644,8 +1644,10 @@
     flex: 1 1 100%;
   }
 
+  /* auto statt 0: drei Knöpfe nebeneinander würden auf schmalen Schirmen die
+     Beschriftung zerquetschen – lieber umbrechen. */
   .batch-pager-actions > .btn {
-    flex: 1 1 0;
+    flex: 1 1 auto;
   }
 
   .overtime-controls {

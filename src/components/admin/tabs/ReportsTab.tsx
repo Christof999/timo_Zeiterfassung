@@ -171,6 +171,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [isBatchLoading, setIsBatchLoading] = useState(false)
   /** Fortschritt des Sammeldrucks (Anzahl fertiger Mitarbeiter), null = kein Druck. */
   const [batchPrintProgress, setBatchPrintProgress] = useState<number | null>(null)
+  /** Fortschritt des Sammelversands, null = es läuft keiner. */
+  const [batchMailProgress, setBatchMailProgress] = useState<number | null>(null)
   /** Gemeldete Stunden im Sammellauf automatisch in die Zeilen übernehmen. */
   const [batchApplyReported, setBatchApplyReported] = useState(true)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
@@ -1824,6 +1826,19 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const formatRangeLabel = (range: { start: string; end: string }): string =>
     `${new Date(range.start).toLocaleDateString('de-DE')} - ${new Date(range.end).toLocaleDateString('de-DE')}`
 
+  /** Dateiname eines Berichts-Anhangs: sprechend und im Postfach sortierbar. */
+  const reportFilename = (
+    prefix: string,
+    employeeName: string,
+    range: { start: string; end: string }
+  ): string => {
+    const safeName = (employeeName || 'mitarbeiter')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+    return `${prefix}-${safeName}-${range.start}_${range.end}.html`
+  }
+
   const exitBatchMode = () => {
     setBatchEmployeeIds([])
     setBatchPeriod(null)
@@ -1945,6 +1960,64 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
+  /**
+   * Baut die Druckdaten aller Mitarbeiter des Sammellaufs – einmal geladen,
+   * genutzt von „Alle drucken" wie von „Alle versenden".
+   */
+  const collectBatchReports = async (
+    range: { start: string; end: string },
+    onProgress: (fertig: number) => void
+  ) => {
+    const periodLabel = formatRangeLabel(range)
+    const monat = monthKeyForPeriod(range.start, range.end)
+    const monthLabel = monat ? monthKeyLabel(monat) : periodLabel
+    const employeeReports: EmployeePrintParams[] = []
+    const datevReports: DatevPrintParams[] = []
+    let totalMinutes = 0
+    let grossWageAmount = 0
+    let fertig = 0
+
+    for (const employeeId of batchEmployeeIds) {
+      // Sequenziell: die Firestore-Abfragen je Mitarbeiter sollen sich nicht
+      // gegenseitig ausbremsen, und der Fortschritt bleibt ablesbar.
+      const { employee, name, report } = await buildBatchReport(employeeId, range)
+      if (reportType === 'datev') {
+        const rows = buildDatevRows(report.entries, range.start, range.end)
+        datevReports.push({
+          rows,
+          employeeName: name,
+          personnelNumber: employee?.heroEmployeeId || '',
+          periodLabel: monthLabel,
+          summary: report.summary
+        })
+        totalMinutes += datevTotalMinutes(rows)
+      } else {
+        employeeReports.push({
+          reportEntries: report.entries,
+          startDate: range.start,
+          endDate: range.end,
+          employeeName: name,
+          periodLabel,
+          payoutMinutes: report.payoutMinutes,
+          summary: report.summary
+        })
+        totalMinutes += report.shownTotalMinutes
+      }
+      grossWageAmount += report.summary.grossWageAmount
+      fertig += 1
+      onProgress(fertig)
+    }
+
+    return {
+      employeeReports,
+      datevReports,
+      periodLabel,
+      monthLabel,
+      totalMinutes,
+      grossWageAmount: Math.round(grossWageAmount * 100) / 100
+    }
+  }
+
   /** Alle Mitarbeiter des Sammellaufs in EINEM Druckauftrag, je einer pro Blatt. */
   const handleBatchPrint = async () => {
     if (!batchPeriod || batchEmployeeIds.length === 0) return
@@ -1964,41 +2037,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     setBatchPrintProgress(0)
     try {
-      const periodLabel = formatRangeLabel(range)
-      const monat = monthKeyForPeriod(range.start, range.end)
-      const employeeReports: EmployeePrintParams[] = []
-      const datevReports: DatevPrintParams[] = []
-
-      for (const employeeId of batchEmployeeIds) {
-        // Sequenziell: die Firestore-Abfragen je Mitarbeiter sollen sich nicht
-        // gegenseitig ausbremsen, und der Fortschritt bleibt ablesbar.
-        const { employee, name, report } = await buildBatchReport(employeeId, range)
-        if (reportType === 'datev') {
-          datevReports.push({
-            rows: buildDatevRows(report.entries, range.start, range.end),
-            employeeName: name,
-            personnelNumber: employee?.heroEmployeeId || '',
-            periodLabel: monat ? monthKeyLabel(monat) : periodLabel,
-            summary: report.summary
-          })
-        } else {
-          employeeReports.push({
-            reportEntries: report.entries,
-            startDate: range.start,
-            endDate: range.end,
-            employeeName: name,
-            periodLabel,
-            payoutMinutes: report.payoutMinutes,
-            summary: report.summary
-          })
-        }
-        setBatchPrintProgress(fertig => (fertig ?? 0) + 1)
-      }
+      const gesammelt = await collectBatchReports(range, fertig => setBatchPrintProgress(fertig))
 
       const html =
         reportType === 'datev'
-          ? buildDatevBatchPrintHtml(datevReports, `Arbeitszeitdokumentation ${periodLabel}`)
-          : buildEmployeeBatchPrintHtml(employeeReports, `Arbeitszeitnachweise ${periodLabel}`)
+          ? buildDatevBatchPrintHtml(
+              gesammelt.datevReports,
+              `Arbeitszeitdokumentation ${gesammelt.periodLabel}`
+            )
+          : buildEmployeeBatchPrintHtml(
+              gesammelt.employeeReports,
+              `Arbeitszeitnachweise ${gesammelt.periodLabel}`
+            )
 
       printWindow.document.open()
       printWindow.document.write(html)
@@ -2032,12 +2082,74 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
-  /** Blätter-Leiste über dem Bericht – Name, Zeitraum, Pfeile, Sammeldruck. */
+  /**
+   * Alle Mitarbeiter des Sammellaufs in EINER Mail – eine Datei je Mitarbeiter.
+   *
+   * Bewusst nicht eine Mail pro Mitarbeiter: die Lohnbuchhaltung bekommt zum
+   * Monatsabschluss eine Sendung, kann die Berichte aber einzeln ablegen und
+   * weiterleiten.
+   */
+  const handleBatchMail = async () => {
+    if (!batchPeriod || batchEmployeeIds.length === 0) return
+    const empfaenger = mailRecipient.trim()
+    if (!isValidEmail(empfaenger)) {
+      toast.error('Bitte unten eine gültige Empfängeradresse angeben.')
+      return
+    }
+
+    const range = batchPeriod
+    const istDatev = reportType === 'datev'
+    const anzahl = batchEmployeeIds.length
+    const wort = istDatev
+      ? anzahl === 1 ? 'Nachweis' : 'Nachweise'
+      : anzahl === 1 ? 'Bericht' : 'Berichte'
+
+    const bestaetigt = window.confirm(
+      `${anzahl} ${wort} an ${empfaenger} senden?\n\n` +
+        'Es geht eine Mail raus, mit einer Datei je Mitarbeiter.'
+    )
+    if (!bestaetigt) return
+
+    setBatchMailProgress(0)
+    try {
+      const gesammelt = await collectBatchReports(range, fertig => setBatchMailProgress(fertig))
+      const reports = istDatev
+        ? gesammelt.datevReports.map(bericht => ({
+            filename: reportFilename('datev-nachweis', bericht.employeeName, range),
+            html: buildDatevPrintHtml(bericht)
+          }))
+        : gesammelt.employeeReports.map(bericht => ({
+            filename: reportFilename('zeiterfassungsbericht', bericht.employeeName, range),
+            html: buildEmployeePrintHtml(bericht)
+          }))
+
+      await sendReportMail({
+        to: empfaenger,
+        employeeName: `${anzahl} Mitarbeiter`,
+        periodLabel: istDatev ? gesammelt.monthLabel : gesammelt.periodLabel,
+        totalHours: minutesToHoursLabel(gesammelt.totalMinutes),
+        grossWage: formatCurrency(gesammelt.grossWageAmount),
+        note: mailNote.trim(),
+        senderName: COMPANY_NAME,
+        reports
+      })
+      toast.success(`${anzahl} ${wort} an ${empfaenger} versendet.`)
+      setMailNote('')
+    } catch (error: any) {
+      console.error('Sammelversand fehlgeschlagen:', error)
+      toast.error(error?.message || 'Versand fehlgeschlagen')
+    } finally {
+      setBatchMailProgress(null)
+    }
+  }
+
+  /** Blätter-Leiste über dem Bericht – Name, Zeitraum, Pfeile, Sammeldruck/-versand. */
   const renderBatchPager = () => {
     if (batchEmployeeIds.length === 0 || !batchPeriod) return null
     const istErster = batchIndex === 0
     const istLetzter = batchIndex >= batchEmployeeIds.length - 1
-    const busy = isLoading || isBatchLoading || batchPrintProgress !== null
+    const busy =
+      isLoading || isBatchLoading || batchPrintProgress !== null || batchMailProgress !== null
 
     return (
       <div className="batch-pager no-print">
@@ -2080,6 +2192,21 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
             {batchPrintProgress !== null
               ? `Erstelle ${batchPrintProgress}/${batchEmployeeIds.length} …`
               : 'Alle drucken'}
+          </button>
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={() => void handleBatchMail()}
+            disabled={busy || !isValidEmail(mailRecipient)}
+            title={
+              isValidEmail(mailRecipient)
+                ? `Eine Mail an ${mailRecipient.trim()} – eine Datei je Mitarbeiter`
+                : 'Bitte unten einen gültigen Empfänger eintragen'
+            }
+          >
+            {batchMailProgress !== null
+              ? `Sende ${batchMailProgress}/${batchEmployeeIds.length} …`
+              : 'Alle versenden'}
           </button>
           <button type="button" className="btn secondary-btn" onClick={exitBatchMode}>
             Sammelansicht beenden
@@ -2157,10 +2284,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
    */
   const buildMailPayload = () => {
     const istDatev = reportType === 'datev'
-    const safeName = (selectedEmployeeName || 'mitarbeiter')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
     return {
       hasContent: istDatev ? datevRows.length > 0 : reportEntries.length > 0,
       periodLabel: istDatev && periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
@@ -2168,7 +2291,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         istDatev ? datevTotalMinutes(datevRows) : adjustedReport.shownTotalMinutes
       ),
       reportHtml: istDatev ? buildCurrentDatevHtml() : buildCurrentReportHtml(),
-      attachmentFilename: `${istDatev ? 'datev-nachweis' : 'zeiterfassungsbericht'}-${safeName}-${startDate}_${endDate}.html`
+      attachmentFilename: reportFilename(
+        istDatev ? 'datev-nachweis' : 'zeiterfassungsbericht',
+        selectedEmployeeName,
+        { start: startDate, end: endDate }
+      )
     }
   }
 

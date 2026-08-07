@@ -40,6 +40,12 @@ export async function saveReportMailRecipient(recipient: string): Promise<void> 
   )
 }
 
+export interface ReportMailAttachment {
+  filename: string
+  /** Vollständiges Druck-HTML eines Berichts */
+  html: string
+}
+
 export interface SendReportMailInput {
   to: string
   employeeName: string
@@ -49,8 +55,13 @@ export interface SendReportMailInput {
   note?: string
   senderName?: string
   /** Vollständiges Druck-HTML des Berichts – wird als Datei angehängt. */
-  reportHtml: string
+  reportHtml?: string
   attachmentFilename?: string
+  /**
+   * Sammelversand: ein Anhang je Mitarbeiter in EINER Mail. Ist die Liste
+   * gesetzt, ersetzt sie `reportHtml`.
+   */
+  reports?: ReportMailAttachment[]
   /** true = nur rendern, es geht nichts raus */
   dryRun?: boolean
 }
