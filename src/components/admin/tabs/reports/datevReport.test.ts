@@ -97,13 +97,28 @@ describe('buildDatevRows', () => {
     expect(rows.map((r) => r.remark)).toEqual(['Urlaub', 'Krank', 'Feiertag'])
   })
 
-  it('weist Abwesenheiten ohne Uhrzeiten aus, aber mit Dauer', () => {
+  it('lässt bei Abwesenheit die Dauer leer – nur das Kürzel steht da', () => {
+    // Das Blatt dokumentiert Arbeitszeit; Urlaub ist keine. Sonst wiche die
+    // Summe unten dauerhaft von den gemeldeten Stunden ab.
     const rows = buildDatevRows(
       [zeile(1, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })],
       '2026-07-01',
       '2026-07-01'
     )
-    expect(rows[0]).toMatchObject({ begin: '', end: '', pauseMinutes: 0, workMinutes: 8 * 60 })
+    expect(rows[0]).toMatchObject({ begin: '', end: '', pauseMinutes: 0, workMinutes: 0, key: 'U' })
+  })
+
+  it('summiert nur Arbeitszeit – die Summe trifft die gemeldeten Stunden', () => {
+    const rows = buildDatevRows(
+      [
+        zeile(1),
+        zeile(2),
+        zeile(3, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })
+      ],
+      '2026-07-01',
+      '2026-07-03'
+    )
+    expect(datevTotalMinutes(rows)).toBe(2 * (8 * 60 + 30))
   })
 
   it('nennt kein Projekt – die Vorlage hat dafür keine Spalte', () => {

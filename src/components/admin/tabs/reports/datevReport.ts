@@ -91,16 +91,18 @@ export const buildDatevRows = (
     const bemerkungen: string[] = []
 
     for (const entry of tagesEintraege) {
-      workMinutes += entry.effectiveWorkMinutes
-
       if (entry.absenceKind) {
-        // Abwesenheit hat keine Uhrzeiten, nur Dauer und Kürzel.
+        // Urlaub, Krankheit und Feiertag sind keine Arbeitszeit: Das Blatt
+        // dokumentiert nach ArbZG die geleistete Arbeit, dafür gibt es die
+        // Kürzel-Spalte. Die Dauer bleibt leer, damit die Summe unten der
+        // gemeldeten Stundenzahl entspricht.
         key = KEY_BY_ABSENCE[entry.absenceKind] || key
         const label = REMARK_BY_ABSENCE[entry.absenceKind]
         if (label && !bemerkungen.includes(label)) bemerkungen.push(label)
         continue
       }
 
+      workMinutes += entry.effectiveWorkMinutes
       pauseMinutes += entry.effectivePauseMinutes
       const beginn = toMinutes(entry.clockIn)
       const ende = toMinutes(entry.effectiveClockOut)
