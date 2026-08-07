@@ -697,6 +697,37 @@
   color: var(--text-secondary);
 }
 
+/* Nimmt der Mitarbeiter am Sammeldruck/-versand teil? */
+.batch-pager-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+/* Abgewählt: die Leiste tritt sichtbar zurück, damit beim Durchblättern sofort
+   auffällt, dass dieser Bericht nicht mit rausgeht. */
+.batch-pager.is-skipped {
+  border-left-color: var(--text-muted, #9ca3af);
+  background: var(--background-secondary, #f5f5f5);
+}
+
+.batch-pager.is-skipped .batch-pager-info > strong,
+.batch-pager.is-skipped .batch-pager-count,
+.batch-pager.is-skipped .batch-pager-period {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.batch-pager-warning {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--danger-color, #dc2626);
+}
+
 .batch-pager-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1638,8 +1669,19 @@
     width: 100%;
   }
 
-  /* Pfeile bleiben links und rechts, Name und Knöpfe darunter – auf schmalen
-     Schirmen ist die Leiste sonst dreimal umgebrochen. */
+  /* Pfeile bleiben links und rechts vom Namen, die Knöpfe kommen darunter.
+     Ohne das Schrumpfen-Dürfen (min-width: 0) drückt der Namensblock die
+     Pfeile auf eigene Zeilen – dann steht „‹" allein über dem Namen. */
+  .batch-pager {
+    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .batch-pager-info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .batch-pager-actions {
     flex: 1 1 100%;
   }

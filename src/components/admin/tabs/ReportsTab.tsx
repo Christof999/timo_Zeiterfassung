@@ -163,6 +163,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   /** Welcher davon gerade angezeigt wird. */
   const [batchIndex, setBatchIndex] = useState(0)
   /**
+   * Wer beim Sammeldruck und -versand dabei ist. Startet mit allen; wer beim
+   * Durchblättern abgehakt wird, fällt aus beidem heraus – gedacht für den
+   * Mitarbeiter, dessen Zeiten diesen Monat noch nicht stimmen.
+   */
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set())
+  /**
    * Zeitraum, für den der Sammellauf gebaut wurde. Bewusst eingefroren: ändert
    * jemand danach die Datumsfelder, blättert und druckt der Lauf trotzdem den
    * Zeitraum, zu dem die Mitarbeiterliste ermittelt wurde.
@@ -1843,6 +1849,22 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setBatchEmployeeIds([])
     setBatchPeriod(null)
     setBatchIndex(0)
+    setBatchSelected(new Set())
+  }
+
+  /**
+   * Ausgewählte Mitarbeiter in der Reihenfolge der Blätter-Liste. Über diese
+   * Liste laufen Sammeldruck und Sammelversand – nicht über batchEmployeeIds.
+   */
+  const selectedBatchIds = batchEmployeeIds.filter(id => batchSelected.has(id))
+
+  const toggleBatchSelection = (employeeId: string, aktiv: boolean) => {
+    setBatchSelected(prev => {
+      const next = new Set(prev)
+      if (aktiv) next.add(employeeId)
+      else next.delete(employeeId)
+      return next
+    })
   }
 
   /**
@@ -1892,6 +1914,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
       setBatchEmployeeIds(ids)
       setBatchIndex(0)
+      // Erst einmal ist jeder dabei; abgewählt wird beim Durchblättern.
+      setBatchSelected(new Set(ids))
       setBatchPeriod(range)
       setSelectedEmployeeId(ids[0])
       await handleEmployeeSearch(range, ids[0], { applyReportedHours: batchApplyReported })
@@ -1961,8 +1985,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   /**
-   * Baut die Druckdaten aller Mitarbeiter des Sammellaufs – einmal geladen,
-   * genutzt von „Alle drucken" wie von „Alle versenden".
+   * Baut die Druckdaten der ausgewählten Mitarbeiter des Sammellaufs – einmal
+   * geladen, genutzt von „Alle drucken" wie von „Alle versenden".
    */
   const collectBatchReports = async (
     range: { start: string; end: string },
@@ -1977,7 +2001,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     let grossWageAmount = 0
     let fertig = 0
 
-    for (const employeeId of batchEmployeeIds) {
+    for (const employeeId of selectedBatchIds) {
       // Sequenziell: die Firestore-Abfragen je Mitarbeiter sollen sich nicht
       // gegenseitig ausbremsen, und der Fortschritt bleibt ablesbar.
       const { employee, name, report } = await buildBatchReport(employeeId, range)
@@ -2018,9 +2042,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
-  /** Alle Mitarbeiter des Sammellaufs in EINEM Druckauftrag, je einer pro Blatt. */
+  /** Die ausgewählten Mitarbeiter in EINEM Druckauftrag, je einer pro Blatt. */
   const handleBatchPrint = async () => {
-    if (!batchPeriod || batchEmployeeIds.length === 0) return
+    if (!batchPeriod || selectedBatchIds.length === 0) return
     const range = batchPeriod
 
     // Das Fenster muss direkt am Klick hängen, sonst hält der Browser es für
@@ -2083,14 +2107,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }
 
   /**
-   * Alle Mitarbeiter des Sammellaufs in EINER Mail – eine Datei je Mitarbeiter.
+   * Die ausgewählten Mitarbeiter in EINER Mail – eine Datei je Mitarbeiter.
    *
    * Bewusst nicht eine Mail pro Mitarbeiter: die Lohnbuchhaltung bekommt zum
    * Monatsabschluss eine Sendung, kann die Berichte aber einzeln ablegen und
    * weiterleiten.
    */
   const handleBatchMail = async () => {
-    if (!batchPeriod || batchEmployeeIds.length === 0) return
+    if (!batchPeriod || selectedBatchIds.length === 0) return
     const empfaenger = mailRecipient.trim()
     if (!isValidEmail(empfaenger)) {
       toast.error('Bitte unten eine gültige Empfängeradresse angeben.')
@@ -2099,13 +2123,16 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
     const range = batchPeriod
     const istDatev = reportType === 'datev'
-    const anzahl = batchEmployeeIds.length
+    const anzahl = selectedBatchIds.length
     const wort = istDatev
       ? anzahl === 1 ? 'Nachweis' : 'Nachweise'
       : anzahl === 1 ? 'Bericht' : 'Berichte'
 
     const bestaetigt = window.confirm(
       `${anzahl} ${wort} an ${empfaenger} senden?\n\n` +
+        (anzahl < batchEmployeeIds.length
+          ? `${batchEmployeeIds.length - anzahl} von ${batchEmployeeIds.length} Mitarbeitern sind abgewählt und gehen nicht mit raus.\n\n`
+          : '') +
         'Es geht eine Mail raus, mit einer Datei je Mitarbeiter.'
     )
     if (!bestaetigt) return
@@ -2146,13 +2173,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   /** Blätter-Leiste über dem Bericht – Name, Zeitraum, Pfeile, Sammeldruck/-versand. */
   const renderBatchPager = () => {
     if (batchEmployeeIds.length === 0 || !batchPeriod) return null
+    const aktuelleId = batchEmployeeIds[batchIndex]
     const istErster = batchIndex === 0
     const istLetzter = batchIndex >= batchEmployeeIds.length - 1
     const busy =
       isLoading || isBatchLoading || batchPrintProgress !== null || batchMailProgress !== null
+    const anzahlGewaehlt = selectedBatchIds.length
+    const alleGewaehlt = anzahlGewaehlt === batchEmployeeIds.length
+    // Nur bei einer Teilauswahl die Zahlen nennen – bei „alle" wäre das Lärm.
+    const auswahlZusatz = alleGewaehlt ? '' : ` (${anzahlGewaehlt}/${batchEmployeeIds.length})`
 
     return (
-      <div className="batch-pager no-print">
+      <div className={`batch-pager no-print${batchSelected.has(aktuelleId) ? '' : ' is-skipped'}`}>
         <button
           type="button"
           className="batch-pager-arrow"
@@ -2167,10 +2199,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           <span className="batch-pager-count">
             Mitarbeiter {batchIndex + 1} von {batchEmployeeIds.length}
           </span>
-          <strong>
-            {selectedEmployeeName || employeeDisplayName(batchEmployeeIds[batchIndex])}
-          </strong>
+          <strong>{selectedEmployeeName || employeeDisplayName(aktuelleId)}</strong>
           <span className="batch-pager-period">{formatRangeLabel(batchPeriod)}</span>
+          <label
+            className="batch-pager-select"
+            title={'Gilt für „Alle drucken" und „Alle versenden"'}
+          >
+            <input
+              type="checkbox"
+              checked={batchSelected.has(aktuelleId)}
+              onChange={e => toggleBatchSelection(aktuelleId, e.target.checked)}
+              disabled={busy}
+            />
+            <span>Drucken / Versenden</span>
+          </label>
         </div>
         <button
           type="button"
@@ -2187,17 +2229,17 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
             type="button"
             className="btn primary-btn"
             onClick={() => void handleBatchPrint()}
-            disabled={busy}
+            disabled={busy || anzahlGewaehlt === 0}
           >
             {batchPrintProgress !== null
-              ? `Erstelle ${batchPrintProgress}/${batchEmployeeIds.length} …`
-              : 'Alle drucken'}
+              ? `Erstelle ${batchPrintProgress}/${anzahlGewaehlt} …`
+              : `Alle drucken${auswahlZusatz}`}
           </button>
           <button
             type="button"
             className="btn primary-btn"
             onClick={() => void handleBatchMail()}
-            disabled={busy || !isValidEmail(mailRecipient)}
+            disabled={busy || anzahlGewaehlt === 0 || !isValidEmail(mailRecipient)}
             title={
               isValidEmail(mailRecipient)
                 ? `Eine Mail an ${mailRecipient.trim()} – eine Datei je Mitarbeiter`
@@ -2205,13 +2247,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
             }
           >
             {batchMailProgress !== null
-              ? `Sende ${batchMailProgress}/${batchEmployeeIds.length} …`
-              : 'Alle versenden'}
+              ? `Sende ${batchMailProgress}/${anzahlGewaehlt} …`
+              : `Alle versenden${auswahlZusatz}`}
+          </button>
+          <button
+            type="button"
+            className="btn secondary-btn"
+            onClick={() => setBatchSelected(alleGewaehlt ? new Set() : new Set(batchEmployeeIds))}
+            disabled={busy}
+          >
+            {alleGewaehlt ? 'Keinen auswählen' : 'Alle auswählen'}
           </button>
           <button type="button" className="btn secondary-btn" onClick={exitBatchMode}>
             Sammelansicht beenden
           </button>
         </div>
+        {anzahlGewaehlt === 0 && (
+          <p className="batch-pager-warning">
+            Kein Mitarbeiter ausgewählt – zum Drucken oder Versenden mindestens einen anhaken.
+          </p>
+        )}
       </div>
     )
   }
