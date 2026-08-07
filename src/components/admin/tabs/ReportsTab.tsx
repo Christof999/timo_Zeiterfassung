@@ -211,6 +211,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   }, [])
 
   // Reset wenn Berichtstyp wechselt
+  /**
+   * Verpflegungssatz des gewählten Mitarbeiters als Vorgabe ins Feld holen.
+   * Er bleibt überschreibbar – die Pflege gehört aber an die Mitarbeiter-Karte,
+   * damit nicht bei jedem Bericht neu getippt werden muss.
+   */
+  useEffect(() => {
+    const satz = employees.find(e => e.id === selectedEmployeeId)?.mealAllowanceRate
+    setMealAllowanceInput(
+      String(typeof satz === 'number' ? satz : DEFAULT_MEAL_ALLOWANCE_EUR).replace('.', ',')
+    )
+  }, [selectedEmployeeId, employees])
+
   useEffect(() => {
     setHasSearched(false)
     setReportEntries([])
@@ -1656,7 +1668,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       rows: datevRows,
       employeeName: selectedEmployeeName,
       personnelNumber: selectedEmployeeRecord?.heroEmployeeId || '',
-      periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod()
+      periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
+      summary: adjustedReport.summary
     })
 
   const handleDatevPrint = () => {

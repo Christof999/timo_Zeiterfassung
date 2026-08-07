@@ -3,6 +3,7 @@ import { DataService } from '../../services/dataService'
 import type { AdminRole, Employee, TimeEntry, Project } from '../../types'
 import { ADMIN_ROLE_LABELS, resolveAdminRole } from '../../utils/adminRole'
 import { toast } from '../ToastContainer'
+import { DEFAULT_MEAL_ALLOWANCE_EUR } from './tabs/reports/reportUtils'
 import EmployeeTimeEntriesSection from './EmployeeTimeEntriesSection'
 import TimeEntryReportModal from './TimeEntryReportModal'
 import '../../styles/Modal.css'
@@ -25,6 +26,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     hourlyRate: 0,
     hourlyCostRate: 0,
     ancillaryWageCosts: 0,
+    mealAllowanceRate: DEFAULT_MEAL_ALLOWANCE_EUR,
     isApprentice: false,
     fixedMonthlySalary: 0,
     overtimeBalanceHours: '' as string,
@@ -88,6 +90,10 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: employee.hourlyRate || employee.hourlyWage || 0,
         hourlyCostRate: employee.hourlyCostRate || 0,
         ancillaryWageCosts: employee.ancillaryWageCosts || 0,
+        mealAllowanceRate:
+          typeof employee.mealAllowanceRate === 'number'
+            ? employee.mealAllowanceRate
+            : DEFAULT_MEAL_ALLOWANCE_EUR,
         isApprentice: employee.isApprentice === true,
         fixedMonthlySalary: employee.fixedMonthlySalary || 0,
         overtimeBalanceHours,
@@ -108,6 +114,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: 0,
         hourlyCostRate: 0,
         ancillaryWageCosts: 0,
+        mealAllowanceRate: DEFAULT_MEAL_ALLOWANCE_EUR,
         isApprentice: false,
         fixedMonthlySalary: 0,
         overtimeBalanceHours: '',
@@ -133,6 +140,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         hourlyRate: formData.hourlyRate,
         hourlyCostRate: formData.hourlyCostRate,
         ancillaryWageCosts: formData.ancillaryWageCosts,
+        mealAllowanceRate: formData.mealAllowanceRate,
         isApprentice: formData.isApprentice,
         // Ohne Azubi-Kennzeichen darf kein Fixlohn stehen bleiben – sonst
         // rechnet der Bericht später mit einem Wert, den niemand mehr sieht.
@@ -265,6 +273,22 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             <small className="form-hint">
               Frei befüllbar – z. B. Sozialabgaben, Umlagen und sonstige Zuschläge zum Lohn.
               Reines Stammdatum, erscheint nicht im Zeiterfassungsbericht.
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Verpflegungsmehraufwand (€/Tag):</label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.mealAllowanceRate}
+              onChange={(e) =>
+                setFormData({ ...formData, mealAllowanceRate: parseFloat(e.target.value) || 0 })
+              }
+            />
+            <small className="form-hint">
+              Steuerfreier Satz je Tag mit mindestens 8 Std Anwesenheit. Gilt als Vorgabe im
+              Zeiterfassungsbericht; dort lässt er sich für einen einzelnen Bericht noch
+              überschreiben. 0 ist zulässig.
             </small>
           </div>
           <div className="form-group">

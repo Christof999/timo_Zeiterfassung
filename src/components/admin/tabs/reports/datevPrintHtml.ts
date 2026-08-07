@@ -1,6 +1,6 @@
-import { escapeHtml, minutesToHoursLabel } from './reportUtils'
+import { escapeHtml, minutesToHoursLabel, type ReportSettlementSummary } from './reportUtils'
 import { DATEV_KEY_LEGEND, datevTotalMinutes, type DatevDayRow } from './datevReport'
-import { COMPANY_NAME } from './printHtml'
+import { buildSettlementSummaryHtml, COMPANY_NAME } from './printHtml'
 
 /**
  * Druck-HTML im Aufbau der DATEV-Vorlage „Dokumentation der täglichen
@@ -15,6 +15,8 @@ export const buildDatevPrintHtml = (params: {
   /** z. B. "Juli 2026" */
   periodLabel: string
   companyName?: string
+  /** Abrechnungsblock – kommt auf ein eigenes Blatt hinter den Nachweis. */
+  summary?: ReportSettlementSummary
 }): string => {
   const company = params.companyName || COMPANY_NAME
   const esc = escapeHtml
@@ -118,6 +120,26 @@ export const buildDatevPrintHtml = (params: {
       width: 26px;
       font-weight: 700;
     }
+    /* Abrechnung auf einem eigenen Blatt hinter dem unterschriebenen Nachweis. */
+    .abrechnung-seite {
+      page-break-before: always;
+      break-before: page;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .summary-title {
+      font-size: 13px;
+      margin: 0 0 8px;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    .summary-table th { text-align: left; }
+    .summary-table .right { text-align: right; }
+    .summary-table tr.summary-total td {
+      font-weight: 700;
+      border-top: 2px solid #222;
+    }
+    .summary-table tr.summary-note td { color: #555; }
     @page { margin: 10mm; size: A4 portrait; }
   </style>
 </head>
@@ -173,6 +195,8 @@ export const buildDatevPrintHtml = (params: {
       <div class="eintraege">${legende}</div>
     </div>
   </div>
+${params.summary ? `
+  <div class="abrechnung-seite">${buildSettlementSummaryHtml(params.summary)}</div>` : ''}
 </body>
 </html>`
 }

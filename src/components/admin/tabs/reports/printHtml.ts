@@ -155,7 +155,7 @@ export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): stri
  * Der Abrechnungsblock, den Petra an die Lohnbuchhaltung meldet. Bewusst als
  * eigene Tabelle unter dem Nachweis, damit beides auf einem Blatt steht.
  */
-const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string => {
+export const buildSettlementSummaryHtml = (summary: ReportSettlementSummary): string => {
   const hours = (minutes: number): string => `${minutesToHoursLabel(minutes)} Std`
   const rate = formatCurrency(summary.hourlyRate)
 

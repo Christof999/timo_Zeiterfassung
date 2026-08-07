@@ -37,6 +37,8 @@ export interface Employee {
   hourlyCostRate?: number
   /** Lohnnebenkosten (EUR/Std) – frei befüllbares Stammdatenfeld, analog zum Stundenlohn. */
   ancillaryWageCosts?: number
+  /** Verpflegungsmehraufwand in EUR je Tag mit mind. 8 Std Anwesenheit. */
+  mealAllowanceRate?: number
   /** Auszubildender: wird nicht nach Stunden, sondern über einen Fixlohn vergütet. */
   isApprentice?: boolean
   /** Fixe monatliche Vergütung (EUR) – gilt nur für Auszubildende. */
