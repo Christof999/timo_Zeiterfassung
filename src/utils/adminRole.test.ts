@@ -29,9 +29,16 @@ describe('Sichtbare Bereiche', () => {
     }
   })
 
-  it('beschränkt die Lohnabrechnung auf Bericht, Mitarbeiter und Urlaub', () => {
-    expect(allowedAdminTabs('payroll')).toEqual(['reports', 'employees', 'vacation'])
+  it('beschränkt die Lohnabrechnung auf Berichte, Mitarbeiter und Urlaub', () => {
+    expect(allowedAdminTabs('payroll')).toEqual([
+      'reports',
+      'reportsDatev',
+      'employees',
+      'vacation'
+    ])
     expect(isTabAllowedForRole('payroll', 'reports')).toBe(true)
+    // Der DATEV-Nachweis ist das Blatt, das an die Lohnbuchhaltung geht.
+    expect(isTabAllowedForRole('payroll', 'reportsDatev')).toBe(true)
     expect(isTabAllowedForRole('payroll', 'employees')).toBe(true)
     // Urlaub ist dabei, weil dort die Krankmeldungen erfasst werden.
     expect(isTabAllowedForRole('payroll', 'vacation')).toBe(true)

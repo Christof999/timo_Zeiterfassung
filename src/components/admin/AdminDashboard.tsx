@@ -24,6 +24,7 @@ import '../../styles/AdminDashboard.css'
 
 type TabType =
   | 'overview'
+  | 'reportsDatev'
   | 'notifications'
   | 'employees'
   | 'projects'
@@ -214,6 +215,7 @@ const AdminDashboard: React.FC = () => {
       : []),
     { id: 'vacation' as TabType, label: 'Urlaub' },
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
+    { id: 'reportsDatev' as TabType, label: 'Zeiterfassungsbericht DATEV' },
     { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)' }
   ]
   const tabs = allTabs.filter(tab => isTabAllowedForRole(adminRole, tab.id))
@@ -384,6 +386,7 @@ const AdminDashboard: React.FC = () => {
           {isTabAllowedForRole(adminRole, 'hero') && currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
           {isTabAllowedForRole(adminRole, 'vacation') && currentTab === 'vacation' && <VacationTab />}
           {isTabAllowedForRole(adminRole, 'reports') && currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
+          {isTabAllowedForRole(adminRole, 'reportsDatev') && currentTab === 'reportsDatev' && <ReportsTab defaultReportType="datev" allowedReportTypes={['datev']} />}
           {isTabAllowedForRole(adminRole, 'diagnostics') && currentTab === 'diagnostics' && <DiagnosticsTab />}
         </div>
       </main>

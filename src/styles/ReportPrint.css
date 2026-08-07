@@ -527,6 +527,27 @@
   color: var(--text-secondary);
 }
 
+/* DATEV-Nachweis: schlanke Tagestabelle */
+.datev-table td,
+.datev-table th {
+  text-align: center;
+}
+
+.datev-table td:last-child,
+.datev-table th:last-child {
+  text-align: left;
+}
+
+.datev-table tbody tr.datev-key-row {
+  background: var(--light-color);
+}
+
+.datev-legend {
+  margin: var(--spacing-md) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
 /* Meldung des Mitarbeiters zur Abrechnung des Monats */
 .employee-report-note {
   display: flex;

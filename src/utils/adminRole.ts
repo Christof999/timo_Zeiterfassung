@@ -31,7 +31,7 @@ export const resolveAdminRole = (
  * gepflegt werden — die Krankheitstage braucht sie für den Beleg.
  */
 export const allowedAdminTabs = (role: AdminRole): string[] =>
-  role === 'payroll' ? ['reports', 'employees', 'vacation'] : []
+  role === 'payroll' ? ['reports', 'reportsDatev', 'employees', 'vacation'] : []
 
 export const isTabAllowedForRole = (role: AdminRole, tabId: string): boolean => {
   if (role === 'full') return true

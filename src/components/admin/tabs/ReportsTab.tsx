@@ -37,6 +37,8 @@ import {
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
+import { buildDatevRows, DATEV_KEY_LEGEND, datevTotalMinutes } from './reports/datevReport'
+import { buildDatevPrintHtml } from './reports/datevPrintHtml'
 import {
   monthKeyForPeriod,
   monthKeyLabel,
@@ -80,7 +82,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const availableReportTypes: ReportType[] =
     allowedReportTypes && allowedReportTypes.length > 0
       ? allowedReportTypes
-      : ['employee', 'project']
+      : ['employee', 'project', 'datev']
 
   const getInitialReportType = (): ReportType => {
     if (availableReportTypes.includes(defaultReportType)) {
@@ -1542,6 +1544,152 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
   }
 
+  /**
+   * Meldung des Mitarbeiters samt „Übernehmen". Identisch in der
+   * Mitarbeiter-Zeitauswertung und im DATEV-Nachweis – beide arbeiten auf
+   * derselben Meldung und derselben Zielsumme.
+   */
+  const renderSettlementNote = () => (
+    <>
+        {/* Meldungen aus anderen Monaten sichtbar machen: der Bericht
+            startet im laufenden Monat, gemeldet wird der Vormonat. */}
+        {!overtimeSettlement && otherSettlements.length > 0 && (
+          <div className="employee-report-note employee-report-note-other no-print">
+            <div className="employee-report-note-text">
+              <h4>Meldung aus einem anderen Monat</h4>
+              <p>
+                {selectedEmployeeName || 'Der Mitarbeiter'} hat{' '}
+                {otherSettlements.length === 1 ? 'eine Meldung' : 'Meldungen'} abgegeben, die
+                nicht zum gewählten Zeitraum passt
+                {otherSettlements.length === 1 ? '' : 'en'}:{' '}
+                {otherSettlements
+                  .slice(0, 3)
+                  .map(
+                    (entry) =>
+                      `${monthKeyLabel(entry.month)} – ${minutesToHoursLabel(entry.minutes)} Std`
+                  )
+                  .join(' · ')}
+              </p>
+            </div>
+            <div className="employee-report-note-actions">
+              {otherSettlements.slice(0, 3).map((entry) => (
+                <button
+                  key={entry.month}
+                  type="button"
+                  className="btn secondary-btn"
+                  onClick={() => {
+                    const range = monthRange(entry.month)
+                    if (!range) return
+                    setStartDate(range.start)
+                    setEndDate(range.end)
+                    void handleEmployeeSearch(range)
+                  }}
+                >
+                  {monthKeyLabel(entry.month)} anzeigen
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
+            haben möchte. Angewendet wird sie erst auf Klick. */}
+        {overtimeSettlement && reportEntries.length > 0 && (
+          <div className="employee-report-note no-print">
+            <div className="employee-report-note-text">
+              <h4>
+                Meldung von {selectedEmployeeName || 'dem Mitarbeiter'} für{' '}
+                {monthKeyLabel(overtimeSettlement.month)}
+              </h4>
+              <p>
+                Abzurechnen: <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>
+                {typeof overtimeSettlement.workedMinutes === 'number' && (
+                  <>
+                    {' '}von {minutesToHoursLabel(overtimeSettlement.workedMinutes)} Std
+                    geleistet
+                    {(() => {
+                      const diff =
+                        overtimeSettlement.workedMinutes - overtimeSettlement.minutes
+                      if (diff > 0)
+                        return ` – ${minutesToHoursLabel(diff)} Std gehen aufs Überstundenkonto.`
+                      if (diff < 0)
+                        return ` – ${minutesToHoursLabel(-diff)} Std kommen vom Überstundenkonto.`
+                      return ' – nichts bleibt auf dem Überstundenkonto.'
+                    })()}
+                  </>
+                )}
+              </p>
+              <p className="employee-report-note-state">
+                In der Liste stehen aktuell{' '}
+                <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
+                Arbeitszeit
+                {adjustedReport.summary.workMinutes === overtimeSettlement.minutes
+                  ? ' – die Meldung ist übernommen.'
+                  : ' – weicht von der Meldung ab.'}
+              </p>
+            </div>
+            <div className="employee-report-note-actions">
+              <button
+                type="button"
+                className="btn primary-btn"
+                onClick={handleApplyReportedHours}
+                disabled={appliedSettlementTarget === overtimeSettlement.minutes}
+              >
+                Übernehmen
+              </button>
+              {appliedSettlementTarget !== null && (
+                <button
+                  type="button"
+                  className="btn secondary-btn"
+                  onClick={handleResetReportedHours}
+                >
+                  Zurücksetzen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+    </>
+  )
+
+  /** Tageszeilen der DATEV-Vorlage (eine Zeile je Kalendertag). */
+  const datevRows = useMemo(
+    () => (reportType === 'datev' ? buildDatevRows(adjustedEntries, startDate, endDate) : []),
+    [reportType, adjustedEntries, startDate, endDate]
+  )
+
+  const buildCurrentDatevHtml = (): string =>
+    buildDatevPrintHtml({
+      rows: datevRows,
+      employeeName: selectedEmployeeName,
+      personnelNumber: selectedEmployeeRecord?.heroEmployeeId || '',
+      periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod()
+    })
+
+  const handleDatevPrint = () => {
+    if (datevRows.length === 0) {
+      toast.error('Kein Nachweis zum Drucken vorhanden')
+      return
+    }
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1024,height=768')
+    if (!printWindow) {
+      toast.error('Bitte Pop-ups für diese Seite erlauben')
+      return
+    }
+    printWindow.document.open()
+    printWindow.document.write(buildCurrentDatevHtml())
+    printWindow.document.close()
+    printWindow.onload = () => window.setTimeout(() => printWindow.print(), 80)
+    window.setTimeout(() => {
+      try {
+        printWindow.focus()
+        printWindow.print()
+      } catch {
+        /* onload hat bereits gedruckt */
+      }
+    }, 350)
+  }
+
   /** Baut dasselbe Druck-HTML wie „Drucken" – es geht als Datei an die Mail. */
   const buildCurrentReportHtml = (): string =>
     buildEmployeePrintHtml({
@@ -1678,7 +1826,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const remainderHasShortening = settlementLinesPreview.some(l => l.paidOutMinutes > 0)
   const isEmployeeReportEnabled = availableReportTypes.includes('employee')
   const isProjectReportEnabled = availableReportTypes.includes('project')
-  const showReportTypeTabs = isEmployeeReportEnabled && isProjectReportEnabled
+  const isDatevReportEnabled = availableReportTypes.includes('datev')
+  const showReportTypeTabs = availableReportTypes.length > 1
 
   const projectJournalDays =
     reportType === 'project' && hasSearched && selectedProject ? buildProjectDayBlocks() : []
@@ -1688,18 +1837,30 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       {/* Tab-Auswahl */}
       {showReportTypeTabs && (
         <div className="report-type-tabs no-print">
-          <button
-            className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
-            onClick={() => setReportType('employee')}
-          >
-            Mitarbeiter-Zeitauswertung
-          </button>
-          <button
-            className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
-            onClick={() => setReportType('project')}
-          >
-            Projekt-Nachkalkulation
-          </button>
+          {isEmployeeReportEnabled && (
+            <button
+              className={`report-type-btn ${reportType === 'employee' ? 'active' : ''}`}
+              onClick={() => setReportType('employee')}
+            >
+              Mitarbeiter-Zeitauswertung
+            </button>
+          )}
+          {isProjectReportEnabled && (
+            <button
+              className={`report-type-btn ${reportType === 'project' ? 'active' : ''}`}
+              onClick={() => setReportType('project')}
+            >
+              Projekt-Nachkalkulation
+            </button>
+          )}
+          {isDatevReportEnabled && (
+            <button
+              className={`report-type-btn ${reportType === 'datev' ? 'active' : ''}`}
+              onClick={() => setReportType('datev')}
+            >
+              DATEV-Nachweis
+            </button>
+          )}
         </div>
       )}
 
@@ -1933,104 +2094,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 )}
               </div>
 
-              {/* Meldungen aus anderen Monaten sichtbar machen: der Bericht
-                  startet im laufenden Monat, gemeldet wird der Vormonat. */}
-              {!overtimeSettlement && otherSettlements.length > 0 && (
-                <div className="employee-report-note employee-report-note-other no-print">
-                  <div className="employee-report-note-text">
-                    <h4>Meldung aus einem anderen Monat</h4>
-                    <p>
-                      {selectedEmployeeName || 'Der Mitarbeiter'} hat{' '}
-                      {otherSettlements.length === 1 ? 'eine Meldung' : 'Meldungen'} abgegeben, die
-                      nicht zum gewählten Zeitraum passt
-                      {otherSettlements.length === 1 ? '' : 'en'}:{' '}
-                      {otherSettlements
-                        .slice(0, 3)
-                        .map(
-                          (entry) =>
-                            `${monthKeyLabel(entry.month)} – ${minutesToHoursLabel(entry.minutes)} Std`
-                        )
-                        .join(' · ')}
-                    </p>
-                  </div>
-                  <div className="employee-report-note-actions">
-                    {otherSettlements.slice(0, 3).map((entry) => (
-                      <button
-                        key={entry.month}
-                        type="button"
-                        className="btn secondary-btn"
-                        onClick={() => {
-                          const range = monthRange(entry.month)
-                          if (!range) return
-                          setStartDate(range.start)
-                          setEndDate(range.end)
-                          void handleEmployeeSearch(range)
-                        }}
-                      >
-                        {monthKeyLabel(entry.month)} anzeigen
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
-                  haben möchte. Angewendet wird sie erst auf Klick. */}
-              {overtimeSettlement && reportEntries.length > 0 && (
-                <div className="employee-report-note no-print">
-                  <div className="employee-report-note-text">
-                    <h4>
-                      Meldung von {selectedEmployeeName || 'dem Mitarbeiter'} für{' '}
-                      {monthKeyLabel(overtimeSettlement.month)}
-                    </h4>
-                    <p>
-                      Abzurechnen: <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>
-                      {typeof overtimeSettlement.workedMinutes === 'number' && (
-                        <>
-                          {' '}von {minutesToHoursLabel(overtimeSettlement.workedMinutes)} Std
-                          geleistet
-                          {(() => {
-                            const diff =
-                              overtimeSettlement.workedMinutes - overtimeSettlement.minutes
-                            if (diff > 0)
-                              return ` – ${minutesToHoursLabel(diff)} Std gehen aufs Überstundenkonto.`
-                            if (diff < 0)
-                              return ` – ${minutesToHoursLabel(-diff)} Std kommen vom Überstundenkonto.`
-                            return ' – nichts bleibt auf dem Überstundenkonto.'
-                          })()}
-                        </>
-                      )}
-                    </p>
-                    <p className="employee-report-note-state">
-                      In der Liste stehen aktuell{' '}
-                      <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
-                      Arbeitszeit
-                      {adjustedReport.summary.workMinutes === overtimeSettlement.minutes
-                        ? ' – die Meldung ist übernommen.'
-                        : ' – weicht von der Meldung ab.'}
-                    </p>
-                  </div>
-                  <div className="employee-report-note-actions">
-                    <button
-                      type="button"
-                      className="btn primary-btn"
-                      onClick={handleApplyReportedHours}
-                      disabled={appliedSettlementTarget === overtimeSettlement.minutes}
-                    >
-                      Übernehmen
-                    </button>
-                    {appliedSettlementTarget !== null && (
-                      <button
-                        type="button"
-                        className="btn secondary-btn"
-                        onClick={handleResetReportedHours}
-                      >
-                        Zurücksetzen
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+              {renderSettlementNote()}
 
               {reportEntries.length > 0 && (
                 <div className="overtime-panel no-print">
@@ -2590,6 +2654,127 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               onClose={() => setShowAddEntryModal(false)}
               onSaved={handleEmployeeSearch}
             />
+          )}
+        </>
+      )}
+
+      {/* ==================== DATEV-NACHWEIS ==================== */}
+      {isDatevReportEnabled && reportType === 'datev' && (
+        <>
+          <div className="report-filters no-print">
+            <h3>DATEV-Nachweis erstellen</h3>
+            <div className="filter-row">
+              <div className="filter-group">
+                <label>Mitarbeiter:</label>
+                <select
+                  value={selectedEmployeeId}
+                  onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                >
+                  <option value="">-- Bitte wählen --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name || `${emp.firstName} ${emp.lastName}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="filter-row">
+              <div className="filter-group">
+                <label>Von:</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="filter-group">
+                <label>Bis:</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+            </div>
+            <button
+              onClick={() => void handleEmployeeSearch()}
+              className="btn primary-btn search-btn"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Lädt...' : 'Nachweis laden'}
+            </button>
+          </div>
+
+          {hasSearched && (
+            <div className="report-content">
+              {renderSettlementNote()}
+
+              <div className="report-actions no-print">
+                <div className="actions-left">
+                  <h4>
+                    {selectedEmployeeName}
+                    <span className="date-range">
+                      {periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod()}
+                    </span>
+                  </h4>
+                </div>
+                <div className="actions-right">
+                  <button onClick={handleDatevPrint} className="btn primary-btn">
+                    Drucken
+                  </button>
+                </div>
+              </div>
+
+              <p className="report-scroll-hint no-print">
+                Tabelle seitlich scrollbar – der Tag bleibt dabei stehen.
+              </p>
+              <div className="report-table-container">
+                <table className="report-table datev-table">
+                  <thead>
+                    <tr>
+                      <th>Kalendertag</th>
+                      <th>Beginn</th>
+                      <th>Pause</th>
+                      <th>Ende</th>
+                      <th>Dauer</th>
+                      <th>*</th>
+                      <th>Bemerkungen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {datevRows.map((row) => (
+                      <tr key={row.dateKey} className={row.key ? 'datev-key-row' : ''}>
+                        <td className="hours-cell">{row.day}</td>
+                        <td className="hours-cell">{row.begin}</td>
+                        <td className="hours-cell">
+                          {row.pauseMinutes > 0 ? minutesToHoursLabel(row.pauseMinutes) : ''}
+                        </td>
+                        <td className="hours-cell">{row.end}</td>
+                        <td className="hours-cell">
+                          {row.workMinutes > 0 ? minutesToHoursLabel(row.workMinutes) : ''}
+                        </td>
+                        <td className="hours-cell">
+                          <strong>{row.key}</strong>
+                        </td>
+                        <td>{row.remark}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="total-row">
+                      <td colSpan={4}>
+                        <strong>Summe:</strong>
+                      </td>
+                      <td className="hours-cell">
+                        <strong>{minutesToHoursLabel(datevTotalMinutes(datevRows))}</strong>
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <p className="datev-legend no-print">
+                {DATEV_KEY_LEGEND.map((item) => `${item.key} = ${item.label}`).join(' · ')}
+              </p>
+            </div>
           )}
         </>
       )}

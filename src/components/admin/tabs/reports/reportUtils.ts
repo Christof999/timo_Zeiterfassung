@@ -14,7 +14,7 @@ import {
 // Reine Berechnungs- und Formatierungslogik der Berichte/Nachkalkulation.
 // Bewusst ohne React-/Komponenten-Abhängigkeiten, damit sie testbar bleibt.
 
-export type ReportType = 'employee' | 'project'
+export type ReportType = 'employee' | 'project' | 'datev'
 export type ReportEntrySource = 'time-entry' | 'leave-request'
 
 /** Bezahlte Abwesenheit; alle drei werden mit der Regelarbeitszeit vergütet. */
