@@ -8,7 +8,7 @@ import { buildSettlementSummaryHtml, COMPANY_NAME } from './printHtml'
  * Dokumentation. Bewusst schlank – das Blatt wird unterschrieben und geht so
  * an die Lohnbuchhaltung.
  */
-export const buildDatevPrintHtml = (params: {
+export interface DatevPrintParams {
   rows: DatevDayRow[]
   employeeName: string
   personnelNumber?: string
@@ -17,7 +17,13 @@ export const buildDatevPrintHtml = (params: {
   companyName?: string
   /** Abrechnungsblock – kommt auf ein eigenes Blatt hinter den Nachweis. */
   summary?: ReportSettlementSummary
-}): string => {
+}
+
+/**
+ * Nachweis eines Mitarbeiters als Rumpf ohne `<html>`-Gerüst – damit derselbe
+ * Baustein mehrfach in ein Sammel-Dokument („Alle drucken") passt.
+ */
+const buildDatevBodyHtml = (params: DatevPrintParams): string => {
   const company = params.companyName || COMPANY_NAME
   const esc = escapeHtml
   const zeit = (minutes: number): string => (minutes > 0 ? minutesToHoursLabel(minutes) : '')
@@ -41,12 +47,70 @@ export const buildDatevPrintHtml = (params: {
     (item) => `<div><span class="legend-key">${esc(item.key)}</span>${esc(item.label)}</div>`
   ).join('')
 
-  return `<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <title>Arbeitszeitdokumentation ${esc(params.employeeName)} – ${esc(params.periodLabel)}</title>
-  <style>
+  return `  <h1>Vorlage zur Dokumentation der täglichen Arbeitszeit</h1>
+  <div class="kopf">
+    <div>Firma:</div><div class="feld">${esc(company)}</div>
+    <div>Monat/Jahr:</div><div class="feld">${esc(params.periodLabel)}</div>
+    <div>Name des Mitarbeiters:</div><div class="feld">${esc(params.employeeName || '')}</div>
+    <div>Pers.-Nr.:</div><div class="feld">${esc(params.personnelNumber || '')}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Kalender-<br>tag</th>
+        <th>Beginn<br>(Uhrzeit)</th>
+        <th>Pause<br>(Dauer)</th>
+        <th>Ende<br>(Uhrzeit)</th>
+        <th>Dauer<br>(Summe)</th>
+        <th>*</th>
+        <th>aufgezeichnet<br>am:</th>
+        <th>Bemerkungen</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4" class="center">Summe:</td>
+        <td class="center">${esc(minutesToHoursLabel(datevTotalMinutes(params.rows)))}</td>
+        <td colspan="3"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="abschluss">
+    <div class="unterschriften">
+      <div class="box">
+        <div class="linie"></div>
+        <p>Datum, Unterschrift des Arbeitnehmers</p>
+      </div>
+      <div class="box">
+        <div class="linie"></div>
+        <p>Datum, Unterschrift des Arbeitgebers</p>
+      </div>
+    </div>
+
+    <div class="legende">
+      <div class="titel">
+        Tragen Sie in die mit * überschriebene Spalte eines der folgenden Kürzel ein,
+        wenn es für diesen Kalendertag zutrifft:
+      </div>
+      <div class="eintraege">${legende}</div>
+    </div>
+  </div>
+${
+    params.summary
+      ? `
+  <div class="abrechnung-seite">
+    <div class="abrechnung-kopf">${esc(params.employeeName || '-')} · ${esc(params.periodLabel)}</div>
+    ${buildSettlementSummaryHtml(params.summary)}
+  </div>`
+      : ''
+  }`
+}
+
+/** Stylesheet des DATEV-Nachweises – einmal je Dokument, auch im Sammeldruck. */
+const DATEV_PRINT_CSS = `
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -127,6 +191,15 @@ export const buildDatevPrintHtml = (params: {
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    /* Das Abrechnungsblatt trägt keinen Tabellenkopf – ohne diese Zeile wäre
+       nicht erkennbar, zu wem es gehört. */
+    .abrechnung-kopf {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #222;
+    }
     .summary-title {
       font-size: 13px;
       margin: 0 0 8px;
@@ -141,62 +214,48 @@ export const buildDatevPrintHtml = (params: {
     }
     .summary-table tr.summary-note td { color: #555; }
     @page { margin: 10mm; size: A4 portrait; }
-  </style>
+`
+
+/**
+ * Sammeldruck: jeder Mitarbeiter beginnt auf einem neuen Blatt. Der Nachweis
+ * wird je Mitarbeiter unterschrieben, er darf nie mit einem anderen auf einer
+ * Seite stehen.
+ */
+const DATEV_BATCH_CSS = `
+    .datev-sheet + .datev-sheet {
+      page-break-before: always;
+      break-before: page;
+    }
+`
+
+const wrapDatevDocument = (title: string, css: string, body: string): string => `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>${css}  </style>
 </head>
 <body>
-  <h1>Vorlage zur Dokumentation der täglichen Arbeitszeit</h1>
-  <div class="kopf">
-    <div>Firma:</div><div class="feld">${esc(company)}</div>
-    <div>Monat/Jahr:</div><div class="feld">${esc(params.periodLabel)}</div>
-    <div>Name des Mitarbeiters:</div><div class="feld">${esc(params.employeeName || '')}</div>
-    <div>Pers.-Nr.:</div><div class="feld">${esc(params.personnelNumber || '')}</div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Kalender-<br>tag</th>
-        <th>Beginn<br>(Uhrzeit)</th>
-        <th>Pause<br>(Dauer)</th>
-        <th>Ende<br>(Uhrzeit)</th>
-        <th>Dauer<br>(Summe)</th>
-        <th>*</th>
-        <th>aufgezeichnet<br>am:</th>
-        <th>Bemerkungen</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
-    <tfoot>
-      <tr>
-        <td colspan="4" class="center">Summe:</td>
-        <td class="center">${esc(minutesToHoursLabel(datevTotalMinutes(params.rows)))}</td>
-        <td colspan="3"></td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <div class="abschluss">
-    <div class="unterschriften">
-      <div class="box">
-        <div class="linie"></div>
-        <p>Datum, Unterschrift des Arbeitnehmers</p>
-      </div>
-      <div class="box">
-        <div class="linie"></div>
-        <p>Datum, Unterschrift des Arbeitgebers</p>
-      </div>
-    </div>
-
-    <div class="legende">
-      <div class="titel">
-        Tragen Sie in die mit * überschriebene Spalte eines der folgenden Kürzel ein,
-        wenn es für diesen Kalendertag zutrifft:
-      </div>
-      <div class="eintraege">${legende}</div>
-    </div>
-  </div>
-${params.summary ? `
-  <div class="abrechnung-seite">${buildSettlementSummaryHtml(params.summary)}</div>` : ''}
+${body}
 </body>
 </html>`
-}
+
+export const buildDatevPrintHtml = (params: DatevPrintParams): string =>
+  wrapDatevDocument(
+    `Arbeitszeitdokumentation ${params.employeeName} – ${params.periodLabel}`,
+    DATEV_PRINT_CSS,
+    buildDatevBodyHtml(params)
+  )
+
+/** Alle Mitarbeiter des Zeitraums in einem Druckauftrag, je einer pro Blatt. */
+export const buildDatevBatchPrintHtml = (
+  reports: DatevPrintParams[],
+  documentTitle = 'Arbeitszeitdokumentation'
+): string =>
+  wrapDatevDocument(
+    documentTitle,
+    DATEV_PRINT_CSS + DATEV_BATCH_CSS,
+    reports
+      .map((report) => `  <section class="datev-sheet">\n${buildDatevBodyHtml(report)}\n  </section>`)
+      .join('\n')
+  )

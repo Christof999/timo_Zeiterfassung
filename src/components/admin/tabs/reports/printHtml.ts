@@ -262,7 +262,7 @@ const buildSignatureHtml = (employeeName: string, companyName: string): string =
 /** Arbeitszeitnachweis eines Mitarbeiters als eigenständiges Druck-HTML. */
 export const COMPANY_NAME = 'Fliesen Reislöhner'
 
-export const buildEmployeePrintHtml = (params: {
+export interface EmployeePrintParams {
   reportEntries: AdjustedReportEntry[]
   startDate: string
   endDate: string
@@ -275,7 +275,26 @@ export const buildEmployeePrintHtml = (params: {
   /** Summenblock für die Lohnabrechnung */
   summary?: ReportSettlementSummary
   companyName?: string
-}): string => {
+}
+
+/**
+ * Nachweis eines Mitarbeiters als Rumpf ohne `<html>`-Gerüst.
+ *
+ * Getrennt vom vollständigen Dokument, damit derselbe Baustein mehrfach in ein
+ * Sammel-Dokument („Alle drucken") gesetzt werden kann – ein Druckauftrag für
+ * alle Mitarbeiter, jeder auf einem eigenen Blatt.
+ */
+const buildEmployeeReportBodyHtml = (
+  params: EmployeePrintParams,
+  options: {
+    /**
+     * Name und Zeitraum als erste Kopfzeile der Tabelle. Der `<thead>`
+     * wiederholt sich auf jeder Folgeseite – im Sammelausdruck ist das die
+     * einzige Stelle, an der auch Seite 3 noch verrät, zu wem sie gehört.
+     */
+    repeatNameInHeader?: boolean
+  } = {}
+): string => {
   const printRows = buildEmployeePrintRows(params.reportEntries, params.startDate, params.endDate)
   const company = params.companyName || COMPANY_NAME
 
@@ -334,13 +353,66 @@ export const buildEmployeePrintHtml = (params: {
     })
     .join('')
 
-  return `<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Arbeitszeitnachweis</title>
-  <style>
+  return `  <div class="doc-head">
+    <div class="company">${escapeHtml(company)}</div>
+    <div class="employee">${escapeHtml(params.employeeName || '-')}</div>
+  </div>
+
+  <div class="meta">
+    <div><strong>Zeitraum:</strong> ${escapeHtml(params.periodLabel)}</div>
+    ${metaExtras.join('\n    ')}
+  </div>
+
+  <table>
+    <colgroup>
+      <col style="width: 15%" />
+      <col style="width: 31%" />
+      <col style="width: 12%" />
+      <col style="width: 12%" />
+      <col style="width: 10%" />
+      <col style="width: 20%" />
+    </colgroup>
+    <thead>
+      ${
+        options.repeatNameInHeader
+          ? `<tr class="sheet-name"><th colspan="6">${escapeHtml(params.employeeName || '-')} · ${escapeHtml(params.periodLabel)}</th></tr>`
+          : ''
+      }
+      <tr>
+        <th>Tag</th>
+        <th>Projekt</th>
+        <th>Kommen</th>
+        <th>Gehen</th>
+        <th>Pause</th>
+        <th>Arbeitszeit</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5">Gesamt:</td>
+        <td class="right">${escapeHtml(calculateEmployeePrintTotalHours(printRows))}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="closing">
+    ${
+      // Der Abrechnungsblock rutscht oft auf ein eigenes Blatt. Im Sammel-
+      // ausdruck wäre das sonst ein Blatt ohne Namen.
+      options.repeatNameInHeader
+        ? `<div class="sheet-owner">${escapeHtml(params.employeeName || '-')} · ${escapeHtml(params.periodLabel)}</div>`
+        : ''
+    }
+    ${summaryHtml}
+    ${footnoteHtml}
+    ${buildSignatureHtml(params.employeeName, company)}
+  </div>`
+}
+
+/** Stylesheet des Arbeitszeitnachweises – einmal je Dokument, auch im Sammeldruck. */
+const EMPLOYEE_PRINT_CSS = `
     body {
       margin: 24px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -525,56 +597,69 @@ export const buildEmployeePrintHtml = (params: {
       margin: 12mm;
       size: A4 portrait;
     }
-  </style>
+`
+
+/**
+ * Mehrere Nachweise in EINEM Druckauftrag: jeder Mitarbeiter beginnt auf einem
+ * neuen Blatt. Ohne diese Regel liefen zwei Berichte auf derselben Seite
+ * ineinander – der Ausdruck geht aber je Mitarbeiter in eine eigene Akte.
+ */
+const BATCH_PRINT_CSS = `
+    .employee-sheet + .employee-sheet {
+      page-break-before: always;
+      break-before: page;
+    }
+    thead tr.sheet-name th {
+      background: #ebebeb;
+      font-size: 14px;
+      text-align: left;
+    }
+    .sheet-owner {
+      margin: 22px 0 0;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #222;
+      font-size: 13px;
+      font-weight: 700;
+    }
+`
+
+/** Baut das druckfertige HTML-Dokument um einen oder mehrere Berichtsrümpfe. */
+const wrapPrintDocument = (title: string, css: string, body: string): string => `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>${css}  </style>
 </head>
 <body>
-  <div class="doc-head">
-    <div class="company">${escapeHtml(company)}</div>
-    <div class="employee">${escapeHtml(params.employeeName || '-')}</div>
-  </div>
-
-  <div class="meta">
-    <div><strong>Zeitraum:</strong> ${escapeHtml(params.periodLabel)}</div>
-    ${metaExtras.join('\n    ')}
-  </div>
-
-  <table>
-    <colgroup>
-      <col style="width: 15%" />
-      <col style="width: 31%" />
-      <col style="width: 12%" />
-      <col style="width: 12%" />
-      <col style="width: 10%" />
-      <col style="width: 20%" />
-    </colgroup>
-    <thead>
-      <tr>
-        <th>Tag</th>
-        <th>Projekt</th>
-        <th>Kommen</th>
-        <th>Gehen</th>
-        <th>Pause</th>
-        <th>Arbeitszeit</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rowsHtml}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="5">Gesamt:</td>
-        <td class="right">${escapeHtml(calculateEmployeePrintTotalHours(printRows))}</td>
-      </tr>
-    </tfoot>
-  </table>
-  <div class="closing">
-    ${summaryHtml}
-    ${footnoteHtml}
-    ${buildSignatureHtml(params.employeeName, company)}
-  </div>
+${body}
 </body>
 </html>`
-}
+
+export const buildEmployeePrintHtml = (params: EmployeePrintParams): string =>
+  wrapPrintDocument('Arbeitszeitnachweis', EMPLOYEE_PRINT_CSS, buildEmployeeReportBodyHtml(params))
+
+/**
+ * Sammel-Ausdruck: alle Mitarbeiter des Zeitraums in einem einzigen Dokument,
+ * jeder auf einem eigenen Blatt.
+ */
+export const buildEmployeeBatchPrintHtml = (
+  reports: EmployeePrintParams[],
+  documentTitle = 'Arbeitszeitnachweise'
+): string =>
+  wrapPrintDocument(
+    documentTitle,
+    EMPLOYEE_PRINT_CSS + BATCH_PRINT_CSS,
+    reports
+      .map(
+        (report) =>
+          `  <section class="employee-sheet">\n${buildEmployeeReportBodyHtml(report, {
+            repeatNameInHeader: true
+          })}\n  </section>`
+      )
+      .join('\n')
+  )
 
 /** Mitarbeiter-Auszug eines Projekts (ohne Kosten/Bilder) als Druck-HTML. */
 export const buildProjectStaffPrintHtml = (params: {

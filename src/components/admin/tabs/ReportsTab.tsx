@@ -33,12 +33,17 @@ import {
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
-  planSettlementTarget,
+  buildAdjustedReportForTarget,
+  type BuildAdjustedReportOptions,
   type AdjustedReportEntry
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
 import { buildDatevRows, DATEV_KEY_LEGEND, datevTotalMinutes } from './reports/datevReport'
-import { buildDatevPrintHtml } from './reports/datevPrintHtml'
+import {
+  buildDatevBatchPrintHtml,
+  buildDatevPrintHtml,
+  type DatevPrintParams
+} from './reports/datevPrintHtml'
 import {
   monthKeyForPeriod,
   monthKeyLabel,
@@ -57,7 +62,13 @@ import {
   regularMinutesForDateKey,
   type RegularWorkTimeConfig
 } from '../../../utils/regularWorkTime'
-import { COMPANY_NAME, buildEmployeePrintHtml, buildProjectStaffPrintHtml } from './reports/printHtml'
+import {
+  COMPANY_NAME,
+  buildEmployeeBatchPrintHtml,
+  buildEmployeePrintHtml,
+  buildProjectStaffPrintHtml,
+  type EmployeePrintParams
+} from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
 import ReportAddEntryModal from '../ReportAddEntryModal'
 import '../../../styles/AdminTabs.css'
@@ -146,6 +157,22 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [appliedSettlementTarget, setAppliedSettlementTarget] = useState<number | null>(null)
   /** Monatsend-Aufruf an alle Mitarbeiter (Popup in der App + Push aufs Handy). */
   const [isBroadcasting, setIsBroadcasting] = useState(false)
+  // ---- Sammellauf „Auswertung für alle" ----
+  /** Mitarbeiter mit mindestens einer Stempelung im Zeitraum, in Blätter-Reihenfolge. */
+  const [batchEmployeeIds, setBatchEmployeeIds] = useState<string[]>([])
+  /** Welcher davon gerade angezeigt wird. */
+  const [batchIndex, setBatchIndex] = useState(0)
+  /**
+   * Zeitraum, für den der Sammellauf gebaut wurde. Bewusst eingefroren: ändert
+   * jemand danach die Datumsfelder, blättert und druckt der Lauf trotzdem den
+   * Zeitraum, zu dem die Mitarbeiterliste ermittelt wurde.
+   */
+  const [batchPeriod, setBatchPeriod] = useState<{ start: string; end: string } | null>(null)
+  const [isBatchLoading, setIsBatchLoading] = useState(false)
+  /** Fortschritt des Sammeldrucks (Anzahl fertiger Mitarbeiter), null = kein Druck. */
+  const [batchPrintProgress, setBatchPrintProgress] = useState<number | null>(null)
+  /** Gemeldete Stunden im Sammellauf automatisch in die Zeilen übernehmen. */
+  const [batchApplyReported, setBatchApplyReported] = useState(true)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
   const [mailRecipient, setMailRecipient] = useState('')
   const [mailNote, setMailNote] = useState('')
@@ -226,6 +253,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   useEffect(() => {
     setHasSearched(false)
     setReportEntries([])
+    // Der Sammellauf gehört zum geladenen Bericht – beim Wechsel des
+    // Berichtstyps ist er hinfällig und wird neu ausgelöst.
+    exitBatchMode()
     setEmployeeSettlement(null)
     setEmployeeReportView('full')
     setEmployeeSummaries([])
@@ -267,14 +297,245 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     return project?.name || projectId
   }
 
+  /** Anzeigename eines Mitarbeiters; leer, wenn er nicht (mehr) geladen ist. */
+  const employeeDisplayName = (employeeId: string): string => {
+    const emp =
+      employees.find(e => e.id === employeeId) || allEmployees.find(e => e.id === employeeId)
+    return emp ? emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : ''
+  }
+
   // ==================== MITARBEITER-BERICHT ====================
   /**
+   * Baut die Berichtszeilen eines Mitarbeiters für einen Zeitraum: gestempelte
+   * Zeiten plus die bezahlten Abwesenheiten (Feiertag, Urlaub, Krankheit).
+   *
+   * Bewusst ohne Zugriff auf den ausgewählten Mitarbeiter und ohne State-
+   * Änderungen – „Auswertung für alle" ruft dieselbe Logik nacheinander für
+   * jeden Mitarbeiter auf.
+   *
+   * @param options.includeFileBinaries Bilddaten mitladen. Der Bericht liest aus
+   *   den Dateien nur die Kommentare; für den Sammellauf bleiben die Binärdaten
+   *   deshalb außen vor.
+   */
+  const loadReportEntriesFor = async (
+    employeeId: string,
+    von: string,
+    bis: string,
+    options?: { includeFileBinaries?: boolean }
+  ): Promise<ReportEntry[]> => {
+    const start = new Date(von)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(bis)
+    end.setHours(23, 59, 59, 999)
+
+    // Zeitraum serverseitig vorfiltern; der Filter unten bleibt als
+    // Absicherung (die Query darf eine Obermenge liefern).
+    const [allEntries, leaveRequests] = await Promise.all([
+      DataService.getTimeEntriesByEmployeeId(employeeId, { from: start, to: end }),
+      DataService.getLeaveRequestsByEmployee(employeeId)
+    ])
+
+    const filteredEntries = allEntries.filter(entry => {
+      const entryDate = convertToDate(entry.clockInTime)
+      if (!entryDate) return false
+      return entryDate >= start && entryDate <= end
+    })
+
+    filteredEntries.sort((a, b) => {
+      const dateA = convertToDate(a.clockInTime)
+      const dateB = convertToDate(b.clockInTime)
+      if (!dateA || !dateB) return 0
+      return dateA.getTime() - dateB.getTime()
+    })
+
+    const entryIds = filteredEntries.map(e => e.id)
+    const linkedFiles =
+      entryIds.length > 0
+        ? await DataService.getFileUploadsByTimeEntryIds(entryIds, {
+            includeBinary: options?.includeFileBinaries !== false
+          })
+        : []
+    const filesByEntryId = new Map<string, FileUpload[]>()
+    for (const file of linkedFiles) {
+      if (!file.timeEntryId) continue
+      const list = filesByEntryId.get(file.timeEntryId) || []
+      list.push(file)
+      filesByEntryId.set(file.timeEntryId, list)
+    }
+
+    const entries: ReportEntry[] = filteredEntries.map(entry => {
+      const clockInDate = convertToDate(entry.clockInTime)
+      const clockOutDate = convertToDate(entry.clockOutTime)
+      // Zeiten auf 15-Min-Raster glätten (Anzeige + Stundenberechnung)
+      const clockIn = formatTimeForInput(roundTimeToStep(clockInDate))
+      const clockOut = formatTimeForInput(roundTimeToStep(clockOutDate))
+      const pauseMs = entry.pauseTotalTime || 0
+      const pauseMinutes = msToMinutes(pauseMs)
+
+      return {
+        id: entry.id,
+        originalEntry: entry,
+        source: 'time-entry',
+        date: clockInDate ? formatDateForDisplay(clockInDate) : '-',
+        dateRaw: clockInDate,
+        dateKey: clockInDate ? getDateKey(clockInDate) : '',
+        projectId: entry.projectId,
+        projectName:
+          entry.customerId && !entry.projectId
+            ? `Kleinauftrag: ${entry.customerName || 'Kunde'}`
+            : getProjectName(entry.projectId),
+        clockIn,
+        clockOut,
+        pauseMinutes,
+        pauseMs,
+        workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes, entryCreditMinutes(entry)),
+        notes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
+        originalNotes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
+        isEdited: false,
+        holidayName: clockInDate ? getBavariaHolidayName(clockInDate) : null
+      }
+    })
+
+    const occupiedTimeEntryDates = new Set(
+      entries
+        .map((entry) => entry.dateKey)
+        .filter((dateKey) => !!dateKey)
+    )
+
+    /**
+     * Baut eine bezahlte Abwesenheitszeile. Vergütet wird immer mit der
+     * Regelarbeitszeit des Wochentags (Mo–Do 8 Std, Fr 6 Std).
+     */
+    const buildAbsenceRow = (
+      date: Date,
+      kind: AbsenceKind,
+      idPrefix: string,
+      projectName: string,
+      notes: string
+    ): ReportEntry => {
+      const dateKey = getDateKey(date)
+      const minutes = regularMinutesForDate(date, regularWorkTimeConfig)
+      const syntheticClockIn = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0, 0, 0)
+      const syntheticClockOut = new Date(syntheticClockIn.getTime() + minutes * 60 * 1000)
+      const originalEntry: TimeEntry = {
+        id: `${idPrefix}-${dateKey}`,
+        employeeId,
+        projectId: kind,
+        clockInTime: syntheticClockIn,
+        clockOutTime: syntheticClockOut,
+        pauseTotalTime: 0,
+        notes,
+        isVacationDay: kind === 'vacation'
+      }
+      return {
+        id: originalEntry.id,
+        originalEntry,
+        source: 'leave-request',
+        date: formatDateForDisplay(date),
+        dateRaw: date,
+        dateKey,
+        projectId: kind,
+        projectName,
+        clockIn: '',
+        clockOut: '',
+        pauseMinutes: 0,
+        pauseMs: 0,
+        workHours: minutesToHoursLabel(minutes),
+        notes,
+        originalNotes: notes,
+        isEdited: false,
+        isReadOnly: true,
+        absenceKind: kind,
+        holidayName: getBavariaHolidayName(date)
+      }
+    }
+
+    // Feiertage zuerst: an einem gesetzlichen Feiertag kann niemand Urlaub
+    // nehmen oder krank sein, der Feiertag hat Vorrang.
+    const holidayEntries: ReportEntry[] = enumerateDays(start, end)
+      .filter((date) => !isWeekendDate(date) && !!getBavariaHolidayName(date))
+      .filter((date) => !occupiedTimeEntryDates.has(getDateKey(date)))
+      .map((date) =>
+        buildAbsenceRow(
+          date,
+          'holiday',
+          'holiday',
+          'Feiertag',
+          `Gesetzlicher Feiertag: ${getBavariaHolidayName(date)}`
+        )
+      )
+
+    const blockedDates = new Set([
+      ...occupiedTimeEntryDates,
+      // Auch bestempelte Feiertage sperren Urlaub/Krankheit für diesen Tag.
+      ...enumerateDays(start, end)
+        .filter((date) => !!getBavariaHolidayName(date))
+        .map((date) => getDateKey(date))
+    ])
+
+    const vacationEntries: ReportEntry[] = getApprovedLeaveDates(
+      leaveRequests,
+      'vacation',
+      start,
+      end,
+      blockedDates
+    ).map(({ date, request }) => {
+      const reason = (request.reason || '').trim()
+      return buildAbsenceRow(
+        date,
+        'vacation',
+        `vacation-${request.id || ''}`,
+        'Urlaub',
+        reason ? `Genehmigter Urlaub: ${reason}` : 'Genehmigter Urlaub'
+      )
+    })
+
+    const vacationDates = new Set(vacationEntries.map((entry) => entry.dateKey))
+    const sickEntries: ReportEntry[] = getApprovedLeaveDates(
+      leaveRequests,
+      'sick',
+      start,
+      end,
+      new Set([...blockedDates, ...vacationDates])
+    ).map(({ date, request }) => {
+      const reason = (request.reason || '').trim()
+      return buildAbsenceRow(
+        date,
+        'sick',
+        `sick-${request.id || ''}`,
+        'Krankheit',
+        reason ? `Krankheitstag: ${reason}` : 'Krankheitstag'
+      )
+    })
+
+    return [...entries, ...holidayEntries, ...vacationEntries, ...sickEntries].sort((a, b) => {
+      const ta = a.dateRaw?.getTime() || 0
+      const tb = b.dateRaw?.getTime() || 0
+      if (ta !== tb) return ta - tb
+      if (a.source !== b.source) return a.source === 'time-entry' ? -1 : 1
+      return a.id.localeCompare(b.id)
+    })
+  }
+
+  /**
+   * Lädt den Bericht eines Mitarbeiters in die Ansicht.
+   *
    * @param range optionaler Zeitraum, der die Datumsfelder überschreibt. Nötig,
    *   weil State-Änderungen erst beim nächsten Rendern greifen – ein direkt
    *   nach setStartDate ausgelöster Suchlauf liefe sonst auf den alten Daten.
+   * @param employeeIdOverride dasselbe für den Mitarbeiter: beim Durchblättern
+   *   im Sammellauf steht der nächste Mitarbeiter noch nicht im State.
+   * @param options.applyReportedHours gemeldete Stunden gleich übernehmen
+   *   (Sammellauf). In der Einzelansicht entscheidet das weiterhin der Klick
+   *   auf „Übernehmen".
    */
-  const handleEmployeeSearch = async (range?: { start: string; end: string }) => {
-    if (!selectedEmployeeId) {
+  const handleEmployeeSearch = async (
+    range?: { start: string; end: string },
+    employeeIdOverride?: string,
+    options?: { applyReportedHours?: boolean }
+  ) => {
+    const employeeId = employeeIdOverride || selectedEmployeeId
+    if (!employeeId) {
       toast.error('Bitte wählen Sie einen Mitarbeiter aus')
       return
     }
@@ -291,213 +552,25 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setAppliedSettlementTarget(null)
 
     try {
-      const start = new Date(von)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(bis)
-      end.setHours(23, 59, 59, 999)
+      setReportEntries(await loadReportEntriesFor(employeeId, von, bis))
+      setSelectedEmployeeName(employeeDisplayName(employeeId))
 
-      // Zeitraum serverseitig vorfiltern; der Filter unten bleibt als
-      // Absicherung (die Query darf eine Obermenge liefern).
-      const [allEntries, leaveRequests] = await Promise.all([
-        DataService.getTimeEntriesByEmployeeId(selectedEmployeeId, { from: start, to: end }),
-        DataService.getLeaveRequestsByEmployee(selectedEmployeeId)
-      ])
-
-      const filteredEntries = allEntries.filter(entry => {
-        const entryDate = convertToDate(entry.clockInTime)
-        if (!entryDate) return false
-        return entryDate >= start && entryDate <= end
-      })
-
-      filteredEntries.sort((a, b) => {
-        const dateA = convertToDate(a.clockInTime)
-        const dateB = convertToDate(b.clockInTime)
-        if (!dateA || !dateB) return 0
-        return dateA.getTime() - dateB.getTime()
-      })
-
-      const entryIds = filteredEntries.map(e => e.id)
-      const linkedFiles =
-        entryIds.length > 0
-          ? await DataService.getFileUploadsByTimeEntryIds(entryIds, { includeBinary: true })
-          : []
-      const filesByEntryId = new Map<string, FileUpload[]>()
-      for (const file of linkedFiles) {
-        if (!file.timeEntryId) continue
-        const list = filesByEntryId.get(file.timeEntryId) || []
-        list.push(file)
-        filesByEntryId.set(file.timeEntryId, list)
-      }
-
-      const entries: ReportEntry[] = filteredEntries.map(entry => {
-        const clockInDate = convertToDate(entry.clockInTime)
-        const clockOutDate = convertToDate(entry.clockOutTime)
-        // Zeiten auf 15-Min-Raster glätten (Anzeige + Stundenberechnung)
-        const clockIn = formatTimeForInput(roundTimeToStep(clockInDate))
-        const clockOut = formatTimeForInput(roundTimeToStep(clockOutDate))
-        const pauseMs = entry.pauseTotalTime || 0
-        const pauseMinutes = msToMinutes(pauseMs)
-
-        return {
-          id: entry.id,
-          originalEntry: entry,
-          source: 'time-entry',
-          date: clockInDate ? formatDateForDisplay(clockInDate) : '-',
-          dateRaw: clockInDate,
-          dateKey: clockInDate ? getDateKey(clockInDate) : '',
-          projectId: entry.projectId,
-          projectName:
-            entry.customerId && !entry.projectId
-              ? `Kleinauftrag: ${entry.customerName || 'Kunde'}`
-              : getProjectName(entry.projectId),
-          clockIn,
-          clockOut,
-          pauseMinutes,
-          pauseMs,
-          workHours: calculateWorkHours(clockIn, clockOut, pauseMinutes, entryCreditMinutes(entry)),
-          notes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
-          originalNotes: collectEntryDocumentation(entry, filesByEntryId.get(entry.id) || []),
-          isEdited: false,
-          holidayName: clockInDate ? getBavariaHolidayName(clockInDate) : null
-        }
-      })
-
-      const occupiedTimeEntryDates = new Set(
-        entries
-          .map((entry) => entry.dateKey)
-          .filter((dateKey) => !!dateKey)
-      )
-
-      /**
-       * Baut eine bezahlte Abwesenheitszeile. Vergütet wird immer mit der
-       * Regelarbeitszeit des Wochentags (Mo–Do 8 Std, Fr 6 Std).
-       */
-      const buildAbsenceRow = (
-        date: Date,
-        kind: AbsenceKind,
-        idPrefix: string,
-        projectName: string,
-        notes: string
-      ): ReportEntry => {
-        const dateKey = getDateKey(date)
-        const minutes = regularMinutesForDate(date, regularWorkTimeConfig)
-        const syntheticClockIn = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0, 0, 0)
-        const syntheticClockOut = new Date(syntheticClockIn.getTime() + minutes * 60 * 1000)
-        const originalEntry: TimeEntry = {
-          id: `${idPrefix}-${dateKey}`,
-          employeeId: selectedEmployeeId,
-          projectId: kind,
-          clockInTime: syntheticClockIn,
-          clockOutTime: syntheticClockOut,
-          pauseTotalTime: 0,
-          notes,
-          isVacationDay: kind === 'vacation'
-        }
-        return {
-          id: originalEntry.id,
-          originalEntry,
-          source: 'leave-request',
-          date: formatDateForDisplay(date),
-          dateRaw: date,
-          dateKey,
-          projectId: kind,
-          projectName,
-          clockIn: '',
-          clockOut: '',
-          pauseMinutes: 0,
-          pauseMs: 0,
-          workHours: minutesToHoursLabel(minutes),
-          notes,
-          originalNotes: notes,
-          isEdited: false,
-          isReadOnly: true,
-          absenceKind: kind,
-          holidayName: getBavariaHolidayName(date)
-        }
-      }
-
-      // Feiertage zuerst: an einem gesetzlichen Feiertag kann niemand Urlaub
-      // nehmen oder krank sein, der Feiertag hat Vorrang.
-      const holidayEntries: ReportEntry[] = enumerateDays(start, end)
-        .filter((date) => !isWeekendDate(date) && !!getBavariaHolidayName(date))
-        .filter((date) => !occupiedTimeEntryDates.has(getDateKey(date)))
-        .map((date) =>
-          buildAbsenceRow(
-            date,
-            'holiday',
-            'holiday',
-            'Feiertag',
-            `Gesetzlicher Feiertag: ${getBavariaHolidayName(date)}`
-          )
-        )
-
-      const blockedDates = new Set([
-        ...occupiedTimeEntryDates,
-        // Auch bestempelte Feiertage sperren Urlaub/Krankheit für diesen Tag.
-        ...enumerateDays(start, end)
-          .filter((date) => !!getBavariaHolidayName(date))
-          .map((date) => getDateKey(date))
-      ])
-
-      const vacationEntries: ReportEntry[] = getApprovedLeaveDates(
-        leaveRequests,
-        'vacation',
-        start,
-        end,
-        blockedDates
-      ).map(({ date, request }) => {
-        const reason = (request.reason || '').trim()
-        return buildAbsenceRow(
-          date,
-          'vacation',
-          `vacation-${request.id || ''}`,
-          'Urlaub',
-          reason ? `Genehmigter Urlaub: ${reason}` : 'Genehmigter Urlaub'
-        )
-      })
-
-      const vacationDates = new Set(vacationEntries.map((entry) => entry.dateKey))
-      const sickEntries: ReportEntry[] = getApprovedLeaveDates(
-        leaveRequests,
-        'sick',
-        start,
-        end,
-        new Set([...blockedDates, ...vacationDates])
-      ).map(({ date, request }) => {
-        const reason = (request.reason || '').trim()
-        return buildAbsenceRow(
-          date,
-          'sick',
-          `sick-${request.id || ''}`,
-          'Krankheit',
-          reason ? `Krankheitstag: ${reason}` : 'Krankheitstag'
-        )
-      })
-
-      const reportRows = [...entries, ...holidayEntries, ...vacationEntries, ...sickEntries].sort(
-        (a, b) => {
-          const ta = a.dateRaw?.getTime() || 0
-          const tb = b.dateRaw?.getTime() || 0
-          if (ta !== tb) return ta - tb
-          if (a.source !== b.source) return a.source === 'time-entry' ? -1 : 1
-          return a.id.localeCompare(b.id)
-        }
-      )
-
-      setReportEntries(reportRows)
-      const emp = employees.find(e => e.id === selectedEmployeeId)
-      setSelectedEmployeeName(
-        emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : ''
-      )
-
-      const settlement = await DataService.getTimeReportSettlement(selectedEmployeeId, von, bis)
+      const settlement = await DataService.getTimeReportSettlement(employeeId, von, bis)
       setEmployeeSettlement(settlement)
 
       // Alle Meldungen des Mitarbeiters laden, nicht nur die des gewählten
       // Zeitraums: Der Bericht startet im laufenden Monat, gemeldet wird aber
       // der Vormonat. Ohne die übrigen Meldungen bliebe der Hinweis unsichtbar.
-      // Angewendet wird nichts automatisch – das entscheidet die Lohnbuchhaltung.
-      setEmployeeSettlements(await DataService.getOvertimeSettlements(selectedEmployeeId))
+      // In der Einzelansicht wird nichts automatisch angewendet – das
+      // entscheidet die Lohnbuchhaltung mit „Übernehmen".
+      const settlements = await DataService.getOvertimeSettlements(employeeId)
+      setEmployeeSettlements(settlements)
+
+      if (options?.applyReportedHours) {
+        const monat = monthKeyForPeriod(von, bis)
+        const meldung = monat ? settlements.find(entry => entry.month === monat) : null
+        setAppliedSettlementTarget(meldung ? meldung.minutes : null)
+      }
     } catch (error) {
       console.error('Fehler:', error)
       toast.error('Fehler beim Laden der Zeiteinträge')
@@ -793,16 +866,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       // Zeilen werden so gedeckelt bzw. aufgefüllt, dass die Summe die
       // gemeldete Stundenzahl exakt trifft.
       if (appliedSettlementTarget !== null) {
-        const ungedeckelt = buildAdjustedReport(reportEntries, gemeinsam)
-        const plan = planSettlementTarget(
-          ungedeckelt.days.map((day) => day.legalWorkMinutes),
-          appliedSettlementTarget
-        )
-        return buildAdjustedReport(reportEntries, {
-          ...gemeinsam,
-          regularDayMinutes: plan.dailyCapMinutes,
-          requestedPayoutMinutes: plan.payoutMinutes
-        })
+        return buildAdjustedReportForTarget(reportEntries, gemeinsam, appliedSettlementTarget)
       }
 
       return buildAdjustedReport(reportEntries, {
@@ -1585,6 +1649,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   onClick={() => {
                     const range = monthRange(entry.month)
                     if (!range) return
+                    // Ein Monatswechsel verlässt den Sammellauf: dessen
+                    // Mitarbeiterliste gilt nur für den Zeitraum, zu dem sie
+                    // ermittelt wurde.
+                    exitBatchMode()
                     setStartDate(range.start)
                     setEndDate(range.end)
                     void handleEmployeeSearch(range)
@@ -1749,6 +1817,303 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setAppliedSettlementTarget(null)
     toast.info('Gemeldete Stunden verworfen – es gelten wieder die gestempelten Zeiten.')
   }
+
+  // ---------- Sammellauf: Auswertung für alle Mitarbeiter ----------
+
+  /** Zeitraum-Beschriftung unabhängig von den aktuellen Datumsfeldern. */
+  const formatRangeLabel = (range: { start: string; end: string }): string =>
+    `${new Date(range.start).toLocaleDateString('de-DE')} - ${new Date(range.end).toLocaleDateString('de-DE')}`
+
+  const exitBatchMode = () => {
+    setBatchEmployeeIds([])
+    setBatchPeriod(null)
+    setBatchIndex(0)
+  }
+
+  /**
+   * Sucht alle Mitarbeiter, die im gewählten Zeitraum gestempelt haben, und
+   * öffnet den Bericht des ersten. Durchgeblättert wird danach mit den Pfeilen –
+   * jeder Bericht ist die gewohnte Einzelansicht, nur ohne neue Auswahl.
+   */
+  const handleSearchAllEmployees = async () => {
+    if (!startDate || !endDate) {
+      toast.error('Bitte wählen Sie einen Zeitraum aus')
+      return
+    }
+    const range = { start: startDate, end: endDate }
+    const start = new Date(range.start)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(range.end)
+    end.setHours(23, 59, 59, 999)
+
+    setIsBatchLoading(true)
+    try {
+      const kandidaten = employees.map(emp => emp.id).filter((id): id is string => !!id)
+      const gestempelt = await Promise.all(
+        kandidaten.map(async employeeId => {
+          const entries = await DataService.getTimeEntriesByEmployeeId(employeeId, {
+            from: start,
+            to: end
+          })
+          // Der Zeitraum wird clientseitig geprüft – die Query darf eine
+          // Obermenge liefern (siehe DataService.queryTimeEntries).
+          const trifftZeitraum = entries.some(entry => {
+            const datum = convertToDate(entry.clockInTime)
+            return !!datum && datum >= start && datum <= end
+          })
+          return trifftZeitraum ? employeeId : null
+        })
+      )
+
+      const ids = gestempelt
+        .filter((id): id is string => !!id)
+        .sort((a, b) => employeeDisplayName(a).localeCompare(employeeDisplayName(b), 'de'))
+
+      if (ids.length === 0) {
+        exitBatchMode()
+        toast.error('Im gewählten Zeitraum hat kein Mitarbeiter gestempelt.')
+        return
+      }
+
+      setBatchEmployeeIds(ids)
+      setBatchIndex(0)
+      setBatchPeriod(range)
+      setSelectedEmployeeId(ids[0])
+      await handleEmployeeSearch(range, ids[0], { applyReportedHours: batchApplyReported })
+      toast.success(
+        `${ids.length} Mitarbeiter mit Zeiteinträgen – mit den Pfeilen durchblättern.`
+      )
+    } catch (error) {
+      console.error('Sammelauswertung fehlgeschlagen:', error)
+      toast.error('Die Auswertung für alle konnte nicht erstellt werden.')
+    } finally {
+      setIsBatchLoading(false)
+    }
+  }
+
+  const goToBatchEmployee = async (index: number) => {
+    if (!batchPeriod) return
+    if (index < 0 || index >= batchEmployeeIds.length) return
+    const employeeId = batchEmployeeIds[index]
+    setBatchIndex(index)
+    setSelectedEmployeeId(employeeId)
+    await handleEmployeeSearch(batchPeriod, employeeId, {
+      applyReportedHours: batchApplyReported
+    })
+  }
+
+  /**
+   * Baut die Auswertung eines Mitarbeiters ohne den Umweg über die Ansicht –
+   * Grundlage des Sammeldrucks. Stundenlohn, Verpflegungssatz und Azubi/Fixlohn
+   * kommen wie in der Einzelansicht von der Mitarbeiterkarte.
+   */
+  const buildBatchReport = async (employeeId: string, range: { start: string; end: string }) => {
+    const emp =
+      employees.find(e => e.id === employeeId) || allEmployees.find(e => e.id === employeeId)
+    const entries = await loadReportEntriesFor(employeeId, range.start, range.end, {
+      // Der Bericht liest aus den Dateien nur die Kommentare – die Bilddaten
+      // würden den Sammellauf nur unnötig schwer machen.
+      includeFileBinaries: false
+    })
+
+    const options: BuildAdjustedReportOptions = {
+      hourlyRate: emp?.hourlyWage || emp?.hourlyRate || 0,
+      mealAllowanceRate:
+        typeof emp?.mealAllowanceRate === 'number'
+          ? emp.mealAllowanceRate
+          : DEFAULT_MEAL_ALLOWANCE_EUR,
+      isApprentice: emp?.isApprentice === true,
+      fixedMonthlySalary: emp?.fixedMonthlySalary || 0,
+      overtimeBalanceMinutes:
+        typeof emp?.overtimeBalanceMinutes === 'number' ? emp.overtimeBalanceMinutes : null
+    }
+
+    const monat = monthKeyForPeriod(range.start, range.end)
+    let ziel: number | null = null
+    if (batchApplyReported && monat) {
+      const meldungen = await DataService.getOvertimeSettlements(employeeId)
+      ziel = meldungen.find(entry => entry.month === monat)?.minutes ?? null
+    }
+
+    return {
+      employee: emp,
+      name: employeeDisplayName(employeeId),
+      report:
+        ziel !== null
+          ? buildAdjustedReportForTarget(entries, options, ziel)
+          : buildAdjustedReport(entries, options)
+    }
+  }
+
+  /** Alle Mitarbeiter des Sammellaufs in EINEM Druckauftrag, je einer pro Blatt. */
+  const handleBatchPrint = async () => {
+    if (!batchPeriod || batchEmployeeIds.length === 0) return
+    const range = batchPeriod
+
+    // Das Fenster muss direkt am Klick hängen, sonst hält der Browser es für
+    // ein ungefragtes Popup. Deshalb zuerst öffnen, dann die Daten laden.
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Popup blockiert. Bitte Popups für diese Seite erlauben.')
+      return
+    }
+    printWindow.document.write(
+      '<!doctype html><meta charset="utf-8"><title>Berichte werden erstellt</title>' +
+        '<p style="font-family:sans-serif;margin:24px">Berichte werden erstellt …</p>'
+    )
+
+    setBatchPrintProgress(0)
+    try {
+      const periodLabel = formatRangeLabel(range)
+      const monat = monthKeyForPeriod(range.start, range.end)
+      const employeeReports: EmployeePrintParams[] = []
+      const datevReports: DatevPrintParams[] = []
+
+      for (const employeeId of batchEmployeeIds) {
+        // Sequenziell: die Firestore-Abfragen je Mitarbeiter sollen sich nicht
+        // gegenseitig ausbremsen, und der Fortschritt bleibt ablesbar.
+        const { employee, name, report } = await buildBatchReport(employeeId, range)
+        if (reportType === 'datev') {
+          datevReports.push({
+            rows: buildDatevRows(report.entries, range.start, range.end),
+            employeeName: name,
+            personnelNumber: employee?.heroEmployeeId || '',
+            periodLabel: monat ? monthKeyLabel(monat) : periodLabel,
+            summary: report.summary
+          })
+        } else {
+          employeeReports.push({
+            reportEntries: report.entries,
+            startDate: range.start,
+            endDate: range.end,
+            employeeName: name,
+            periodLabel,
+            payoutMinutes: report.payoutMinutes,
+            summary: report.summary
+          })
+        }
+        setBatchPrintProgress(fertig => (fertig ?? 0) + 1)
+      }
+
+      const html =
+        reportType === 'datev'
+          ? buildDatevBatchPrintHtml(datevReports, `Arbeitszeitdokumentation ${periodLabel}`)
+          : buildEmployeeBatchPrintHtml(employeeReports, `Arbeitszeitnachweise ${periodLabel}`)
+
+      printWindow.document.open()
+      printWindow.document.write(html)
+      printWindow.document.close()
+
+      let hasTriggeredPrint = false
+      const triggerPrint = () => {
+        if (hasTriggeredPrint) return
+        hasTriggeredPrint = true
+        try {
+          printWindow.focus()
+          printWindow.print()
+        } catch (error) {
+          console.error('Druckvorschau konnte nicht geöffnet werden:', error)
+          toast.error('Druckvorschau konnte nicht geöffnet werden')
+        }
+      }
+      printWindow.onload = () => window.setTimeout(triggerPrint, 120)
+      // Fallback, falls onload in einzelnen Browsern nicht feuert.
+      window.setTimeout(triggerPrint, 500)
+    } catch (error) {
+      console.error('Sammeldruck fehlgeschlagen:', error)
+      toast.error('Der Sammeldruck konnte nicht erstellt werden.')
+      try {
+        printWindow.close()
+      } catch {
+        /* Fenster ist ggf. schon zu */
+      }
+    } finally {
+      setBatchPrintProgress(null)
+    }
+  }
+
+  /** Blätter-Leiste über dem Bericht – Name, Zeitraum, Pfeile, Sammeldruck. */
+  const renderBatchPager = () => {
+    if (batchEmployeeIds.length === 0 || !batchPeriod) return null
+    const istErster = batchIndex === 0
+    const istLetzter = batchIndex >= batchEmployeeIds.length - 1
+    const busy = isLoading || isBatchLoading || batchPrintProgress !== null
+
+    return (
+      <div className="batch-pager no-print">
+        <button
+          type="button"
+          className="batch-pager-arrow"
+          onClick={() => void goToBatchEmployee(batchIndex - 1)}
+          disabled={istErster || busy}
+          aria-label="Vorheriger Mitarbeiter"
+          title="Vorheriger Mitarbeiter"
+        >
+          ‹
+        </button>
+        <div className="batch-pager-info">
+          <span className="batch-pager-count">
+            Mitarbeiter {batchIndex + 1} von {batchEmployeeIds.length}
+          </span>
+          <strong>
+            {selectedEmployeeName || employeeDisplayName(batchEmployeeIds[batchIndex])}
+          </strong>
+          <span className="batch-pager-period">{formatRangeLabel(batchPeriod)}</span>
+        </div>
+        <button
+          type="button"
+          className="batch-pager-arrow"
+          onClick={() => void goToBatchEmployee(batchIndex + 1)}
+          disabled={istLetzter || busy}
+          aria-label="Nächster Mitarbeiter"
+          title="Nächster Mitarbeiter"
+        >
+          ›
+        </button>
+        <div className="batch-pager-actions">
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={() => void handleBatchPrint()}
+            disabled={busy}
+          >
+            {batchPrintProgress !== null
+              ? `Erstelle ${batchPrintProgress}/${batchEmployeeIds.length} …`
+              : 'Alle drucken'}
+          </button>
+          <button type="button" className="btn secondary-btn" onClick={exitBatchMode}>
+            Sammelansicht beenden
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /** Knopf „für alle erstellen" samt Hinweis – in beiden Berichten identisch. */
+  const renderBatchTrigger = (label: string) => (
+    <div className="batch-trigger no-print">
+      <button
+        type="button"
+        className="btn secondary-btn"
+        onClick={() => void handleSearchAllEmployees()}
+        disabled={isBatchLoading || isLoading}
+      >
+        {isBatchLoading ? 'Suche Mitarbeiter…' : label}
+      </button>
+      <label className="batch-trigger-option">
+        <input
+          type="checkbox"
+          checked={batchApplyReported}
+          onChange={e => setBatchApplyReported(e.target.checked)}
+        />
+        <span>Gemeldete Stunden je Mitarbeiter übernehmen</span>
+      </label>
+      <p className="batch-trigger-hint">
+        Erstellt die Auswertung für jeden Mitarbeiter mit Zeiteintrag im Zeitraum. Danach mit den
+        Pfeilen durchblättern oder alles in einem Druckauftrag ausgeben – ein Mitarbeiter je Blatt.
+      </p>
+    </div>
+  )
 
   const handleBroadcastOvertimeReminder = async () => {
     // Abgerechnet wird der Vormonat – Anfang August also der Juli.
@@ -1934,13 +2299,23 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
-            <button onClick={() => void handleEmployeeSearch()} className="btn primary-btn search-btn" disabled={isLoading}>
+            <button
+              onClick={() => {
+                exitBatchMode()
+                void handleEmployeeSearch()
+              }}
+              className="btn primary-btn search-btn"
+              disabled={isLoading}
+            >
               {isLoading ? 'Lädt...' : 'Auswertung laden'}
             </button>
+            {renderBatchTrigger('Auswertung für alle erstellen')}
           </div>
 
           {hasSearched && (
             <div className="report-content">
+              {renderBatchPager()}
+
               <div className="print-header print-only">
                 <h2>Arbeitszeitnachweis</h2>
                 <div className="print-meta">
@@ -2715,16 +3090,22 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
               </div>
             </div>
             <button
-              onClick={() => void handleEmployeeSearch()}
+              onClick={() => {
+                exitBatchMode()
+                void handleEmployeeSearch()
+              }}
               className="btn primary-btn search-btn"
               disabled={isLoading}
             >
               {isLoading ? 'Lädt...' : 'Nachweis laden'}
             </button>
+            {renderBatchTrigger('Nachweis für alle erstellen')}
           </div>
 
           {hasSearched && (
             <div className="report-content">
+              {renderBatchPager()}
+
               {renderSettlementNote()}
 
               <div className="report-actions no-print">

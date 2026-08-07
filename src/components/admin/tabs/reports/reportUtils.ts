@@ -454,6 +454,21 @@ export const planSettlementTarget = (
   return { dailyCapMinutes: unten, payoutMinutes: Math.max(0, ziel - summeBei(unten)) }
 }
 
+export interface BuildAdjustedReportOptions {
+  regularDayMinutes?: number | ((dateKey: string) => number) | null
+  requestedPayoutMinutes?: number
+  /** Stundenlohn für die Beträge auf dem Beleg */
+  hourlyRate?: number
+  /** Satz je Tag Verpflegungsmehraufwand */
+  mealAllowanceRate?: number
+  /** Azubi: Vergütung über Fixlohn statt Stundensatz */
+  isApprentice?: boolean
+  /** Monatlicher Fixlohn (EUR) – nur bei Azubis */
+  fixedMonthlySalary?: number
+  /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
+  overtimeBalanceMinutes?: number | null
+}
+
 export interface AdjustedReport {
   entries: AdjustedReportEntry[]
   days: WorkTimeDaySummary[]
@@ -487,20 +502,7 @@ const isFixedReportEntry = (entry: ReportEntry): boolean =>
  */
 export const buildAdjustedReport = (
   entries: ReportEntry[],
-  options: {
-    regularDayMinutes?: number | ((dateKey: string) => number) | null
-    requestedPayoutMinutes?: number
-    /** Stundenlohn für die Beträge auf dem Beleg */
-    hourlyRate?: number
-    /** Satz je Tag Verpflegungsmehraufwand */
-    mealAllowanceRate?: number
-    /** Azubi: Vergütung über Fixlohn statt Stundensatz */
-    isApprentice?: boolean
-    /** Monatlicher Fixlohn (EUR) – nur bei Azubis */
-    fixedMonthlySalary?: number
-    /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
-    overtimeBalanceMinutes?: number | null
-  } = {}
+  options: BuildAdjustedReportOptions = {}
 ): AdjustedReport => {
   const {
     regularDayMinutes = null,
@@ -643,4 +645,29 @@ export const buildAdjustedReport = (
       isFixedSalary: useFixedSalary
     }
   }
+}
+
+/**
+ * Auswertung, die eine gemeldete Zielsumme exakt trifft.
+ *
+ * Erst ungedeckelt rechnen, um die tatsächlichen Tagesminuten zu kennen, dann
+ * Tagesdeckel und Auszahlung so wählen, dass die ausgewiesene Arbeitszeit auf
+ * die Meldung des Mitarbeiters kommt. Identisch genutzt in der Einzelansicht
+ * („Übernehmen") und im Sammellauf über alle Mitarbeiter.
+ */
+export const buildAdjustedReportForTarget = (
+  entries: ReportEntry[],
+  options: BuildAdjustedReportOptions,
+  targetMinutes: number
+): AdjustedReport => {
+  const ungedeckelt = buildAdjustedReport(entries, options)
+  const plan = planSettlementTarget(
+    ungedeckelt.days.map((day) => day.legalWorkMinutes),
+    targetMinutes
+  )
+  return buildAdjustedReport(entries, {
+    ...options,
+    regularDayMinutes: plan.dailyCapMinutes,
+    requestedPayoutMinutes: plan.payoutMinutes
+  })
 }

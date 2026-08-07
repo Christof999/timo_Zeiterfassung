@@ -623,6 +623,86 @@
   color: var(--text-secondary);
 }
 
+/* Sammellauf: Auswertung für alle Mitarbeiter des Zeitraums */
+.batch-trigger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px dashed var(--border-light);
+}
+
+.batch-trigger-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 6px);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.batch-trigger-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+/* Blätter-Leiste über dem Bericht */
+.batch-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+}
+
+.batch-pager-arrow {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+  line-height: 1;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--background-secondary, #f5f5f5);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.batch-pager-arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.batch-pager-info {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.batch-pager-count,
+.batch-pager-period {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.batch-pager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
 /* E-Mail-Versand des Berichts */
 .report-mail-panel {
   margin-top: var(--spacing-lg);
@@ -1553,8 +1633,19 @@
 
   .broadcast-panel > .btn,
   .report-mail-row > .btn,
-  .report-mail-actions > .btn {
+  .report-mail-actions > .btn,
+  .batch-trigger > .btn {
     width: 100%;
+  }
+
+  /* Pfeile bleiben links und rechts, Name und Knöpfe darunter – auf schmalen
+     Schirmen ist die Leiste sonst dreimal umgebrochen. */
+  .batch-pager-actions {
+    flex: 1 1 100%;
+  }
+
+  .batch-pager-actions > .btn {
+    flex: 1 1 0;
   }
 
   .overtime-controls {
