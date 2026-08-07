@@ -272,8 +272,6 @@ export const buildEmployeePrintHtml = (params: {
   regularWorkTimeLabel?: string | null
   /** ausbezahlte und damit in den Zeilen enthaltene Überstunden */
   payoutMinutes?: number
-  /** true, wenn im Bericht Pausen ergänzt oder auf 10 Std gedeckelt wurde */
-  hasLegalCorrection?: boolean
   /** Summenblock für die Lohnabrechnung */
   summary?: ReportSettlementSummary
   companyName?: string
@@ -293,12 +291,9 @@ export const buildEmployeePrintHtml = (params: {
     )
   }
 
+  // Der Hinweis auf die Pausenregel nach §4 ArbZG steht bewusst nicht mehr auf
+  // dem Beleg – auf ausdrücklichen Wunsch, der Ausdruck soll schlank bleiben.
   const footnotes: string[] = []
-  if (params.hasLegalCorrection) {
-    footnotes.push(
-      'Pausen sind nach §4 ArbZG ausgewiesen (ab 6 Std 30 Min, ab 9 Std 45 Min) und auf die Anwesenheit aufgeschlagen; die tägliche Arbeitszeit ist auf 10 Std begrenzt.'
-    )
-  }
   if (params.regularWorkTimeLabel) {
     footnotes.push(
       'Über die Regelarbeitszeit hinaus geleistete Zeit ist nicht ausgewiesen, sondern dem Überstundenkonto gutgeschrieben.'
@@ -317,14 +312,24 @@ export const buildEmployeePrintHtml = (params: {
         row.isVacation ? 'vacation-row' : '',
         row.isEmpty ? 'empty-row' : ''
       ].filter(Boolean).join(' ')
-      return `<tr>
+      // Die Dokumentation steht in einer eigenen Zeile über die volle Breite.
+      // Als schmale Spalte war sie im Druck nur ~150px breit und machte Zeilen
+      // hunderte Pixel hoch – eine solche Zeile passt irgendwann auf keine
+      // Seite mehr und wird vom Umbruch zerschnitten. Die Zeile mit den
+      // Zeitdaten bleibt so immer niedrig und damit unteilbar.
+      const zeitZeile = `<tr class="time-row">
   <td class="date-print-cell ${classes}">${buildPrintDateCellHtml(row)}</td>
   <td>${escapeHtml(row.projectName)}</td>
   <td>${escapeHtml(row.clockIn)}</td>
   <td>${escapeHtml(row.clockOut)}</td>
   <td>${row.pauseMinutes ?? '—'}</td>
-  <td class="doc-cell">${formatNotesForPrintHtml(row.notes)}</td>
   <td>${escapeHtml(row.workHours)}</td>
+</tr>`
+      const doku = (row.notes || '').trim()
+      if (!doku) return zeitZeile
+      return `${zeitZeile}
+<tr class="doc-row">
+  <td colspan="6"><span class="doc-label">Dokumentation:</span> ${formatNotesForPrintHtml(row.notes)}</td>
 </tr>`
     })
     .join('')
@@ -377,13 +382,41 @@ export const buildEmployeePrintHtml = (params: {
       text-align: left;
       vertical-align: middle;
     }
-    td.doc-cell {
+    /* Zeile mit den Zeitdaten: niedrig und garantiert unteilbar. Sie darf
+       auch nicht von ihrer Dokumentation getrennt werden, sonst stünde der Tag
+       allein am Seitenfuß. */
+    tr.time-row {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    tr.time-row td {
+      white-space: nowrap;
+    }
+    /* Fließtext darf umbrechen – sonst bliebe am Seitenfuß Platz liegen, nur
+       weil eine lange Dokumentation nicht mehr komplett hinpasst. */
+    tr.doc-row {
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+    tr.time-row td.date-print-cell {
+      white-space: normal;
+    }
+    /* Dokumentation über die volle Breite statt in einer schmalen Spalte. */
+    tr.doc-row td {
       vertical-align: top;
       white-space: normal;
       word-break: break-word;
-      max-width: 280px;
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1.4;
+      color: #333;
+      border-top: none;
+      padding-top: 0;
+    }
+    .doc-label {
+      font-weight: 700;
+      color: #555;
     }
     th {
       background: #f4f4f4;
@@ -506,6 +539,14 @@ export const buildEmployeePrintHtml = (params: {
   </div>
 
   <table>
+    <colgroup>
+      <col style="width: 15%" />
+      <col style="width: 31%" />
+      <col style="width: 12%" />
+      <col style="width: 12%" />
+      <col style="width: 10%" />
+      <col style="width: 20%" />
+    </colgroup>
     <thead>
       <tr>
         <th>Tag</th>
@@ -513,7 +554,6 @@ export const buildEmployeePrintHtml = (params: {
         <th>Kommen</th>
         <th>Gehen</th>
         <th>Pause</th>
-        <th>Dokumentation</th>
         <th>Arbeitszeit</th>
       </tr>
     </thead>
@@ -522,7 +562,7 @@ export const buildEmployeePrintHtml = (params: {
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="6">Gesamt:</td>
+        <td colspan="5">Gesamt:</td>
         <td class="right">${escapeHtml(calculateEmployeePrintTotalHours(printRows))}</td>
       </tr>
     </tfoot>

@@ -844,12 +844,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const adjustedEntries = adjustedReport.entries
   const regularWorkTimeLabel = `Mo–Do ${minutesToHoursLabel(regularWorkTimeConfig.monThu)} · Fr ${minutesToHoursLabel(regularWorkTimeConfig.fri)}`
-  /** true, sobald der Bericht eine Pause ergänzt oder auf 10 Std gedeckelt hat. */
-  const hasLegalCorrection = adjustedReport.entries.some(
-    entry =>
-      entry.workTimeAdjustments.includes('break') ||
-      entry.workTimeAdjustments.includes('max-hours')
-  )
 
   /** Klartext für Tooltip/Hinweis, warum eine Zeile im Bericht abweicht. */
   const describeAdjustments = (entry: AdjustedReportEntry): string => {
@@ -1524,7 +1518,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           periodLabel: formatPeriod(),
           regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
           payoutMinutes: adjustedReport.payoutMinutes,
-          hasLegalCorrection: hasLegalCorrection,
           summary: adjustedReport.summary
         })
       )
@@ -1716,7 +1709,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       periodLabel: formatPeriod(),
       regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
       payoutMinutes: adjustedReport.payoutMinutes,
-      hasLegalCorrection: hasLegalCorrection,
       summary: adjustedReport.summary
     })
 
