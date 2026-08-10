@@ -28,6 +28,7 @@ import {
   entryCreditMinutes,
   workMinutesFromParts,
   minutesToHoursLabel,
+  minutesToDecimalHours,
   workMinutesFromOriginalEntry,
   formatCurrency,
   buildDateFromTimeInput,
@@ -517,7 +518,33 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       )
     })
 
-    return [...entries, ...holidayEntries, ...vacationEntries, ...sickEntries].sort((a, b) => {
+    // Berufsschule: bei Azubis soll auf dem Nachweis stehen, warum an dem Tag
+    // nicht gearbeitet wurde (Wunsch der Lohnbuchhaltung).
+    const sickDates = new Set(sickEntries.map((entry) => entry.dateKey))
+    const schoolEntries: ReportEntry[] = getApprovedLeaveDates(
+      leaveRequests,
+      'school',
+      start,
+      end,
+      new Set([...blockedDates, ...vacationDates, ...sickDates])
+    ).map(({ date, request }) => {
+      const reason = (request.reason || '').trim()
+      return buildAbsenceRow(
+        date,
+        'school',
+        `school-${request.id || ''}`,
+        'Berufsschule',
+        reason ? `Berufsschule: ${reason}` : 'Berufsschule'
+      )
+    })
+
+    return [
+      ...entries,
+      ...holidayEntries,
+      ...vacationEntries,
+      ...sickEntries,
+      ...schoolEntries
+    ].sort((a, b) => {
       const ta = a.dateRaw?.getTime() || 0
       const tb = b.dateRaw?.getTime() || 0
       if (ta !== tb) return ta - tb
@@ -980,7 +1007,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     toast.success(`${minutesToHoursLabel(preview.payoutMinutes)} auf die Zeilen verteilt.`)
   }
 
-  const calculateTotalHours = (): string => minutesToHoursLabel(adjustedReport.shownTotalMinutes)
+  /**
+   * Gesamtzeit unter der Tabelle – in Dezimalstunden wie auf dem Beleg. Die
+   * Vorschau muss zeigen, was die Lohnbuchhaltung bekommt.
+   */
+  const calculateTotalHours = (): string => minutesToDecimalHours(adjustedReport.shownTotalMinutes)
 
   const buildSettlementLinesFromEntries = () =>
     reportEntries.map(re => {
@@ -3022,7 +3053,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               className={entry.workTimeAdjustments.length > 0 ? 'hours-adjusted' : ''}
                               title={adjustmentTitle}
                             >
-                              {entry.effectiveWorkHours}
+                              {minutesToDecimalHours(entry.effectiveWorkMinutes)}
                             </span>
                             {entry.effectiveWorkHours !== entry.workHours && (
                               <span className="legal-adjust-note" title={adjustmentTitle}>
@@ -3359,11 +3390,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <td className="hours-cell">{row.day}</td>
                         <td className="hours-cell">{row.begin}</td>
                         <td className="hours-cell">
-                          {row.pauseMinutes > 0 ? minutesToHoursLabel(row.pauseMinutes) : ''}
+                          {row.pauseMinutes > 0 ? minutesToDecimalHours(row.pauseMinutes) : ''}
                         </td>
                         <td className="hours-cell">{row.end}</td>
                         <td className="hours-cell">
-                          {row.workMinutes > 0 ? minutesToHoursLabel(row.workMinutes) : ''}
+                          {row.workMinutes > 0 ? minutesToDecimalHours(row.workMinutes) : ''}
                         </td>
                         <td className="hours-cell">
                           <strong>{row.key}</strong>
@@ -3378,7 +3409,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <strong>Summe:</strong>
                       </td>
                       <td className="hours-cell">
-                        <strong>{minutesToHoursLabel(datevTotalMinutes(datevRows))}</strong>
+                        <strong>{minutesToDecimalHours(datevTotalMinutes(datevRows))}</strong>
                       </td>
                       <td colSpan={2}></td>
                     </tr>

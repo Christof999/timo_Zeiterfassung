@@ -16,7 +16,7 @@ import {
   getWeekEnd,
   getWeekStart,
   isWeekendDate,
-  minutesToHoursLabel,
+  minutesToDecimalHours,
   msToMinutes,
   parseDateInputAsLocalDate
 } from './reportUtils'
@@ -148,8 +148,9 @@ export const buildEmployeePrintRows = (
   return rows
 }
 
+/** Gesamtzeit des Belegs – in Dezimalstunden, so rechnet die Lohnbuchhaltung. */
 export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): string =>
-  minutesToHoursLabel(rows.reduce((sum, row) => sum + row.workMinutes, 0))
+  minutesToDecimalHours(rows.reduce((sum, row) => sum + row.workMinutes, 0))
 
 export interface SummaryLine {
   label: string
@@ -167,7 +168,9 @@ export interface SummaryLine {
  * dieselben Posten zeigen.
  */
 export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): SummaryLine[] => {
-  const hours = (minutes: number): string => `${minutesToHoursLabel(minutes)} Std`
+  // Die Kanzlei rechnet in Dezimalstunden – „8,50" statt „8:30".
+  const hours = (minutes: number): string => `${minutesToDecimalHours(minutes)} Std`
+  const days = (anzahl: number): string => `${anzahl} ${anzahl === 1 ? 'Tag' : 'Tage'}`
   const rate = formatCurrency(summary.hourlyRate)
 
   // Reihenfolge ist bewusst: erst alle lohnwirksamen Posten, dann der Bruttolohn.
@@ -184,20 +187,24 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
       amount: amountOrDash(summary.workAmount)
     },
     {
-      label: 'Urlaubsstunden',
-      detail: timesRate(hours(summary.vacationMinutes)),
-      amount: amountOrDash(summary.vacationAmount)
-    },
-    {
       label: 'Feiertagsstunden',
       detail: timesRate(hours(summary.holidayMinutes)),
       amount: amountOrDash(summary.holidayAmount)
     },
     {
       label: 'Krankheitstage',
-      detail: timesRate(`${summary.sickDays} Tage (${hours(summary.sickMinutes)})`),
+      detail: timesRate(`${days(summary.sickDays)} (${hours(summary.sickMinutes)})`),
       amount: amountOrDash(summary.sickAmount)
     },
+    ...(summary.schoolDays > 0
+      ? [
+          {
+            label: 'Berufsschultage',
+            detail: timesRate(`${days(summary.schoolDays)} (${hours(summary.schoolMinutes)})`),
+            amount: amountOrDash(summary.schoolAmount)
+          }
+        ]
+      : []),
     {
       label: fixed ? 'Fixlohn (steuer- und SV-pflichtig)' : 'Bruttolohn (steuer- und SV-pflichtig)',
       detail: fixed
@@ -208,7 +215,7 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
     },
     {
       label: 'Verpflegungsmehraufwand (steuerfrei)',
-      detail: `${summary.mealAllowanceDays} Tage × ${formatCurrency(summary.mealAllowanceRate)}`,
+      detail: `${days(summary.mealAllowanceDays)} × ${formatCurrency(summary.mealAllowanceRate)}`,
       amount: formatCurrency(summary.mealAllowanceAmount)
     },
     {
@@ -216,6 +223,14 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
       detail: `${fixed ? 'Fixlohn' : 'Bruttolohn'} + steuerfreie Zuwendungen`,
       amount: formatCurrency(summary.totalPayoutAmount),
       isTotal: true
+    },
+    {
+      // Urlaub steht bewusst NACH dem Bruttolohn und ohne Betrag: der Baulohn
+      // rechnet ihn über die Urlaubskasse selbst, gemeldet werden nur die Tage.
+      label: 'Urlaubstage',
+      detail: `${days(summary.vacationDays)} – Abrechnung im Baulohn, nicht im Bruttolohn enthalten`,
+      amount: '—',
+      isNote: true
     },
     {
       label: 'Nicht abgerechnete Überstunden',
@@ -315,7 +330,7 @@ const buildEmployeeReportBodyHtml = (
   }
   if (params.payoutMinutes) {
     metaExtras.push(
-      `<div><strong>Ausbezahlte Überstunden:</strong> ${escapeHtml(minutesToHoursLabel(params.payoutMinutes))} Std (in den Zeiten enthalten)</div>`
+      `<div><strong>Ausbezahlte Überstunden:</strong> ${escapeHtml(minutesToDecimalHours(params.payoutMinutes))} Std (in den Zeiten enthalten)</div>`
     )
   }
 
@@ -351,7 +366,7 @@ const buildEmployeeReportBodyHtml = (
   <td>${escapeHtml(row.clockIn)}</td>
   <td>${escapeHtml(row.clockOut)}</td>
   <td>${row.pauseMinutes ?? '—'}</td>
-  <td>${escapeHtml(row.workHours)}</td>
+  <td>${escapeHtml(minutesToDecimalHours(row.workMinutes))}</td>
 </tr>`
       const doku = (row.notes || '').trim()
       if (!doku) return zeitZeile

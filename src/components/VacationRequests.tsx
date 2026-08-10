@@ -142,6 +142,7 @@ const VacationRequests: React.FC = () => {
       case 'special': return 'Sonderurlaub'
       case 'unpaid': return 'Unbezahlt'
       case 'overtime': return 'Urlaub auf Überstunden'
+      case 'school': return 'Berufsschule'
       default: return type
     }
   }

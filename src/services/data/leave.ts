@@ -75,19 +75,25 @@ function toDateValue(value: unknown): Date | null {
 }
 
 /**
- * Krankheitstage werden vom Admin gemeldet, nicht beantragt: der Eintrag wird
- * direkt als genehmigt gespeichert und löst keine Benachrichtigung aus.
- * Gezählt werden nur Werktage ohne gesetzlichen Feiertag — an einem Feiertag
- * kann niemand krank gemeldet werden.
+ * Krankheits- und Berufsschultage werden vom Admin gemeldet, nicht beantragt:
+ * der Eintrag wird direkt als genehmigt gespeichert und löst keine
+ * Benachrichtigung aus. Gezählt werden nur Werktage ohne gesetzlichen Feiertag
+ * — an einem Feiertag ist niemand krank oder in der Berufsschule.
+ *
+ * Beide Arten laufen bewusst am Urlaubskonto vorbei: sie werden weder beantragt
+ * noch vom Urlaubsanspruch abgezogen.
  */
-export async function reportSickLeave(data: {
-  employeeId: string
-  employeeName?: string
-  startDate: Date
-  endDate: Date
-  reason?: string
-  reportedBy?: string
-}): Promise<string> {
+async function reportAbsence(
+  type: 'sick' | 'school',
+  data: {
+    employeeId: string
+    employeeName?: string
+    startDate: Date
+    endDate: Date
+    reason?: string
+    reportedBy?: string
+  }
+): Promise<string> {
   await authReady
   const current = new Date(data.startDate)
   current.setHours(12, 0, 0, 0)
@@ -110,7 +116,7 @@ export async function reportSickLeave(data: {
     employeeName: data.employeeName || '',
     startDate: data.startDate,
     endDate: data.endDate,
-    type: 'sick',
+    type,
     reason: data.reason || '',
     workingDays,
     status: 'approved',
@@ -120,6 +126,25 @@ export async function reportSickLeave(data: {
   })
   return docRef.id
 }
+
+export const reportSickLeave = (data: {
+  employeeId: string
+  employeeName?: string
+  startDate: Date
+  endDate: Date
+  reason?: string
+  reportedBy?: string
+}): Promise<string> => reportAbsence('sick', data)
+
+/** Berufsschultage eines Azubis – auf dem Nachweis der Grund für den freien Tag. */
+export const reportSchoolDays = (data: {
+  employeeId: string
+  employeeName?: string
+  startDate: Date
+  endDate: Date
+  reason?: string
+  reportedBy?: string
+}): Promise<string> => reportAbsence('school', data)
 
 export async function createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
   await authReady

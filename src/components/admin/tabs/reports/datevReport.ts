@@ -12,7 +12,7 @@ import { formatDateForInputLocal } from '../../../../utils/dateUtils'
  */
 
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
-export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU'
+export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S'
 
 export const DATEV_KEY_LEGEND: Array<{ key: Exclude<DatevKey, ''>; label: string }> = [
   { key: 'K', label: 'Krank' },
@@ -20,7 +20,10 @@ export const DATEV_KEY_LEGEND: Array<{ key: Exclude<DatevKey, ''>; label: string
   { key: 'UU', label: 'unbezahlter Urlaub' },
   { key: 'F', label: 'Feiertag' },
   { key: 'SA', label: 'Stundenweise abwesend' },
-  { key: 'SU', label: 'Stundenweise Urlaub' }
+  { key: 'SU', label: 'Stundenweise Urlaub' },
+  // Nicht Teil der DATEV-Vorlage, aber von der Lohnbuchhaltung ausdrücklich
+  // gewünscht: bei Azubis soll erkennbar sein, warum nicht gearbeitet wurde.
+  { key: 'S', label: 'Berufsschule' }
 ]
 
 export interface DatevDayRow {
@@ -40,13 +43,15 @@ export interface DatevDayRow {
 const KEY_BY_ABSENCE: Record<string, DatevKey> = {
   sick: 'K',
   vacation: 'U',
-  holiday: 'F'
+  holiday: 'F',
+  school: 'S'
 }
 
 const REMARK_BY_ABSENCE: Record<string, string> = {
   sick: 'Krank',
   vacation: 'Urlaub',
-  holiday: 'Feiertag'
+  holiday: 'Feiertag',
+  school: 'Berufsschule'
 }
 
 /** "07:00" → 420; ungültig → null. Für den frühesten/spätesten Zeitpunkt. */

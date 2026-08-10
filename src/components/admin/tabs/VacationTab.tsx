@@ -9,9 +9,10 @@ const VacationTab: React.FC = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [sickModalOpen, setSickModalOpen] = useState(false)
-  const [isSavingSick, setIsSavingSick] = useState(false)
-  const [sickForm, setSickForm] = useState({
+  /** Welche Abwesenheit der Admin gerade meldet – beide laufen gleich ab. */
+  const [absenceModal, setAbsenceModal] = useState<'sick' | 'school' | null>(null)
+  const [isSavingAbsence, setIsSavingAbsence] = useState(false)
+  const [absenceForm, setAbsenceForm] = useState({
     employeeId: '',
     startDate: formatDateForInputLocal(new Date()),
     endDate: formatDateForInputLocal(new Date()),
@@ -67,13 +68,15 @@ const VacationTab: React.FC = () => {
     employee.id ||
     'Mitarbeiter'
 
-  const handleReportSick = async () => {
-    if (!sickForm.employeeId) {
+  /** Krankheit und Berufsschule werden identisch gemeldet – nur der Typ wechselt. */
+  const handleReportAbsence = async () => {
+    if (!absenceModal) return
+    if (!absenceForm.employeeId) {
       toast.error('Bitte einen Mitarbeiter auswählen')
       return
     }
-    const start = new Date(`${sickForm.startDate}T12:00:00`)
-    const end = new Date(`${sickForm.endDate}T12:00:00`)
+    const start = new Date(`${absenceForm.startDate}T12:00:00`)
+    const end = new Date(`${absenceForm.endDate}T12:00:00`)
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       toast.error('Bitte gültige Daten angeben')
       return
@@ -83,25 +86,29 @@ const VacationTab: React.FC = () => {
       return
     }
 
-    setIsSavingSick(true)
+    setIsSavingAbsence(true)
     try {
-      const employee = employees.find(e => e.id === sickForm.employeeId)
-      await DataService.reportSickLeave({
-        employeeId: sickForm.employeeId,
+      const employee = employees.find(e => e.id === absenceForm.employeeId)
+      const daten = {
+        employeeId: absenceForm.employeeId,
         employeeName: employee ? employeeLabel(employee) : '',
         startDate: start,
         endDate: end,
-        reason: sickForm.reason.trim(),
+        reason: absenceForm.reason.trim(),
         reportedBy: 'Admin'
-      })
-      toast.success('Krankmeldung gespeichert')
-      setSickModalOpen(false)
-      setSickForm(prev => ({ ...prev, reason: '' }))
+      }
+      if (absenceModal === 'school') await DataService.reportSchoolDays(daten)
+      else await DataService.reportSickLeave(daten)
+      toast.success(
+        absenceModal === 'school' ? 'Berufsschultage gespeichert' : 'Krankmeldung gespeichert'
+      )
+      setAbsenceModal(null)
+      setAbsenceForm(prev => ({ ...prev, reason: '' }))
       loadData()
     } catch (error: any) {
-      toast.error(error?.message || 'Krankmeldung konnte nicht gespeichert werden')
+      toast.error(error?.message || 'Die Meldung konnte nicht gespeichert werden')
     } finally {
-      setIsSavingSick(false)
+      setIsSavingAbsence(false)
     }
   }
 
@@ -142,6 +149,7 @@ const VacationTab: React.FC = () => {
       case 'special': return 'Sonderurlaub'
       case 'unpaid': return 'Unbezahlt'
       case 'overtime': return 'Urlaub auf Überstunden'
+      case 'school': return 'Berufsschule'
       default: return type
     }
   }
@@ -185,13 +193,22 @@ const VacationTab: React.FC = () => {
             <span className="pending-badge">{pendingCount} offen</span>
           )}
         </h3>
-        <button
-          type="button"
-          className="btn primary-btn"
-          onClick={() => setSickModalOpen(true)}
-        >
-          Krankheit melden
-        </button>
+        <div className="tab-header-actions">
+          <button
+            type="button"
+            className="btn secondary-btn"
+            onClick={() => setAbsenceModal('school')}
+          >
+            Berufsschule melden
+          </button>
+          <button
+            type="button"
+            className="btn primary-btn"
+            onClick={() => setAbsenceModal('sick')}
+          >
+            Krankheit melden
+          </button>
+        </div>
       </div>
 
       {/* Filter */}
@@ -315,24 +332,25 @@ const VacationTab: React.FC = () => {
         </div>
       )}
 
-      {sickModalOpen && (
-        <div className="modal-overlay" onClick={() => setSickModalOpen(false)}>
+      {absenceModal && (
+        <div className="modal-overlay" onClick={() => setAbsenceModal(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Krankheit melden</h3>
-              <button className="modal-close" onClick={() => setSickModalOpen(false)}>×</button>
+              <h3>{absenceModal === 'school' ? 'Berufsschule melden' : 'Krankheit melden'}</h3>
+              <button className="modal-close" onClick={() => setAbsenceModal(null)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
                 <label>Mitarbeiter:</label>
                 <select
-                  value={sickForm.employeeId}
-                  onChange={(e) => setSickForm({ ...sickForm, employeeId: e.target.value })}
+                  value={absenceForm.employeeId}
+                  onChange={(e) => setAbsenceForm({ ...absenceForm, employeeId: e.target.value })}
                 >
                   <option value="">— bitte wählen —</option>
                   {employees.filter((employee) => !!employee.id).map((employee) => (
                     <option key={employee.id} value={employee.id}>
                       {employeeLabel(employee)}
+                      {employee.isApprentice ? ' (Azubi)' : ''}
                     </option>
                   ))}
                 </select>
@@ -341,24 +359,26 @@ const VacationTab: React.FC = () => {
                 <label>Von:</label>
                 <input
                   type="date"
-                  value={sickForm.startDate}
-                  onChange={(e) => setSickForm({ ...sickForm, startDate: e.target.value })}
+                  value={absenceForm.startDate}
+                  onChange={(e) => setAbsenceForm({ ...absenceForm, startDate: e.target.value })}
                 />
               </div>
               <div className="form-group">
                 <label>Bis:</label>
                 <input
                   type="date"
-                  value={sickForm.endDate}
-                  onChange={(e) => setSickForm({ ...sickForm, endDate: e.target.value })}
+                  value={absenceForm.endDate}
+                  onChange={(e) => setAbsenceForm({ ...absenceForm, endDate: e.target.value })}
                 />
               </div>
               <div className="form-group">
                 <label>Notiz (optional):</label>
                 <textarea
-                  value={sickForm.reason}
-                  onChange={(e) => setSickForm({ ...sickForm, reason: e.target.value })}
-                  placeholder="z.B. Attest liegt vor"
+                  value={absenceForm.reason}
+                  onChange={(e) => setAbsenceForm({ ...absenceForm, reason: e.target.value })}
+                  placeholder={
+                    absenceModal === 'school' ? 'z.B. Blockunterricht' : 'z.B. Attest liegt vor'
+                  }
                   rows={2}
                 />
               </div>
@@ -366,18 +386,24 @@ const VacationTab: React.FC = () => {
                 Gezählt werden nur Werktage ohne gesetzlichen Feiertag. Im Zeiterfassungsbericht
                 werden sie mit der Regelarbeitszeit vergütet – Montag bis Donnerstag 8 Std,
                 Freitag 6 Std.
+                {absenceModal === 'school' && (
+                  <>
+                    {' '}Berufsschultage zählen nicht gegen den Urlaubsanspruch; auf dem Nachweis
+                    steht damit der Grund, warum an dem Tag nicht gearbeitet wurde.
+                  </>
+                )}
               </p>
             </div>
             <div className="modal-actions">
-              <button onClick={() => setSickModalOpen(false)} className="btn secondary-btn">
+              <button onClick={() => setAbsenceModal(null)} className="btn secondary-btn">
                 Abbrechen
               </button>
               <button
-                onClick={handleReportSick}
+                onClick={handleReportAbsence}
                 className="btn primary-btn"
-                disabled={isSavingSick}
+                disabled={isSavingAbsence}
               >
-                {isSavingSick ? 'Speichert…' : 'Krankmeldung speichern'}
+                {isSavingAbsence ? 'Speichert…' : 'Meldung speichern'}
               </button>
             </div>
           </div>

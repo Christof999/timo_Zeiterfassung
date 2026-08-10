@@ -15,6 +15,7 @@ import {
   planSettlementTarget,
   parseMealAllowanceInput,
   DEFAULT_MEAL_ALLOWANCE_EUR,
+  type AbsenceKind,
   type ReportEntry
 } from './reportUtils'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
@@ -315,7 +316,7 @@ describe('Abrechnungs-Summen für den Beleg', () => {
     }
   }
 
-  const absenceEntry = (day: number, kind: 'vacation' | 'holiday' | 'sick', minutes: number): ReportEntry => {
+  const absenceEntry = (day: number, kind: AbsenceKind, minutes: number): ReportEntry => {
     const start = new Date(2026, 2, day, 7, 0)
     const original: TimeEntry = {
       id: `${kind}-${day}`,
@@ -403,11 +404,44 @@ describe('Abrechnungs-Summen für den Beleg', () => {
       { hourlyRate: 20, mealAllowanceRate: 14 }
     )
 
-    // 4 × 8 Std × 20 € – der Verpflegungsmehraufwand bleibt draußen.
-    expect(report.summary.grossWageMinutes).toBe(32 * 60)
-    expect(report.summary.grossWageAmount).toBe(640)
+    // Arbeit + Feiertag + Krankheit = 3 × 8 Std × 20 €. Draußen bleiben der
+    // steuerfreie Verpflegungsmehraufwand UND der Urlaub – letzterer wird im
+    // Baulohn über die Urlaubskasse gesondert abgerechnet.
+    expect(report.summary.grossWageMinutes).toBe(24 * 60)
+    expect(report.summary.grossWageAmount).toBe(480)
     expect(report.summary.taxFreeAmount).toBe(14)
-    expect(report.summary.totalPayoutAmount).toBe(654)
+    expect(report.summary.totalPayoutAmount).toBe(494)
+  })
+
+  it('meldet Urlaub in Tagen und hält ihn aus dem Bruttolohn heraus', () => {
+    const report = buildAdjustedReport(
+      [
+        workEntry(2, '07:00', '15:00'),
+        absenceEntry(3, 'vacation', 8 * 60),
+        absenceEntry(4, 'vacation', 8 * 60)
+      ],
+      { hourlyRate: 20, mealAllowanceRate: 0 }
+    )
+
+    // Die Tage stehen weiterhin auf dem Beleg …
+    expect(report.summary.vacationDays).toBe(2)
+    expect(report.summary.vacationMinutes).toBe(16 * 60)
+    // … der Betrag daraus fließt aber nicht in den Bruttolohn.
+    expect(report.summary.grossWageMinutes).toBe(8 * 60)
+    expect(report.summary.grossWageAmount).toBe(160)
+  })
+
+  it('vergütet Berufsschultage wie Arbeitszeit und weist sie getrennt aus', () => {
+    const report = buildAdjustedReport(
+      [workEntry(2, '07:00', '15:00'), absenceEntry(3, 'school', 8 * 60)],
+      { hourlyRate: 20, mealAllowanceRate: 0 }
+    )
+
+    expect(report.summary.schoolDays).toBe(1)
+    expect(report.summary.schoolMinutes).toBe(8 * 60)
+    // Berufsschule ist bezahlte Zeit – anders als Urlaub bleibt sie im Bruttolohn.
+    expect(report.summary.grossWageMinutes).toBe(16 * 60)
+    expect(report.summary.grossWageAmount).toBe(320)
   })
 
   it('summiert den Bruttolohn aus den gerundeten Einzelzeilen', () => {
@@ -417,10 +451,10 @@ describe('Abrechnungs-Summen für den Beleg', () => {
       { hourlyRate: 20.01, mealAllowanceRate: 0 }
     )
 
-    const { workAmount, vacationAmount, holidayAmount, sickAmount, grossWageAmount } =
-      report.summary
+    // Urlaub zählt hier bewusst nicht mit – er ist nicht Teil des Bruttolohns.
+    const { workAmount, holidayAmount, sickAmount, schoolAmount, grossWageAmount } = report.summary
     expect(grossWageAmount).toBe(
-      Math.round((workAmount + vacationAmount + holidayAmount + sickAmount) * 100) / 100
+      Math.round((workAmount + holidayAmount + sickAmount + schoolAmount) * 100) / 100
     )
   })
 
@@ -473,7 +507,8 @@ describe('Abrechnungs-Summen für den Beleg', () => {
       expect(report.summary.workMinutes).toBe(8 * 60)
       expect(report.summary.vacationMinutes).toBe(8 * 60)
       expect(report.summary.sickMinutes).toBe(8 * 60)
-      expect(report.summary.grossWageMinutes).toBe(24 * 60)
+      // Ohne Urlaub: Arbeit + Krankheit.
+      expect(report.summary.grossWageMinutes).toBe(16 * 60)
     })
 
     it('rechnet den steuerfreien Verpflegungsmehraufwand zusätzlich zum Fixlohn', () => {
@@ -505,7 +540,8 @@ describe('Abrechnungs-Summen für den Beleg', () => {
       })
 
       expect(report.summary.isFixedSalary).toBe(false)
-      expect(report.summary.grossWageAmount).toBe(480)
+      // Arbeit + Krankheit × 20 € (Urlaub läuft über den Baulohn).
+      expect(report.summary.grossWageAmount).toBe(320)
     })
   })
 })

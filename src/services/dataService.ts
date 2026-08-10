@@ -2360,6 +2360,18 @@ class DataServiceClass {
     return leave.reportSickLeave(data)
   }
 
+  /** Berufsschultage eines Azubis – ebenfalls direkt genehmigt gespeichert. */
+  reportSchoolDays(data: {
+    employeeId: string
+    employeeName?: string
+    startDate: Date
+    endDate: Date
+    reason?: string
+    reportedBy?: string
+  }): Promise<string> {
+    return leave.reportSchoolDays(data)
+  }
+
   updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {
     return leave.updateLeaveRequest(id, requestData)
   }

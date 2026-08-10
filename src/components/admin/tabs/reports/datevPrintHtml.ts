@@ -1,4 +1,4 @@
-import { escapeHtml, minutesToHoursLabel, type ReportSettlementSummary } from './reportUtils'
+import { escapeHtml, minutesToDecimalHours, type ReportSettlementSummary } from './reportUtils'
 import { DATEV_KEY_LEGEND, datevTotalMinutes, type DatevDayRow } from './datevReport'
 import { buildSettlementSummaryHtml, COMPANY_NAME } from './printHtml'
 
@@ -26,7 +26,8 @@ export interface DatevPrintParams {
 const buildDatevBodyHtml = (params: DatevPrintParams): string => {
   const company = params.companyName || COMPANY_NAME
   const esc = escapeHtml
-  const zeit = (minutes: number): string => (minutes > 0 ? minutesToHoursLabel(minutes) : '')
+  // Dezimalstunden statt 0:45 – die Lohnbuchhaltung rechnet so weiter.
+  const zeit = (minutes: number): string => (minutes > 0 ? minutesToDecimalHours(minutes) : '')
 
   const rowsHtml = params.rows
     .map(
@@ -72,7 +73,7 @@ const buildDatevBodyHtml = (params: DatevPrintParams): string => {
     <tfoot>
       <tr>
         <td colspan="4" class="center">Summe:</td>
-        <td class="center">${esc(minutesToHoursLabel(datevTotalMinutes(params.rows)))}</td>
+        <td class="center">${esc(minutesToDecimalHours(datevTotalMinutes(params.rows)))}</td>
         <td colspan="3"></td>
       </tr>
     </tfoot>

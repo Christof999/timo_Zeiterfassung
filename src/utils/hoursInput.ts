@@ -10,6 +10,16 @@ export const minutesToHoursLabel = (totalMinutes: number): string => {
   return `${h}:${m.toString().padStart(2, '0')}`
 }
 
+/**
+ * Dezimalstunden für die Lohnbuchhaltung: 8:30 → „8,50".
+ *
+ * Der Baulohn rechnet in Dezimalstunden, nicht in Stunden:Minuten – bisher hat
+ * die Kanzlei jede Zeile von Hand umgerechnet. Zwei Nachkommastellen, damit
+ * Viertelstunden aufgehen; deutsches Komma, weil der Beleg deutsch ist.
+ */
+export const minutesToDecimalHours = (totalMinutes: number): string =>
+  (Math.round((totalMinutes / 60) * 100) / 100).toFixed(2).replace('.', ',')
+
 /** "8:30", "8,5" oder "510" (Minuten-frei) → Minuten. Ungültig → null. */
 export const parseHoursMinutesInput = (value: string): number | null => {
   const trimmed = (value || '').trim()

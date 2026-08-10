@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib'
-import { formatCurrency, minutesToHoursLabel, type ReportSettlementSummary } from './reportUtils'
+import { formatCurrency, minutesToDecimalHours, type ReportSettlementSummary } from './reportUtils'
 import {
   COMPANY_NAME,
   buildEmployeePrintRows,
@@ -388,7 +388,7 @@ export const buildEmployeeReportPdf = async (
   if (params.payoutMinutes) {
     drawParagraph(
       sheet,
-      `Ausbezahlte Überstunden: ${minutesToHoursLabel(params.payoutMinutes)} Std (in den Zeiten enthalten)`,
+      `Ausbezahlte Überstunden: ${minutesToDecimalHours(params.payoutMinutes)} Std (in den Zeiten enthalten)`,
       { size: 9 }
     )
   }
@@ -418,7 +418,7 @@ export const buildEmployeeReportPdf = async (
         row.clockIn,
         row.clockOut,
         row.pauseMinutes === null ? '—' : String(row.pauseMinutes),
-        row.workHours
+        minutesToDecimalHours(row.workMinutes)
       ],
       {
         background: hintergrund,
@@ -518,7 +518,7 @@ export const buildDatevReportPdf = async (params: DatevPrintParams): Promise<Uin
   drawTableHead(sheet)
 
   for (const row of params.rows) {
-    const zeit = (minutes: number): string => (minutes > 0 ? minutesToHoursLabel(minutes) : '')
+    const zeit = (minutes: number): string => (minutes > 0 ? minutesToDecimalHours(minutes) : '')
     drawRow(
       sheet,
       columns,
@@ -547,7 +547,7 @@ export const buildDatevReportPdf = async (params: DatevPrintParams): Promise<Uin
       { ...columns[4] },
       { width: columns.slice(5).reduce((s, c) => s + c.width, 0) }
     ],
-    ['Summe:', minutesToHoursLabel(datevTotalMinutes(params.rows)), ''],
+    ['Summe:', minutesToDecimalHours(datevTotalMinutes(params.rows)), ''],
     { bold: true, size: 8, background: COLOR_HEAD_BG }
   )
 

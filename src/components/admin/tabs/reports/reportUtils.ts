@@ -17,8 +17,11 @@ import {
 export type ReportType = 'employee' | 'project' | 'datev'
 export type ReportEntrySource = 'time-entry' | 'leave-request'
 
-/** Bezahlte Abwesenheit; alle drei werden mit der Regelarbeitszeit vergütet. */
-export type AbsenceKind = 'vacation' | 'holiday' | 'sick'
+/**
+ * Bezahlte Abwesenheit; alle werden mit der Regelarbeitszeit vergütet.
+ * `school` = Berufsschultag eines Azubis.
+ */
+export type AbsenceKind = 'vacation' | 'holiday' | 'sick' | 'school'
 
 export const VACATION_WORK_MINUTES = 8 * 60
 export const VACATION_WORK_HOURS_LABEL = '8:00'
@@ -240,7 +243,7 @@ export const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMin
   return Math.max(0, grossMinutes - pauseMinutes)
 }
 
-export { minutesToHoursLabel } from '../../../../utils/hoursInput'
+export { minutesToHoursLabel, minutesToDecimalHours } from '../../../../utils/hoursInput'
 
 export const workMinutesFromOriginalEntry = (entry: TimeEntry): number => {
   if (entry.isVacationDay) return VACATION_WORK_MINUTES
@@ -393,6 +396,8 @@ export interface ReportSettlementSummary {
   mealAllowanceDays: number
   mealAllowanceRate: number
   mealAllowanceAmount: number
+  /** Urlaub wird in TAGEN gemeldet – der Baulohn rechnet ihn selbst. */
+  vacationDays: number
   vacationMinutes: number
   vacationAmount: number
   holidayMinutes: number
@@ -400,11 +405,15 @@ export interface ReportSettlementSummary {
   sickDays: number
   sickMinutes: number
   sickAmount: number
+  /** Berufsschultage (Azubis) – bezahlt, aber keine geleistete Arbeitszeit. */
+  schoolDays: number
+  schoolMinutes: number
+  schoolAmount: number
   hourlyRate: number
   /**
    * Der Betrag, den der Steuerberater meldet. Bei Stundenlohn: alle
-   * lohnwirksamen Stunden (Arbeit, Urlaub, Feiertag, Krankheit) × Stundenlohn.
-   * Bei Azubis: der Fixlohn. Enthält nie den steuerfreien
+   * lohnwirksamen Stunden × Stundenlohn – ohne Urlaub, den der Baulohn
+   * gesondert abrechnet. Bei Azubis: der Fixlohn. Enthält nie den steuerfreien
    * Verpflegungsmehraufwand.
    */
   grossWageAmount: number
@@ -584,10 +593,15 @@ export const buildAdjustedReport = (
   const workMinutes = sum(
     adjusted.filter((entry) => !entry.absenceKind).map((entry) => entry.effectiveWorkMinutes)
   )
+  const daysOfKind = (kind: AbsenceKind): number =>
+    adjusted.filter((entry) => entry.absenceKind === kind).length
   const vacationMinutes = minutesOfKind('vacation')
+  const vacationDays = daysOfKind('vacation')
   const holidayMinutes = minutesOfKind('holiday')
   const sickMinutes = minutesOfKind('sick')
-  const sickDays = adjusted.filter((entry) => entry.absenceKind === 'sick').length
+  const sickDays = daysOfKind('sick')
+  const schoolMinutes = minutesOfKind('school')
+  const schoolDays = daysOfKind('school')
 
   // „Nicht abgerechnet" = was nach der Auszahlung im Konto stehen bleibt.
   const openOvertimeMinutes =
@@ -604,13 +618,19 @@ export const buildAdjustedReport = (
   const vacationAmount = useFixedSalary ? 0 : amountFor(vacationMinutes)
   const holidayAmount = useFixedSalary ? 0 : amountFor(holidayMinutes)
   const sickAmount = useFixedSalary ? 0 : amountFor(sickMinutes)
+  const schoolAmount = useFixedSalary ? 0 : amountFor(schoolMinutes)
   const mealAllowanceAmount = round2(mealAllowanceDays * mealAllowanceRate)
 
   // Lohnwirksam ist jede bezahlte Stunde – Arbeit wie Lohnfortzahlung.
-  const grossWageMinutes = workMinutes + vacationMinutes + holidayMinutes + sickMinutes
+  //
+  // AUSNAHME URLAUB: Im Baulohn wird der Urlaub über die Urlaubskasse gesondert
+  // abgerechnet (Wunsch der Steuerkanzlei). Er steht deshalb nur noch mit der
+  // Anzahl der Tage auf dem Beleg und ist im Bruttolohn NICHT enthalten – sonst
+  // würde er doppelt vergütet.
+  const grossWageMinutes = workMinutes + holidayMinutes + sickMinutes + schoolMinutes
   const grossWageAmount = useFixedSalary
     ? round2(Math.max(0, fixedMonthlySalary))
-    : round2(workAmount + vacationAmount + holidayAmount + sickAmount)
+    : round2(workAmount + holidayAmount + sickAmount + schoolAmount)
 
   return {
     entries: adjusted,
@@ -630,6 +650,7 @@ export const buildAdjustedReport = (
       mealAllowanceDays,
       mealAllowanceRate,
       mealAllowanceAmount,
+      vacationDays,
       vacationMinutes,
       vacationAmount,
       holidayMinutes,
@@ -637,6 +658,9 @@ export const buildAdjustedReport = (
       sickDays,
       sickMinutes,
       sickAmount,
+      schoolDays,
+      schoolMinutes,
+      schoolAmount,
       hourlyRate: useFixedSalary ? 0 : hourlyRate,
       grossWageMinutes,
       grossWageAmount,
