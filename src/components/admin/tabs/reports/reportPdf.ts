@@ -5,6 +5,8 @@ import {
   buildEmployeePrintRows,
   buildSettlementSummaryLines,
   calculateEmployeePrintTotalHours,
+  employeePrintTotalLabel,
+  printRowHoursLabel,
   type EmployeePrintParams
 } from './printHtml'
 import { DATEV_KEY_LEGEND, datevTotalMinutes } from './datevReport'
@@ -418,7 +420,7 @@ export const buildEmployeeReportPdf = async (
         row.clockIn,
         row.clockOut,
         row.pauseMinutes === null ? '—' : String(row.pauseMinutes),
-        minutesToDecimalHours(row.workMinutes)
+        printRowHoursLabel(row)
       ],
       {
         background: hintergrund,
@@ -440,7 +442,7 @@ export const buildEmployeeReportPdf = async (
   drawRow(
     sheet,
     [{ width: columns.slice(0, 5).reduce((s, c) => s + c.width, 0) }, { ...columns[5] }],
-    ['Gesamt:', calculateEmployeePrintTotalHours(rows)],
+    [employeePrintTotalLabel(rows), calculateEmployeePrintTotalHours(rows)],
     { bold: true, background: COLOR_HEAD_BG }
   )
 

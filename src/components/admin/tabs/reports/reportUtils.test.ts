@@ -431,6 +431,23 @@ describe('Abrechnungs-Summen für den Beleg', () => {
     expect(report.summary.grossWageAmount).toBe(160)
   })
 
+  it('lässt Urlaubsstunden aus der Belegsumme heraus', () => {
+    const report = buildAdjustedReport(
+      [
+        workEntry(2, '07:00', '15:00'),
+        absenceEntry(3, 'vacation', 8 * 60),
+        absenceEntry(4, 'sick', 8 * 60)
+      ],
+      { hourlyRate: 20, mealAllowanceRate: 0 }
+    )
+
+    // Die Zeile behält ihre Minuten (sie steht ja im Bericht) …
+    expect(report.shownTotalMinutes).toBe(24 * 60)
+    // … die Summe unter dem Beleg zählt den Urlaub aber nicht mit.
+    expect(report.documentTotalMinutes).toBe(16 * 60)
+    expect(report.documentTotalMinutes).toBe(report.summary.grossWageMinutes)
+  })
+
   it('vergütet Berufsschultage wie Arbeitszeit und weist sie getrennt aus', () => {
     const report = buildAdjustedReport(
       [workEntry(2, '07:00', '15:00'), absenceEntry(3, 'school', 8 * 60)],

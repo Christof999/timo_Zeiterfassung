@@ -1011,7 +1011,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
    * Gesamtzeit unter der Tabelle – in Dezimalstunden wie auf dem Beleg. Die
    * Vorschau muss zeigen, was die Lohnbuchhaltung bekommt.
    */
-  const calculateTotalHours = (): string => minutesToDecimalHours(adjustedReport.shownTotalMinutes)
+  const calculateTotalHours = (): string =>
+    minutesToDecimalHours(adjustedReport.documentTotalMinutes)
 
   const buildSettlementLinesFromEntries = () =>
     reportEntries.map(re => {
@@ -2047,7 +2048,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           payoutMinutes: report.payoutMinutes,
           summary: report.summary
         })
-        totalMinutes += report.shownTotalMinutes
+        totalMinutes += report.documentTotalMinutes
       }
       grossWageAmount += report.summary.grossWageAmount
       fertig += 1
@@ -2399,7 +2400,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         employeeName: selectedEmployeeName,
         periodLabel: istDatev && periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
         totalHours: minutesToHoursLabel(
-          istDatev ? datevTotalMinutes(datevRows) : adjustedReport.shownTotalMinutes
+          istDatev ? datevTotalMinutes(datevRows) : adjustedReport.documentTotalMinutes
         ),
         grossWage: formatCurrency(adjustedReport.summary.grossWageAmount),
         note: mailNote.trim(),
@@ -3053,7 +3054,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                               className={entry.workTimeAdjustments.length > 0 ? 'hours-adjusted' : ''}
                               title={adjustmentTitle}
                             >
-                              {minutesToDecimalHours(entry.effectiveWorkMinutes)}
+                              {entry.absenceKind === 'vacation'
+                                ? '—'
+                                : minutesToDecimalHours(entry.effectiveWorkMinutes)}
                             </span>
                             {entry.effectiveWorkHours !== entry.workHours && (
                               <span className="legal-adjust-note" title={adjustmentTitle}>
@@ -3108,7 +3111,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                     <tfoot>
                       <tr className="total-row">
                         <td colSpan={6}>
-                          <strong>Gesamt:</strong>
+                          <strong>
+                            {adjustedReport.summary.vacationDays > 0
+                              ? 'Gesamt (ohne Urlaub):'
+                              : 'Gesamt:'}
+                          </strong>
+                          {adjustedReport.summary.vacationDays > 0 && (
+                            <span className="total-note">
+                              {adjustedReport.summary.vacationDays} Urlaubstag
+                              {adjustedReport.summary.vacationDays === 1 ? '' : 'e'} – ohne Stunden,
+                              Abrechnung im Baulohn
+                            </span>
+                          )}
                           {legalCorrectionMinutes > 0 && (
                             <span className="total-note">
                               gestempelt {minutesToHoursLabel(adjustedReport.stampedTotalMinutes)}, davon

@@ -487,6 +487,12 @@ export interface AdjustedReport {
   legalTotalMinutes: number
   /** Summe, die Tabelle und Ausdruck zeigen */
   shownTotalMinutes: number
+  /**
+   * Gesamtzeit, die auf dem Beleg steht: alles außer Urlaub. Urlaub wird im
+   * Baulohn gesondert abgerechnet und deshalb weder mit Stunden ausgewiesen
+   * noch mitsummiert – gemeldet werden nur die Urlaubstage.
+   */
+  documentTotalMinutes: number
   /** im Zeitraum über der Regelarbeitszeit angefallen */
   overtimeAvailableMinutes: number
   /** tatsächlich auf die Zeilen verteilte Auszahlung */
@@ -638,6 +644,11 @@ export const buildAdjustedReport = (
     stampedTotalMinutes: sum(base.days.map((day) => day.stampedWorkMinutes)) + fixedMinutes,
     legalTotalMinutes: sum(base.days.map((day) => day.legalWorkMinutes)) + fixedMinutes,
     shownTotalMinutes: sum(adjusted.map((entry) => entry.effectiveWorkMinutes)),
+    documentTotalMinutes: sum(
+      adjusted
+        .filter((entry) => entry.absenceKind !== 'vacation')
+        .map((entry) => entry.effectiveWorkMinutes)
+    ),
     overtimeAvailableMinutes: sum(base.days.map((day) => day.overtimeMinutes)),
     payoutMinutes: allocation.allocatedMinutes,
     payoutBeyondActualMinutes: allocation.beyondActualMinutes,

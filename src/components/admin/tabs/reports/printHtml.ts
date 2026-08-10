@@ -2,6 +2,7 @@ import type { TimeEntry } from '../../../../types'
 import { getBavariaHolidayName } from '../../../../utils/bavariaHolidays'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
 import {
+  type AbsenceKind,
   type AdjustedReportEntry,
   type ReportSettlementSummary,
   calculateWorkHours,
@@ -41,7 +42,19 @@ export interface EmployeePrintRow {
   isWeekend: boolean
   isVacation: boolean
   isEmpty: boolean
+  /** gesetzt bei Urlaub, Feiertag, Krankheit und Berufsschule */
+  absenceKind?: AbsenceKind
 }
+
+/**
+ * Arbeitszeit einer Belegzeile.
+ *
+ * Beim Urlaub steht bewusst KEINE Stundenzahl: der Baulohn rechnet den Urlaub
+ * über die Urlaubskasse selbst, gemeldet werden nur die Urlaubstage im
+ * Abrechnungsblock. Eine Stundenangabe daneben würde doppelt gelesen.
+ */
+export const printRowHoursLabel = (row: EmployeePrintRow): string =>
+  row.absenceKind === 'vacation' ? '—' : minutesToDecimalHours(row.workMinutes)
 
 const buildPrintDateCellHtml = (row: EmployeePrintRow): string => {
   const notes: string[] = []
@@ -111,11 +124,14 @@ export const buildEmployeePrintRows = (
           pauseMinutes: entry.clockIn ? entry.effectivePauseMinutes : null,
           notes,
           workHours: entry.effectiveWorkHours || '0:00',
-          workMinutes: entry.effectiveWorkMinutes,
+          // Urlaubsstunden zählen nicht in die Belegsumme – sie werden im
+          // Baulohn gesondert abgerechnet.
+          workMinutes: entry.absenceKind === 'vacation' ? 0 : entry.effectiveWorkMinutes,
           holidayName,
           isWeekend,
           isVacation: entry.source === 'leave-request',
-          isEmpty: false
+          isEmpty: false,
+          absenceKind: entry.absenceKind
         })
       })
       continue
@@ -147,6 +163,14 @@ export const buildEmployeePrintRows = (
 
   return rows
 }
+
+/**
+ * Beschriftung der Summenzeile. Enthält der Zeitraum Urlaub, wird ausdrücklich
+ * gesagt, dass er nicht mitgezählt ist – sonst sucht die Lohnbuchhaltung die
+ * fehlenden Stunden.
+ */
+export const employeePrintTotalLabel = (rows: EmployeePrintRow[]): string =>
+  rows.some((row) => row.absenceKind === 'vacation') ? 'Gesamt (ohne Urlaub):' : 'Gesamt:'
 
 /** Gesamtzeit des Belegs – in Dezimalstunden, so rechnet die Lohnbuchhaltung. */
 export const calculateEmployeePrintTotalHours = (rows: EmployeePrintRow[]): string =>
@@ -366,7 +390,7 @@ const buildEmployeeReportBodyHtml = (
   <td>${escapeHtml(row.clockIn)}</td>
   <td>${escapeHtml(row.clockOut)}</td>
   <td>${row.pauseMinutes ?? '—'}</td>
-  <td>${escapeHtml(minutesToDecimalHours(row.workMinutes))}</td>
+  <td>${escapeHtml(printRowHoursLabel(row))}</td>
 </tr>`
       const doku = (row.notes || '').trim()
       if (!doku) return zeitZeile
@@ -416,7 +440,7 @@ const buildEmployeeReportBodyHtml = (
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="5">Gesamt:</td>
+        <td colspan="5">${escapeHtml(employeePrintTotalLabel(printRows))}</td>
         <td class="right">${escapeHtml(calculateEmployeePrintTotalHours(printRows))}</td>
       </tr>
     </tfoot>
