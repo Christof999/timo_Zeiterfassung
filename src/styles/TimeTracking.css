@@ -336,3 +336,18 @@
   color: var(--text-secondary, #555);
   text-align: center;
 }
+
+/* ===== Abwesenheiten: Krankmeldung und Ausbildungstag ===== */
+.absence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm, 0.5rem);
+  justify-content: center;
+  margin: 0 0 var(--spacing-md, 1rem);
+}
+
+.absence-actions-btn {
+  flex: 1 1 auto;
+  min-width: 10rem;
+  max-width: 20rem;
+}

@@ -10,7 +10,8 @@ import {
   where
 } from 'firebase/firestore'
 import { db, auth } from '../firebaseConfig'
-import type { Employee, LeaveRequest } from '../../types'
+import type { Employee, LeaveRequest, SchoolDayKind } from '../../types'
+import { SCHOOL_DAY_LABELS } from '../../types'
 import { authReady, isDevMode, postWithIdToken } from './shared'
 import { regularMinutesForRange } from '../../utils/regularWorkTime'
 import { getBavariaHolidayName } from '../../utils/bavariaHolidays'
@@ -92,6 +93,13 @@ async function reportAbsence(
     endDate: Date
     reason?: string
     reportedBy?: string
+    /** Bei 'school': Berufsschule oder Handwerkskammer. */
+    schoolKind?: SchoolDayKind
+    /** Bei 'sick': Nachweis der Arbeitsunfähigkeit. */
+    sickNoteFileId?: string
+    sickNoteUrl?: string
+    /** true = vom Mitarbeiter selbst gemeldet. */
+    selfReported?: boolean
   }
 ): Promise<string> {
   await authReady
@@ -111,7 +119,7 @@ async function reportAbsence(
   }
 
   const leaveRequestsRef = collection(db, 'leaveRequests')
-  const docRef = await addDoc(leaveRequestsRef, {
+  const payload: Record<string, unknown> = {
     employeeId: data.employeeId,
     employeeName: data.employeeName || '',
     startDate: data.startDate,
@@ -123,7 +131,13 @@ async function reportAbsence(
     approvedBy: data.reportedBy || 'Admin',
     approvedAt: new Date(),
     createdAt: new Date()
-  })
+  }
+  if (data.schoolKind) payload.schoolKind = data.schoolKind
+  if (data.sickNoteFileId) payload.sickNoteFileId = data.sickNoteFileId
+  if (data.sickNoteUrl) payload.sickNoteUrl = data.sickNoteUrl
+  if (data.selfReported) payload.selfReported = true
+
+  const docRef = await addDoc(leaveRequestsRef, payload)
   return docRef.id
 }
 
@@ -134,9 +148,12 @@ export const reportSickLeave = (data: {
   endDate: Date
   reason?: string
   reportedBy?: string
+  sickNoteFileId?: string
+  sickNoteUrl?: string
+  selfReported?: boolean
 }): Promise<string> => reportAbsence('sick', data)
 
-/** Berufsschultage eines Azubis – auf dem Nachweis der Grund für den freien Tag. */
+/** Berufsschul-/Handwerkskammertage eines Azubis – Grund für den freien Tag. */
 export const reportSchoolDays = (data: {
   employeeId: string
   employeeName?: string
@@ -144,7 +161,51 @@ export const reportSchoolDays = (data: {
   endDate: Date
   reason?: string
   reportedBy?: string
+  schoolKind?: SchoolDayKind
+  selfReported?: boolean
 }): Promise<string> => reportAbsence('school', data)
+
+/**
+ * Krankmeldung durch den Mitarbeiter selbst. Anders als bei der Admin-Meldung
+ * ist der AU-Nachweis hier Pflicht – ohne Bild wird nichts gespeichert.
+ */
+export async function reportOwnSickLeave(data: {
+  employeeId: string
+  employeeName?: string
+  startDate: Date
+  endDate: Date
+  reason?: string
+  sickNoteFileId: string
+  sickNoteUrl?: string
+}): Promise<string> {
+  if (!data.sickNoteFileId) {
+    throw new Error('Für die Krankmeldung muss ein Bild der Arbeitsunfähigkeitsbescheinigung hochgeladen werden.')
+  }
+  return reportAbsence('sick', {
+    ...data,
+    reportedBy: data.employeeName || 'Mitarbeiter',
+    selfReported: true
+  })
+}
+
+/** Ausbildungstag (Berufsschule/Handwerkskammer), vom Azubi selbst gebucht. */
+export async function reportOwnSchoolDay(data: {
+  employeeId: string
+  employeeName?: string
+  date: Date
+  schoolKind: SchoolDayKind
+}): Promise<string> {
+  return reportAbsence('school', {
+    employeeId: data.employeeId,
+    employeeName: data.employeeName,
+    startDate: data.date,
+    endDate: data.date,
+    schoolKind: data.schoolKind,
+    reason: SCHOOL_DAY_LABELS[data.schoolKind],
+    reportedBy: data.employeeName || 'Mitarbeiter',
+    selfReported: true
+  })
+}
 
 export async function createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {
   await authReady

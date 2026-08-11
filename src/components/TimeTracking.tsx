@@ -6,6 +6,8 @@ import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
 import RetroactiveDocumentationListModal from './RetroactiveDocumentationListModal'
+import SickLeaveModal from './SickLeaveModal'
+import SchoolDayModal from './SchoolDayModal'
 import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
@@ -44,6 +46,8 @@ const TimeTracking: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [showManualEntryModal, setShowManualEntryModal] = useState(false)
   const [showRetroDocListModal, setShowRetroDocListModal] = useState(false)
+  const [showSickLeaveModal, setShowSickLeaveModal] = useState(false)
+  const [showSchoolDayModal, setShowSchoolDayModal] = useState(false)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
   /** Monatsend-Erinnerung an die Überstunden-Verrechnung (null = kein Hinweis). */
   const [overtimeReminder, setOvertimeReminder] = useState<{
@@ -416,6 +420,26 @@ const TimeTracking: React.FC = () => {
           </div>
         </div>
 
+        {/* Abwesenheiten: Krankmeldung für alle, Ausbildungstag nur für Azubis */}
+        <div className="absence-actions">
+          <button
+            type="button"
+            className="btn secondary-btn absence-actions-btn"
+            onClick={() => setShowSickLeaveModal(true)}
+          >
+            Krank
+          </button>
+          {currentUser.isApprentice === true && (
+            <button
+              type="button"
+              className="btn secondary-btn absence-actions-btn"
+              onClick={() => setShowSchoolDayModal(true)}
+            >
+              Schule / Handwerkskammer
+            </button>
+          )}
+        </div>
+
         {!currentTimeEntry ? (
           <ClockInForm onClockIn={handleClockIn} />
         ) : (
@@ -454,6 +478,22 @@ const TimeTracking: React.FC = () => {
           <ManualTimeEntryModal
             addedBy={currentUser}
             onClose={() => setShowManualEntryModal(false)}
+            onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
+
+        {showSickLeaveModal && currentUser && (
+          <SickLeaveModal
+            employee={currentUser}
+            onClose={() => setShowSickLeaveModal(false)}
+            onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
+
+        {showSchoolDayModal && currentUser && (
+          <SchoolDayModal
+            employee={currentUser}
+            onClose={() => setShowSchoolDayModal(false)}
             onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
           />
         )}

@@ -44,6 +44,7 @@ import type {
   VehicleUsage,
   FileUpload,
   LeaveRequest,
+  SchoolDayKind,
   MaterialType,
   MaterialCredit,
   TimeReportSettlement,
@@ -2360,7 +2361,7 @@ class DataServiceClass {
     return leave.reportSickLeave(data)
   }
 
-  /** Berufsschultage eines Azubis – ebenfalls direkt genehmigt gespeichert. */
+  /** Berufsschul-/Handwerkskammertage eines Azubis – ebenfalls direkt genehmigt gespeichert. */
   reportSchoolDays(data: {
     employeeId: string
     employeeName?: string
@@ -2368,8 +2369,32 @@ class DataServiceClass {
     endDate: Date
     reason?: string
     reportedBy?: string
+    schoolKind?: SchoolDayKind
   }): Promise<string> {
     return leave.reportSchoolDays(data)
+  }
+
+  /** Krankmeldung durch den Mitarbeiter selbst – AU-Nachweis ist Pflicht. */
+  reportOwnSickLeave(data: {
+    employeeId: string
+    employeeName?: string
+    startDate: Date
+    endDate: Date
+    reason?: string
+    sickNoteFileId: string
+    sickNoteUrl?: string
+  }): Promise<string> {
+    return leave.reportOwnSickLeave(data)
+  }
+
+  /** Ausbildungstag, vom Azubi selbst gebucht. */
+  reportOwnSchoolDay(data: {
+    employeeId: string
+    employeeName?: string
+    date: Date
+    schoolKind: SchoolDayKind
+  }): Promise<string> {
+    return leave.reportOwnSchoolDay(data)
   }
 
   updateLeaveRequest(id: string, requestData: Partial<LeaveRequest>): Promise<void> {

@@ -5,6 +5,7 @@ import { ADMIN_ROLE_LABELS, resolveAdminRole } from '../../utils/adminRole'
 import { toast } from '../ToastContainer'
 import { DEFAULT_MEAL_ALLOWANCE_EUR } from './tabs/reports/reportUtils'
 import EmployeeTimeEntriesSection from './EmployeeTimeEntriesSection'
+import EmployeeAbsenceHistory from './EmployeeAbsenceHistory'
 import TimeEntryReportModal from './TimeEntryReportModal'
 import '../../styles/Modal.css'
 
@@ -401,6 +402,8 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               {isLoading ? 'Speichere...' : 'Speichern'}
             </button>
           </div>
+
+          {employee?.id && <EmployeeAbsenceHistory employeeId={employee.id} />}
 
           {employee?.id && (
             <EmployeeTimeEntriesSection

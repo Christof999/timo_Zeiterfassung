@@ -364,6 +364,14 @@ export interface OvertimeSettlement {
   updatedAt?: Date | any
 }
 
+/** Abwesenheitsgrund eines Azubis an einem Ausbildungstag. */
+export type SchoolDayKind = 'school' | 'chamber'
+
+export const SCHOOL_DAY_LABELS: Record<SchoolDayKind, string> = {
+  school: 'Berufsschule',
+  chamber: 'Handwerkskammer',
+}
+
 export interface LeaveRequest {
   id?: string
   employeeId: string
@@ -372,9 +380,21 @@ export interface LeaveRequest {
   endDate: Date | any
   /**
    * 'overtime' = Urlaub auf Überstunden (wird vom Überstundenkonto abgezogen)
-   * 'school' = Berufsschultag eines Azubis (bezahlt, kein Urlaubstag)
+   * 'school' = Berufsschul-/Handwerkskammertag eines Azubis (bezahlt, kein Urlaubstag)
    */
   type: 'vacation' | 'sick' | 'special' | 'unpaid' | 'overtime' | 'school'
+  /** Bei type 'school': Berufsschule oder Handwerkskammer. */
+  schoolKind?: SchoolDayKind
+  /**
+   * Krankmeldung: Nachweis der Arbeitsunfähigkeit. Bei einer Selbstmeldung durch
+   * den Mitarbeiter ist das Bild Pflicht; vom Admin gemeldete Krankheitstage
+   * können ohne Nachweis erfasst werden (z. B. telefonische Meldung).
+   */
+  sickNoteFileId?: string
+  /** Direkt-URL des AU-Nachweises (Storage) – für die Anzeige ohne Extra-Abfrage. */
+  sickNoteUrl?: string
+  /** true = vom Mitarbeiter selbst gemeldet, nicht vom Admin erfasst. */
+  selfReported?: boolean
   reason?: string
   workingDays: number
   status: 'pending' | 'approved' | 'rejected'

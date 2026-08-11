@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, LeaveRequest } from '../types'
+import { SCHOOL_DAY_LABELS } from '../types'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
@@ -135,14 +136,15 @@ const VacationRequests: React.FC = () => {
     }
   }
 
-  const getTypeLabel = (type: LeaveRequest['type']) => {
+  const getTypeLabel = (type: LeaveRequest['type'], schoolKind?: LeaveRequest['schoolKind']) => {
     switch (type) {
       case 'vacation': return 'Urlaub'
       case 'sick': return 'Krankheit'
       case 'special': return 'Sonderurlaub'
       case 'unpaid': return 'Unbezahlt'
       case 'overtime': return 'Urlaub auf Überstunden'
-      case 'school': return 'Berufsschule'
+      // Ausbildungstage tragen seit der Selbstbuchung den genauen Grund
+      case 'school': return schoolKind ? SCHOOL_DAY_LABELS[schoolKind] : 'Berufsschule'
       default: return type
     }
   }
@@ -372,7 +374,7 @@ const VacationRequests: React.FC = () => {
           leaveRequests.map((request) => (
             <div key={request.id} className={`request-card card status-${request.status}`}>
               <div className="request-header">
-                <span className="request-type">{getTypeLabel(request.type)}</span>
+                <span className="request-type">{getTypeLabel(request.type, request.schoolKind)}</span>
                 {getStatusBadge(request.status)}
               </div>
               
