@@ -53,6 +53,8 @@ export interface HeroProjectSyncResponse {
   customerStats?: {
     created: number
     updated: number
+    /** Im Admin gelöschte HERO-Kunden, die bewusst nicht wieder importiert wurden. */
+    skippedDeleted?: number
     total: number
   }
   offerStats?: {
@@ -68,6 +70,8 @@ export interface HeroCustomerSyncResponse {
   stats?: {
     created: number
     updated: number
+    /** Im Admin gelöschte HERO-Kunden, die bewusst nicht wieder importiert wurden. */
+    skippedDeleted?: number
     total: number
   }
 }

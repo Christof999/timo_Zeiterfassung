@@ -48,7 +48,13 @@ const CustomersTab: React.FC = () => {
 
   const handleDelete = async (customer: Customer) => {
     if (!customer.id) return
-    if (!confirm(`Kunde "${customer.name}" wirklich löschen?`)) {
+    // Bei HERO-Kunden klarstellen, dass sie auch beim nächsten Sync wegbleiben
+    const question =
+      customer.source === 'hero'
+        ? `Kunde "${customer.name}" wirklich löschen?\n\n` +
+          'Der Kunde stammt aus HERO und wird auch beim nächsten Sync nicht wieder angelegt.'
+        : `Kunde "${customer.name}" wirklich löschen?`
+    if (!confirm(question)) {
       return
     }
 
@@ -58,7 +64,7 @@ const CustomersTab: React.FC = () => {
       toast.success('Kunde gelöscht')
       await loadCustomers()
     } catch (error: any) {
-      toast.error('Fehler beim Löschen: ' + error.message)
+      toast.error('Fehler beim Löschen: ' + (error?.message || 'Unbekannter Fehler'))
     } finally {
       setDeletingCustomerId(null)
     }
@@ -69,9 +75,12 @@ const CustomersTab: React.FC = () => {
     try {
       const result = await heroService.syncCustomers()
       const stats = result.stats
+      const skippedDeleted = stats?.skippedDeleted
+        ? ` ${stats.skippedDeleted} gelöschte übersprungen.`
+        : ''
       toast.success(
         stats
-          ? `Kunden-Sync: ${stats.created} neu, ${stats.updated} aktualisiert.`
+          ? `Kunden-Sync: ${stats.created} neu, ${stats.updated} aktualisiert.${skippedDeleted}`
           : 'Kunden aus HERO synchronisiert.'
       )
       await loadCustomers()
