@@ -13,6 +13,7 @@ import {
   getReportRowChanges,
   buildAdjustedReport,
   employeeBillingRate,
+  isReportSelectableEmployee,
   employeeHourlyMargin,
   employeeLaborCostRate,
   planSettlementTarget,
@@ -21,6 +22,7 @@ import {
   type AbsenceKind,
   type ReportEntry
 } from './reportUtils'
+import type { Employee } from '../../../../types'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
 import type { TimeEntry } from '../../../../types'
 
@@ -770,5 +772,32 @@ describe('employeeBillingRate / employeeHourlyMargin', () => {
     expect(employeeHourlyMargin({ hourlyRate: 30, hourlyCostRate: 34, ancillaryWageCosts: 6 })).toBe(
       -10
     )
+  })
+})
+
+describe('isReportSelectableEmployee', () => {
+  const emp = (over: Partial<Employee>): Employee =>
+    ({ username: 'mitarbeiter', name: 'Max Muster', ...over }) as Employee
+
+  it('lässt die Geschäftsführung trotz Admin-Rechten zur Auswahl', () => {
+    // Regression: das Admin-Häkchen hat den GF aus dem Bericht geworfen, obwohl
+    // er stempelt und einen Lohnbeleg braucht.
+    expect(isReportSelectableEmployee(emp({ name: 'Timo Reislöhner', isAdmin: true }))).toBe(true)
+  })
+
+  it('blendet ausgeschiedene Mitarbeiter aus', () => {
+    expect(isReportSelectableEmployee(emp({ status: 'inactive' }))).toBe(false)
+    expect(isReportSelectableEmployee(emp({ status: 'active' }))).toBe(true)
+  })
+
+  it('blendet das technische Administrator-Konto aus', () => {
+    expect(isReportSelectableEmployee(emp({ username: 'admin', name: 'Administrator' }))).toBe(false)
+    expect(isReportSelectableEmployee(emp({ username: 'irgendwas', name: 'Administrator' }))).toBe(
+      false
+    )
+  })
+
+  it('trifft nur das Konto selbst, nicht jeden Namen mit „admin" darin', () => {
+    expect(isReportSelectableEmployee(emp({ name: 'Sabine Adminger' }))).toBe(true)
   })
 })

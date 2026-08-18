@@ -37,6 +37,7 @@ import {
   buildAdjustedReportForTarget,
   employeeLaborCostRate,
   employeeBillingRate,
+  isReportSelectableEmployee,
   type BuildAdjustedReportOptions,
   type AdjustedReportEntry
 } from './reports/reportUtils'
@@ -289,14 +290,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       setAllEmployees(fetchedEmployees)
       setMaterialTypes(fetchedMaterialTypes)
       
-      const filteredEmployees = fetchedEmployees.filter(e => {
-        if (e.status === 'inactive') return false
-        if (e.isAdmin) return false
-        const name = (e.name || `${e.firstName} ${e.lastName}`).toLowerCase()
-        if (name.includes('administrator') || name.includes('admin')) return false
-        return true
-      })
-      setEmployees(filteredEmployees)
+      setEmployees(fetchedEmployees.filter(isReportSelectableEmployee))
       setProjects(fetchedProjects)
     } catch (error) {
       console.error('Fehler beim Laden:', error)

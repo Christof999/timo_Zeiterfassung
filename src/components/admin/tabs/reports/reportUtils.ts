@@ -111,6 +111,25 @@ export const employeeHourlyMargin = (
 ): number =>
   Math.round((employeeBillingRate(employee) - employeeLaborCostRate(employee)) * 100) / 100
 
+/**
+ * Steht der Mitarbeiter im Zeiterfassungsbericht zur Auswahl?
+ *
+ * Ausgeschlossen sind ausgeschiedene Mitarbeiter und das technische
+ * Administrator-Konto. Das Häkchen „Administrator" ist bewusst KEIN
+ * Ausschlussgrund: es vergibt nur das Recht, sich im Admin-Bereich anzumelden,
+ * und wird auch von Leuten geführt, die selbst stempeln (Geschäftsführung,
+ * Vorarbeiter). Die stünden sonst ohne Lohnbeleg da.
+ */
+export const isReportSelectableEmployee = (employee: Employee): boolean => {
+  if (employee.status === 'inactive') return false
+  const name = (employee.name || `${employee.firstName || ''} ${employee.lastName || ''}`)
+    .trim()
+    .toLowerCase()
+  const username = (employee.username || '').trim().toLowerCase()
+  // Nur das Sammelkonto selbst, nicht jeder, in dessen Namen „admin" vorkommt.
+  return username !== 'admin' && name !== 'admin' && name !== 'administrator'
+}
+
 export const convertToDate = (date: unknown): Date | null => {
   if (!date) return null
   const withToDate = date as { toDate?: () => Date; seconds?: number }
