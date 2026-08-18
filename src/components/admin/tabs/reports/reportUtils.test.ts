@@ -12,6 +12,8 @@ import {
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
+  employeeBillingRate,
+  employeeHourlyMargin,
   employeeLaborCostRate,
   planSettlementTarget,
   parseMealAllowanceInput,
@@ -742,5 +744,31 @@ describe('employeeLaborCostRate', () => {
     expect(employeeLaborCostRate({})).toBe(0)
     expect(employeeLaborCostRate({ hourlyCostRate: -5, ancillaryWageCosts: 7 })).toBe(7)
     expect(employeeLaborCostRate({ ancillaryWageCosts: 6.5 })).toBe(6.5)
+  })
+})
+
+describe('employeeBillingRate / employeeHourlyMargin', () => {
+  it('nimmt den gepflegten Verrechnungssatz vor dem Altfeld', () => {
+    expect(employeeBillingRate({ hourlyRate: 65, hourlyWage: 40 })).toBe(65)
+  })
+
+  it('fällt auf hourlyWage zurück, solange kein Verrechnungssatz gepflegt ist', () => {
+    expect(employeeBillingRate({ hourlyWage: 40 })).toBe(40)
+    expect(employeeBillingRate({})).toBe(0)
+  })
+
+  it('rechnet die Marge je Stunde als Verrechnung minus Lohnkosten', () => {
+    const marge = employeeHourlyMargin({
+      hourlyRate: 60,
+      hourlyCostRate: 24,
+      ancillaryWageCosts: 9
+    })
+    expect(marge).toBe(27)
+  })
+
+  it('wird negativ, wenn die Lohnkosten über dem Verrechnungssatz liegen', () => {
+    expect(employeeHourlyMargin({ hourlyRate: 30, hourlyCostRate: 34, ancillaryWageCosts: 6 })).toBe(
+      -10
+    )
   })
 })

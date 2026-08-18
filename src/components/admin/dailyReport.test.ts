@@ -7,7 +7,16 @@ const at = (h: number, m: number) => new Date(2026, 6, 10, h, m, 0, 0)
 
 const employees: Employee[] = [
   { id: 'e1', username: 'niko', name: 'Niko', hourlyWage: 40 },
-  { id: 'e2', username: 'timo', name: 'Timo', hourlyRate: 30 }
+  { id: 'e2', username: 'timo', name: 'Timo', hourlyRate: 30 },
+  // Verrechnung 60 €, Lohnkosten 24 + 9 = 33 € → 27 € Marge je Stunde
+  {
+    id: 'e3',
+    username: 'ali',
+    name: 'Ali',
+    hourlyRate: 60,
+    hourlyCostRate: 24,
+    ancillaryWageCosts: 9
+  }
 ]
 
 const projects: Project[] = [
@@ -129,5 +138,56 @@ describe('buildDailyReport – Material & Marge', () => {
     const r = buildDailyReport(entries, employees, projects, materialTypes, today)
     expect(r.materials[0].purchaseCost).toBe(16)
     expect(r.materialMarginTotal).toBe(6)
+  })
+})
+
+describe('buildDailyReport – Personalmarge', () => {
+  it('stellt der Verrechnung die Lohnkosten aus Kostensatz + Lohnnebenkosten gegenüber', () => {
+    const entries = [
+      entry({ employeeId: 'e3', clockInTime: at(8, 0), clockOutTime: at(16, 0), pauseTotalTime: 0 })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+    const ali = r.employees[0]
+
+    expect(ali.totalHours).toBe(8)
+    expect(ali.hourlyRate).toBe(60) // Verrechnungssatz
+    expect(ali.hourlyCostRate).toBe(33) // 24 Kostensatz + 9 Lohnnebenkosten
+    expect(ali.laborCost).toBe(480) // 8 × 60
+    expect(ali.laborPurchaseCost).toBe(264) // 8 × 33
+    expect(ali.hasCostRate).toBe(true)
+
+    expect(r.totalLaborPurchaseCost).toBe(264)
+    expect(r.totalLaborMarginTotal).toBe(216) // 480 − 264
+  })
+
+  it('lässt Mitarbeiter ohne hinterlegte Lohnkosten aus Kosten und Marge heraus', () => {
+    // e1 hat nur einen Verrechnungssatz – ohne Kostensatz gibt es keine Marge,
+    // und eine Marge in Höhe der vollen Verrechnung wäre schlicht falsch.
+    const entries = [
+      entry({ employeeId: 'e1', clockInTime: at(8, 0), clockOutTime: at(16, 0), pauseTotalTime: 0 }),
+      entry({ employeeId: 'e3', clockInTime: at(8, 0), clockOutTime: at(16, 0), pauseTotalTime: 0 })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+
+    const niko = r.employees.find((e) => e.employeeId === 'e1')!
+    expect(niko.hasCostRate).toBe(false)
+    expect(niko.hourlyCostRate).toBe(0)
+
+    expect(r.totalLaborCost).toBe(800) // 8 × 40 + 8 × 60
+    expect(r.totalLaborPurchaseCost).toBe(264) // nur Ali
+    expect(r.totalLaborMarginTotal).toBe(216) // nur Ali
+  })
+
+  it('weist eine negative Marge aus, wenn die Lohnkosten über der Verrechnung liegen', () => {
+    const teuer: Employee[] = [
+      { id: 'e9', username: 'x', name: 'Teuer', hourlyRate: 30, hourlyCostRate: 34, ancillaryWageCosts: 6 }
+    ]
+    const entries = [
+      entry({ employeeId: 'e9', clockInTime: at(8, 0), clockOutTime: at(16, 0), pauseTotalTime: 0 })
+    ]
+    const r = buildDailyReport(entries, teuer, projects, materialTypes, today)
+    expect(r.totalLaborCost).toBe(240) // 8 × 30
+    expect(r.totalLaborPurchaseCost).toBe(320) // 8 × 40
+    expect(r.totalLaborMarginTotal).toBe(-80)
   })
 })

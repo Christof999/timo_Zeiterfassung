@@ -41,6 +41,11 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
   })
 
   const hasMaterial = report.materials.length > 0
+  /** Ohne hinterlegte Lohnkosten gibt es keine Personalmarge – dann bleiben die Spalten weg. */
+  const hasLaborCost = report.employees.some((e) => e.hasCostRate)
+  const totalMargin = report.totalLaborMarginTotal + report.materialMarginTotal
+  /** Rot statt grün, sobald eine Marge ins Minus läuft. */
+  const negIf = (value: number): string => (value < 0 ? ' is-negative' : '')
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -69,14 +74,28 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                 </div>
                 <div className="daily-kpi kpi-labor">
                   <span className="daily-kpi-icon" aria-hidden="true">💶</span>
-                  <span className="daily-kpi-label">Lohn-Hochrechnung</span>
+                  <span className="daily-kpi-label">Verrechnung Arbeitszeit</span>
                   <span className="daily-kpi-value">{fmtEur(report.totalLaborCost)}</span>
                 </div>
+                {hasLaborCost && (
+                  <div className={`daily-kpi kpi-margin${negIf(report.totalLaborMarginTotal)}`}>
+                    <span className="daily-kpi-icon" aria-hidden="true">👷</span>
+                    <span className="daily-kpi-label">Personal-Marge</span>
+                    <span className="daily-kpi-value">{fmtEur(report.totalLaborMarginTotal)}</span>
+                  </div>
+                )}
                 {hasMaterial && (
-                  <div className="daily-kpi kpi-margin">
-                    <span className="daily-kpi-icon" aria-hidden="true">📈</span>
+                  <div className={`daily-kpi kpi-margin${negIf(report.materialMarginTotal)}`}>
+                    <span className="daily-kpi-icon" aria-hidden="true">📦</span>
                     <span className="daily-kpi-label">Material-Marge</span>
                     <span className="daily-kpi-value">{fmtEur(report.materialMarginTotal)}</span>
+                  </div>
+                )}
+                {(hasLaborCost || hasMaterial) && (
+                  <div className={`daily-kpi kpi-margin${negIf(totalMargin)}`}>
+                    <span className="daily-kpi-icon" aria-hidden="true">📈</span>
+                    <span className="daily-kpi-label">Marge gesamt</span>
+                    <span className="daily-kpi-value">{fmtEur(totalMargin)}</span>
                   </div>
                 )}
               </div>
@@ -98,11 +117,19 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                         <th>Projekt(e)</th>
                         <th className="num">Stunden</th>
                         <th className="num">Satz</th>
-                        <th className="num">Lohn</th>
+                        <th className="num">Verrechnung</th>
+                        {hasLaborCost && (
+                          <>
+                            <th className="num">Lohnkosten</th>
+                            <th className="num">Marge</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {report.employees.map((emp) => (
+                      {report.employees.map((emp) => {
+                        const margin = emp.hasCostRate ? emp.laborCost - emp.laborPurchaseCost : null
+                        return (
                         <tr key={emp.employeeId}>
                           <td>
                             {emp.employeeName}
@@ -121,8 +148,21 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                           <td className="num">{fmtHours(emp.totalHours)}</td>
                           <td className="num">{emp.hourlyRate > 0 ? fmtEur(emp.hourlyRate) : '—'}</td>
                           <td className="num">{emp.hourlyRate > 0 ? fmtEur(emp.laborCost) : '—'}</td>
+                          {hasLaborCost && (
+                            <>
+                              <td className="num">
+                                {emp.hasCostRate ? fmtEur(emp.laborPurchaseCost) : '—'}
+                              </td>
+                              <td
+                                className={`num ${margin != null && margin < 0 ? 'daily-margin-neg' : 'daily-margin-pos'}`}
+                              >
+                                {margin != null ? fmtEur(margin) : '—'}
+                              </td>
+                            </>
+                          )}
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot>
                       <tr>
@@ -136,6 +176,16 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                         <td className="num">
                           <strong>{fmtEur(report.totalLaborCost)}</strong>
                         </td>
+                        {hasLaborCost && (
+                          <>
+                            <td className="num">
+                              <strong>{fmtEur(report.totalLaborPurchaseCost)}</strong>
+                            </td>
+                            <td className="num">
+                              <strong>{fmtEur(report.totalLaborMarginTotal)}</strong>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     </tfoot>
                   </table>
@@ -204,9 +254,23 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                 <h3 className="daily-section-title"><span aria-hidden="true">🧮</span> Überblick</h3>
                 <div className="daily-overview-grid">
                   <div className="daily-overview-row">
-                    <span>Lohn-Hochrechnung (Stunden × Satz)</span>
+                    <span>Personal – Verrechnung (Stunden × Verrechnungssatz)</span>
                     <strong>{fmtEur(report.totalLaborCost)}</strong>
                   </div>
+                  {hasLaborCost && (
+                    <>
+                      <div className="daily-overview-row">
+                        <span>Personal – Lohnkosten (Kostensatz + Lohnnebenkosten)</span>
+                        <strong>{fmtEur(report.totalLaborPurchaseCost)}</strong>
+                      </div>
+                      <div
+                        className={`daily-overview-row daily-overview-margin${negIf(report.totalLaborMarginTotal)}`}
+                      >
+                        <span>Personal – Marge (Verrechnung − Lohnkosten)</span>
+                        <strong>{fmtEur(report.totalLaborMarginTotal)}</strong>
+                      </div>
+                    </>
+                  )}
                   {hasMaterial && (
                     <>
                       <div className="daily-overview-row">
@@ -217,16 +281,28 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                         <span>Material – Einkauf</span>
                         <strong>{fmtEur(report.materialPurchaseTotal)}</strong>
                       </div>
-                      <div className="daily-overview-row daily-overview-margin">
+                      <div
+                        className={`daily-overview-row daily-overview-margin${negIf(report.materialMarginTotal)}`}
+                      >
                         <span>Material – Marge (Verkauf − Einkauf)</span>
                         <strong>{fmtEur(report.materialMarginTotal)}</strong>
                       </div>
                     </>
                   )}
+                  {(hasLaborCost || hasMaterial) && (
+                    <div
+                      className={`daily-overview-row daily-overview-margin daily-overview-total${negIf(totalMargin)}`}
+                    >
+                      <span>Marge gesamt (Personal + Material)</span>
+                      <strong>{fmtEur(totalMargin)}</strong>
+                    </div>
+                  )}
                 </div>
                 <p className="daily-report-note">
-                  Lohn-Hochrechnung = gearbeitete Stunden je Mitarbeiter × Stundensatz. In Einkauf/Marge
-                  fließen nur Materialpositionen mit hinterlegtem Einkaufspreis ein.
+                  Verrechnung = gearbeitete Stunden je Mitarbeiter × Verrechnungssatz. In
+                  Lohnkosten/Marge fließen nur Mitarbeiter mit hinterlegtem Kostensatz bzw.
+                  Lohnnebenkosten ein, ins Material-Ergebnis nur Positionen mit hinterlegtem
+                  Einkaufspreis.
                 </p>
               </section>
             </>

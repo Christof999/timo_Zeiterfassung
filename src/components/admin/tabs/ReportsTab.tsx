@@ -36,6 +36,7 @@ import {
   buildAdjustedReport,
   buildAdjustedReportForTarget,
   employeeLaborCostRate,
+  employeeBillingRate,
   type BuildAdjustedReportOptions,
   type AdjustedReportEntry
 } from './reports/reportUtils'
@@ -1352,9 +1353,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         const hours = workMs / (1000 * 60 * 60)
 
         const employee = allEmployees.find(e => e.id === entry.employeeId)
-        const hourlyRate = employee?.hourlyWage || employee?.hourlyRate || 0
-        const hasCostRate = typeof employee?.hourlyCostRate === 'number' && employee.hourlyCostRate > 0
-        const costRate = hasCostRate ? (employee!.hourlyCostRate as number) : 0
+        // Nachkalkulation: verkaufte Stunde gegen ihre echten Lohnkosten.
+        const hourlyRate = employeeBillingRate(employee)
+        const costRate = employeeLaborCostRate(employee)
+        const hasCostRate = costRate > 0
         const employeeName = employee?.name || `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || entry.employeeId
 
         const existing = employeeMap.get(entry.employeeId)
@@ -1422,15 +1424,15 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   const getEmployeeTotalCost = () => employeeSummaries.reduce((sum, e) => sum + e.totalCost, 0)
 
-  // Summe interner Personalkosten (Einkauf) – nur Mitarbeiter mit hinterlegtem Kostensatz
+  // Summe der Lohnkosten – nur Mitarbeiter mit hinterlegtem Lohnkostensatz
   const getEmployeeTotalPurchaseCost = () =>
     employeeSummaries.reduce((sum, e) => sum + (e.hasCostRate ? e.totalPurchaseCost : 0), 0)
 
-  // Summe Personalmarge = Verrechnung − interner Kostensatz (nur mit hinterlegtem Kostensatz)
+  // Summe Personalmarge = Verrechnung − Lohnkosten (nur mit hinterlegtem Lohnkostensatz)
   const getEmployeeTotalMargin = () =>
     employeeSummaries.reduce((sum, e) => sum + (e.hasCostRate ? e.totalCost - e.totalPurchaseCost : 0), 0)
 
-  // Mindestens ein Mitarbeiter mit hinterlegtem Kostensatz? (steuert Anzeige der Marge-Spalten)
+  // Mindestens ein Mitarbeiter mit hinterlegten Lohnkosten? (steuert Anzeige der Marge-Spalten)
   const hasAnyEmployeeCostRate = () => employeeSummaries.some((e) => e.hasCostRate)
 
   // Einkaufspreis pro Einheit aus dem Materialkatalog auflösen (per ID, sonst Name).
@@ -3572,7 +3574,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <th className="number-cell">Kosten (Verrechnung)</th>
                         {hasAnyEmployeeCostRate() && (
                           <>
-                            <th className="number-cell">Einkauf</th>
+                            <th className="number-cell">Lohnkosten</th>
                             <th className="number-cell">Marge</th>
                           </>
                         )}
@@ -3616,8 +3618,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </table>
                   {hasAnyEmployeeCostRate() && (
                     <p className="material-margin-note">
-                      Marge = Kosten (Verrechnung) − Einkauf (interner Kostensatz). Nur Mitarbeiter mit
-                      hinterlegtem Kostensatz fließen in Einkauf/Marge ein.
+                      Marge = Kosten (Verrechnung) − Lohnkosten (Kostensatz + Lohnnebenkosten). Nur
+                      Mitarbeiter mit hinterlegten Lohnkosten fließen in Lohnkosten/Marge ein.
                     </p>
                   )}
                   </>
@@ -3695,7 +3697,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 )}
                 {hasAnyEmployeeCostRate() && (
                   <div className="total-cost-box total-cost-box-margin">
-                    <span className="total-label">Personalmarge (Verrechnung − Kostensatz):</span>
+                    <span className="total-label">Personalmarge (Verrechnung − Lohnkosten):</span>
                     <span className="total-value">{formatCurrency(getEmployeeTotalMargin())}</span>
                   </div>
                 )}

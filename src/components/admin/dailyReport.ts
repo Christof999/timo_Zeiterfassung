@@ -1,6 +1,7 @@
 import type { Employee, MaterialType, Project, TimeEntry } from '../../types'
 import { roundedSpanMs } from '../../utils/timeRounding'
 import { getReturnTravelCreditMs } from '../../utils/returnTravel'
+import { employeeBillingRate, employeeLaborCostRate } from './tabs/reports/reportUtils'
 
 // Reine Berechnungslogik für den Tagesbericht (Admin-Dashboard). Bewusst ohne
 // React/Firestore, damit sie testbar bleibt. Basis: die heutigen Zeiteinträge.
@@ -13,9 +14,17 @@ export interface DailyEmployeeProjectLine {
 export interface DailyEmployeeSummary {
   employeeId: string
   employeeName: string
+  /** Verrechnungssatz (EUR/Std) – was die Stunde dem Kunden berechnet wird */
   hourlyRate: number
   totalHours: number
+  /** Stunden × Verrechnungssatz = Umsatz aus der Arbeitszeit */
   laborCost: number
+  /** Lohnkosten je Std = Kostensatz + Lohnnebenkosten; 0 wenn nicht hinterlegt */
+  hourlyCostRate: number
+  /** Stunden × Lohnkostensatz = was der Mitarbeiter heute wirklich kostet */
+  laborPurchaseCost: number
+  /** true, wenn Lohnkosten hinterlegt sind (nur dann gibt es eine Marge) */
+  hasCostRate: boolean
   /** true, wenn der Mitarbeiter aktuell noch eingestempelt ist (Stunden bis jetzt gerechnet) */
   hasOpenEntry: boolean
   projects: DailyEmployeeProjectLine[]
@@ -36,7 +45,12 @@ export interface DailyMaterialLine {
 export interface DailyReportData {
   employees: DailyEmployeeSummary[]
   totalHours: number
+  /** Summe Stunden × Verrechnungssatz */
   totalLaborCost: number
+  /** Summe der Lohnkosten – nur Mitarbeiter mit hinterlegtem Lohnkostensatz */
+  totalLaborPurchaseCost: number
+  /** Verrechnung − Lohnkosten, nur über Mitarbeiter mit hinterlegten Lohnkosten */
+  totalLaborMarginTotal: number
   /** true, wenn mindestens ein Eintrag noch offen ist (Stunden bis jetzt) */
   hasOpenEntries: boolean
   materials: DailyMaterialLine[]
@@ -70,11 +84,6 @@ function workedMs(entry: TimeEntry, now: Date): number {
   return ms > 0 ? ms : 0
 }
 
-const employeeRate = (emp: Employee | undefined): number =>
-  (typeof emp?.hourlyWage === 'number' && emp.hourlyWage) ||
-  (typeof emp?.hourlyRate === 'number' && emp.hourlyRate) ||
-  0
-
 const round2 = (n: number): number => Math.round(n * 100) / 100
 
 export function buildDailyReport(
@@ -103,7 +112,10 @@ export function buildDailyReport(
   // ── Mitarbeiter → Stunden je Projekt + Lohn ──
   type EmpRec = {
     name: string
+    /** Verrechnungssatz – der Verkaufspreis der Stunde */
     rate: number
+    /** Lohnkosten je Std = Kostensatz + Lohnnebenkosten */
+    costRate: number
     hoursByProject: Map<string, number>
     total: number
     open: boolean
@@ -116,10 +128,11 @@ export function buildDailyReport(
     const emp = employees.find((e) => e.id === entry.employeeId)
     const name =
       emp?.name || `${emp?.firstName || ''} ${emp?.lastName || ''}`.trim() || entry.employeeId
-    const rate = employeeRate(emp)
+    const rate = employeeBillingRate(emp)
+    const costRate = employeeLaborCostRate(emp)
     let rec = empMap.get(entry.employeeId)
     if (!rec) {
-      rec = { name, rate, hoursByProject: new Map(), total: 0, open: false }
+      rec = { name, rate, costRate, hoursByProject: new Map(), total: 0, open: false }
       empMap.set(entry.employeeId, rec)
     }
     rec.total += hours
@@ -138,6 +151,9 @@ export function buildDailyReport(
       hourlyRate: rec.rate,
       totalHours: round2(rec.total),
       laborCost: round2(rec.total * rec.rate),
+      hourlyCostRate: rec.costRate,
+      laborPurchaseCost: round2(rec.total * rec.costRate),
+      hasCostRate: rec.costRate > 0,
       hasOpenEntry: rec.open,
       projects: Array.from(rec.hoursByProject.entries())
         .map(([projectName, hours]) => ({ projectName, hours: round2(hours) }))
@@ -147,6 +163,14 @@ export function buildDailyReport(
 
   const totalHours = round2(employeeSummaries.reduce((s, e) => s + e.totalHours, 0))
   const totalLaborCost = round2(employeeSummaries.reduce((s, e) => s + e.laborCost, 0))
+  // Wie beim Material: ohne hinterlegten Gegenwert gibt es keine Marge, und die
+  // Zeile darf die Summe dann auch nicht verfälschen.
+  const totalLaborPurchaseCost = round2(
+    employeeSummaries.reduce((s, e) => s + (e.hasCostRate ? e.laborPurchaseCost : 0), 0)
+  )
+  const totalLaborMarginTotal = round2(
+    employeeSummaries.reduce((s, e) => s + (e.hasCostRate ? e.laborCost - e.laborPurchaseCost : 0), 0)
+  )
   const hasOpenEntries = employeeSummaries.some((e) => e.hasOpenEntry)
 
   // ── Material kumuliert über alle Mitarbeiter ──
@@ -204,6 +228,8 @@ export function buildDailyReport(
     employees: employeeSummaries,
     totalHours,
     totalLaborCost,
+    totalLaborPurchaseCost,
+    totalLaborMarginTotal,
     hasOpenEntries,
     materials,
     materialSalesTotal,

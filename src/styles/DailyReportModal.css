@@ -284,6 +284,29 @@
   font-weight: 800;
 }
 
+/* Die Gesamtmarge schließt den Überblick ab und darf lauter sein als die
+   Einzelmargen darüber. */
+.daily-overview-row.daily-overview-total {
+  margin-top: 2px;
+  border-top-width: 3px;
+}
+
+.daily-overview-row.daily-overview-total strong {
+  font-size: 1.4rem;
+}
+
+/* Ein Minus vor der Marge muss sofort auffallen – Grün wäre hier irreführend. */
+.daily-overview-row.daily-overview-margin.is-negative {
+  border-top-color: color-mix(in srgb, var(--danger-color) 40%, transparent);
+}
+
+.daily-overview-row.daily-overview-margin.is-negative strong {
+  color: var(--danger-color);
+}
+
+.daily-kpi.kpi-margin.is-negative::before { background: var(--danger-color); }
+.daily-kpi.kpi-margin.is-negative .daily-kpi-value { color: var(--danger-color); }
+
 .daily-report-note {
   margin: var(--spacing-sm) 0 0;
   font-size: 0.76rem;

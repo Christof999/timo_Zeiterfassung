@@ -55,11 +55,11 @@ export interface EmployeeSummary {
   totalHours: number
   hourlyRate: number
   totalCost: number
-  /** Interner Kostensatz (EUR/Std) – Einkauf-Gegenstück; 0 wenn nicht hinterlegt */
+  /** Lohnkosten je Std (Kostensatz + Lohnnebenkosten); 0 wenn nichts hinterlegt */
   hourlyCostRate: number
-  /** Personalkosten intern = Stunden × Kostensatz (nur wenn Kostensatz hinterlegt) */
+  /** Personalkosten intern = Stunden × Lohnkostensatz (nur wenn hinterlegt) */
   totalPurchaseCost: number
-  /** true, wenn ein interner Kostensatz hinterlegt ist (fließt in Einkauf/Marge ein) */
+  /** true, wenn ein Lohnkostensatz hinterlegt ist (fließt in Einkauf/Marge ein) */
   hasCostRate: boolean
 }
 
@@ -81,6 +81,35 @@ export const employeeLaborCostRate = (
     Math.round((value(employee?.hourlyCostRate) + value(employee?.ancillaryWageCosts)) * 100) / 100
   )
 }
+
+/**
+ * Verrechnungssatz eines Mitarbeiters in EUR/Std – der Preis, zu dem die Stunde
+ * verkauft wird. Grundlage der Nachkalkulation, nie des Lohnbelegs.
+ *
+ * `hourlyWage` ist das ältere Feld; die Mitarbeiterkarte pflegt `hourlyRate`
+ * und zeigt `hourlyWage` nur noch, solange nichts Neues hinterlegt ist. Die
+ * Reihenfolge hier ist bewusst dieselbe, damit in der Auswertung genau der Satz
+ * steht, den man im Profil sieht.
+ */
+export const employeeBillingRate = (
+  employee?: Pick<Employee, 'hourlyRate' | 'hourlyWage'> | null
+): number => {
+  const value = (input: number | undefined): number =>
+    typeof input === 'number' && isFinite(input) && input > 0 ? input : 0
+  return value(employee?.hourlyRate) || value(employee?.hourlyWage)
+}
+
+/**
+ * Marge einer Personalstunde: Verrechnungssatz − Lohnkosten. Das ist der
+ * Rohertrag, der nach dem Mitarbeiter übrig bleibt.
+ */
+export const employeeHourlyMargin = (
+  employee?: Pick<
+    Employee,
+    'hourlyRate' | 'hourlyWage' | 'hourlyCostRate' | 'ancillaryWageCosts'
+  > | null
+): number =>
+  Math.round((employeeBillingRate(employee) - employeeLaborCostRate(employee)) * 100) / 100
 
 export const convertToDate = (date: unknown): Date | null => {
   if (!date) return null
