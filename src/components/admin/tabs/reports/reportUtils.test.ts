@@ -12,6 +12,7 @@ import {
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
+  employeeLaborCostRate,
   planSettlementTarget,
   parseMealAllowanceInput,
   DEFAULT_MEAL_ALLOWANCE_EUR,
@@ -716,5 +717,30 @@ describe('planSettlementTarget – gemeldete Stunden treffen', () => {
     // gemeldeten Stunden vollständig als Auszahlung angefordert werden.
     expect(planSettlementTarget([], 0).payoutMinutes).toBe(0)
     expect(planSettlementTarget([], 120).payoutMinutes).toBe(120)
+  })
+})
+
+describe('employeeLaborCostRate', () => {
+  it('addiert Kostensatz und Lohnnebenkosten', () => {
+    expect(employeeLaborCostRate({ hourlyCostRate: 24.5, ancillaryWageCosts: 8.75 })).toBe(33.25)
+  })
+
+  it('ignoriert den Verrechnungssatz vollständig', () => {
+    // hourlyRate/hourlyWage sind der Verkaufspreis der Stunde und dürfen nie
+    // als Lohn auf dem Beleg landen.
+    const rate = employeeLaborCostRate({
+      hourlyCostRate: 20,
+      ancillaryWageCosts: 0,
+      hourlyRate: 65,
+      hourlyWage: 55
+    } as never)
+    expect(rate).toBe(20)
+  })
+
+  it('rechnet fehlende oder unsinnige Werte als 0', () => {
+    expect(employeeLaborCostRate(undefined)).toBe(0)
+    expect(employeeLaborCostRate({})).toBe(0)
+    expect(employeeLaborCostRate({ hourlyCostRate: -5, ancillaryWageCosts: 7 })).toBe(7)
+    expect(employeeLaborCostRate({ ancillaryWageCosts: 6.5 })).toBe(6.5)
   })
 })

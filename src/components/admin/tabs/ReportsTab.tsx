@@ -35,6 +35,7 @@ import {
   getReportRowChanges,
   buildAdjustedReport,
   buildAdjustedReportForTarget,
+  employeeLaborCostRate,
   type BuildAdjustedReportOptions,
   type AdjustedReportEntry
 } from './reports/reportUtils'
@@ -872,8 +873,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   // ---------- Gesetzliche Korrektur & Überstunden (reine Anzeige) ----------
 
   const selectedEmployeeRecord = employees.find(e => e.id === selectedEmployeeId)
-  const employeeHourlyRate =
-    selectedEmployeeRecord?.hourlyWage || selectedEmployeeRecord?.hourlyRate || 0
+  /** Lohnbasis des Belegs: Kostensatz + Lohnnebenkosten, nicht der Verrechnungssatz. */
+  const employeeHourlyRate = employeeLaborCostRate(selectedEmployeeRecord)
   /** Azubis werden pauschal vergütet – im Bericht steht dann kein Stundensatz. */
   const employeeIsApprentice = selectedEmployeeRecord?.isApprentice === true
   const employeeFixedSalary = selectedEmployeeRecord?.fixedMonthlySalary || 0
@@ -1966,8 +1967,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   /**
    * Baut die Auswertung eines Mitarbeiters ohne den Umweg über die Ansicht –
-   * Grundlage des Sammeldrucks. Stundenlohn, Verpflegungssatz und Azubi/Fixlohn
-   * kommen wie in der Einzelansicht von der Mitarbeiterkarte.
+   * Grundlage des Sammeldrucks. Lohnkostensatz, Verpflegungssatz und
+   * Azubi/Fixlohn kommen wie in der Einzelansicht von der Mitarbeiterkarte.
    */
   const buildBatchReport = async (employeeId: string, range: { start: string; end: string }) => {
     const emp =
@@ -1979,7 +1980,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     })
 
     const options: BuildAdjustedReportOptions = {
-      hourlyRate: emp?.hourlyWage || emp?.hourlyRate || 0,
+      hourlyRate: employeeLaborCostRate(emp),
       mealAllowanceRate:
         typeof emp?.mealAllowanceRate === 'number'
           ? emp.mealAllowanceRate
@@ -3280,8 +3281,10 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   ) : (
                     adjustedReport.summary.hourlyRate === 0 && (
                       <p className="settlement-summary-hint no-print">
-                        Für {selectedEmployeeName} ist kein Stundenlohn hinterlegt – die Beträge
-                        bleiben deshalb bei 0,00 €. Der Satz lässt sich im Mitarbeiter-Profil setzen.
+                        Für {selectedEmployeeName} sind weder Kostensatz noch Lohnnebenkosten
+                        hinterlegt – die Beträge bleiben deshalb bei 0,00 €. Beide Sätze lassen sich
+                        im Mitarbeiter-Profil setzen; der Verrechnungssatz wird hier bewusst nicht
+                        verwendet.
                       </p>
                     )
                   )}

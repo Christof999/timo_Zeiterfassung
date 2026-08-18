@@ -257,8 +257,9 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               onChange={(e) => setFormData({ ...formData, hourlyCostRate: parseFloat(e.target.value) || 0 })}
             />
             <small className="form-hint">
-              Interner Kostensatz (analog Material-Einkaufspreis). Die Differenz zum
-              Stundensatz wird in der Nachkalkulation als Personalmarge ausgewiesen.
+              Interner Kostensatz (analog Material-Einkaufspreis). Zusammen mit den
+              Lohnnebenkosten ist er die Lohnbasis im Zeiterfassungsbericht; die Differenz
+              zum Verrechnungssatz wird in der Nachkalkulation als Personalmarge ausgewiesen.
             </small>
           </div>
           <div className="form-group">
@@ -273,7 +274,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             />
             <small className="form-hint">
               Frei befüllbar – z. B. Sozialabgaben, Umlagen und sonstige Zuschläge zum Lohn.
-              Reines Stammdatum, erscheint nicht im Zeiterfassungsbericht.
+              Wird im Zeiterfassungsbericht zum Kostensatz addiert und ergibt die Lohnbasis.
             </small>
           </div>
           <div className="form-group">

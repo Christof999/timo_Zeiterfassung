@@ -1,4 +1,4 @@
-import type { LeaveRequest, TimeEntry } from '../../../../types'
+import type { Employee, LeaveRequest, TimeEntry } from '../../../../types'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
 import { minutesToHoursLabel } from '../../../../utils/hoursInput'
 import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
@@ -61,6 +61,25 @@ export interface EmployeeSummary {
   totalPurchaseCost: number
   /** true, wenn ein interner Kostensatz hinterlegt ist (fließt in Einkauf/Marge ein) */
   hasCostRate: boolean
+}
+
+/**
+ * Lohnkosten-Satz eines Mitarbeiters in EUR/Std – die Grundlage aller Beträge
+ * im Zeiterfassungsbericht (inkl. DATEV-Nachweis).
+ *
+ * Bewusst „was kostet mich der Mitarbeiter" + Lohnnebenkosten und **nicht** der
+ * Verrechnungssatz (`hourlyRate`): der Verrechnungssatz ist der Preis, zu dem
+ * die Stunde verkauft wird, und gehört damit in die Nachkalkulation
+ * (Verrechnungssatz − Lohnkosten = Marge). Als Lohn ausgewiesen wäre er zu hoch.
+ */
+export const employeeLaborCostRate = (
+  employee?: Pick<Employee, 'hourlyCostRate' | 'ancillaryWageCosts'> | null
+): number => {
+  const value = (input: number | undefined): number =>
+    typeof input === 'number' && isFinite(input) && input > 0 ? input : 0
+  return (
+    Math.round((value(employee?.hourlyCostRate) + value(employee?.ancillaryWageCosts)) * 100) / 100
+  )
 }
 
 export const convertToDate = (date: unknown): Date | null => {
@@ -466,7 +485,7 @@ export const planSettlementTarget = (
 export interface BuildAdjustedReportOptions {
   regularDayMinutes?: number | ((dateKey: string) => number) | null
   requestedPayoutMinutes?: number
-  /** Stundenlohn für die Beträge auf dem Beleg */
+  /** Lohnkostensatz für die Beträge auf dem Beleg (siehe employeeLaborCostRate) */
   hourlyRate?: number
   /** Satz je Tag Verpflegungsmehraufwand */
   mealAllowanceRate?: number
