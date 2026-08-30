@@ -7,7 +7,9 @@ import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
-import { REGULAR_MINUTES_MON_THU } from '../utils/regularWorkTime'
+import { REGULAR_MINUTES_MON_THU, leaveMinutesForRange } from '../utils/regularWorkTime'
+import { countLeaveWorkingDays } from '../utils/workingDays'
+import { getBavariaHolidayName } from '../utils/bavariaHolidays'
 
 // Reguläre Tagesarbeitszeit in Minuten (= Kosten eines „Urlaub auf Überstunden"-Tages).
 // Regelarbeitszeit Mo–Do; für die grobe Tages-Schätzung des Überstunden-Urlaubs.
@@ -19,6 +21,26 @@ const REGULAR_DAY_MINUTES = REGULAR_MINUTES_MON_THU
  * UTC-Mitternacht und könnte je nach Zeitzone auf den Vortag rutschen.
  */
 const parseInputDate = (value: string): Date => new Date(`${value}T12:00:00`)
+
+/** Minuten als "8:00" darstellen. */
+const formatMinutes = (minutes: number): string =>
+  `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
+
+/** Gesetzliche Feiertage (ohne Wochenende) im gewählten Zeitraum. */
+const holidaysInRange = (start: Date, end: Date): string[] => {
+  const current = new Date(start)
+  current.setHours(12, 0, 0, 0)
+  const last = new Date(end)
+  last.setHours(12, 0, 0, 0)
+  const names: string[] = []
+  while (current <= last) {
+    const day = current.getDay()
+    const name = day !== 0 && day !== 6 ? getBavariaHolidayName(current) : null
+    if (name) names.push(`${current.toLocaleDateString('de-DE')} ${name}`)
+    current.setDate(current.getDate() + 1)
+  }
+  return names
+}
 
 const VacationRequests: React.FC = () => {
   const navigate = useNavigate()
@@ -47,7 +69,7 @@ const VacationRequests: React.FC = () => {
       const start = parseInputDate(formData.startDate)
       const end = parseInputDate(formData.endDate)
       if (end >= start) {
-        const days = DataService.calculateWorkingDays(start, end)
+        const days = countLeaveWorkingDays(start, end)
         setWorkingDays(days)
       } else {
         setWorkingDays(0)
@@ -99,10 +121,15 @@ const VacationRequests: React.FC = () => {
     }
 
     if (formData.type === 'overtime') {
-      const neededMinutes = workingDays * REGULAR_DAY_MINUTES
+      // Gleiche Rechnung wie bei der Genehmigung: Freitag kostet nur 6 Std,
+      // Feiertage kosten gar nichts.
+      const neededMinutes = leaveMinutesForRange(
+        parseInputDate(formData.startDate),
+        parseInputDate(formData.endDate)
+      )
       if (overtimeMinutes < neededMinutes) {
         toast.error(
-          `Nicht genügend Überstunden: ${overtimeHoursLabel} h vorhanden, ${workingDays} Tag(e) benötigen ${Math.floor(neededMinutes / 60)}:00 h.`
+          `Nicht genügend Überstunden: ${overtimeHoursLabel} h vorhanden, ${workingDays} Tag(e) benötigen ${formatMinutes(neededMinutes)} h.`
         )
         return
       }
@@ -212,7 +239,7 @@ const VacationRequests: React.FC = () => {
       return sum
     }
 
-    return sum + DataService.calculateWorkingDays(rangeStart, rangeEnd)
+    return sum + countLeaveWorkingDays(rangeStart, rangeEnd)
   }, 0)
 
   const usedForAccount = takenVacationDays + approvedVacationDaysThisYear
@@ -229,6 +256,13 @@ const VacationRequests: React.FC = () => {
   // beantragt werden (z.B. ein vergessener Tag aus dem Vormonat).
   const today = getTodayLocalDateString()
   const isBackdated = !!formData.startDate && formData.startDate < today
+
+  // Feiertage im gewählten Zeitraum – sie kosten keinen Urlaubstag, das soll
+  // im Formular auch so dastehen und nicht wie ein Rechenfehler wirken.
+  const selectedHolidays =
+    formData.startDate && formData.endDate
+      ? holidaysInRange(parseInputDate(formData.startDate), parseInputDate(formData.endDate))
+      : []
 
   if (isLoading) {
     return (
@@ -339,6 +373,13 @@ const VacationRequests: React.FC = () => {
                   )}
                 </div>
               )
+            )}
+
+            {selectedHolidays.length > 0 && (
+              <div className="working-days-info info">
+                {selectedHolidays.length === 1 ? 'Feiertag' : 'Feiertage'} im Zeitraum –
+                kostet keinen Urlaubstag: {selectedHolidays.join(', ')}
+              </div>
             )}
 
             <div className="form-group">

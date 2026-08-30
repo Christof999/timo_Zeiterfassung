@@ -2,6 +2,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebaseConfig'
 import type { Employee, TimeReportSettlement } from '../../types'
 import { authReady } from './shared'
+import { countLeaveWorkingDays } from '../../utils/workingDays'
 
 export function settlementDocId(employeeId: string, periodStart: string, periodEnd: string): string {
   return `${employeeId}_${periodStart}_${periodEnd}`.replace(/\//g, '-')
@@ -77,20 +78,11 @@ export async function getTimeReportSettlement(
   }
 }
 
-/** Arbeitstage (Mo–Fr) zwischen zwei Daten, beide inklusive. */
+/**
+ * Arbeitstage zwischen zwei Daten, beide inklusive – ohne Wochenenden und
+ * ohne gesetzliche Feiertage. Wird für Urlaubszeiträume genutzt; ein Feiertag
+ * ist ohnehin frei und darf nicht als Urlaubstag zählen.
+ */
 export function calculateWorkingDays(startDate: Date, endDate: Date): number {
-  let count = 0
-  const current = new Date(startDate)
-  const end = new Date(endDate)
-
-  while (current <= end) {
-    const dayOfWeek = current.getDay()
-    // 0 = Sonntag, 6 = Samstag
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      count++
-    }
-    current.setDate(current.getDate() + 1)
-  }
-
-  return count
+  return countLeaveWorkingDays(startDate, endDate)
 }

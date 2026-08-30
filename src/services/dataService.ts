@@ -21,7 +21,7 @@ import {
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from './firebaseConfig'
 import { authReady, convertToDate as sharedConvertToDate } from './data/shared'
-import { regularMinutesForDateKey, regularMinutesForRange } from '../utils/regularWorkTime'
+import { regularMinutesForDateKey, leaveMinutesForRange } from '../utils/regularWorkTime'
 import * as session from './data/session'
 import * as customers from './data/customers'
 import * as vehicles from './data/vehicles'
@@ -984,7 +984,7 @@ class DataServiceClass {
       if (req.type === 'overtime' && req.status === 'approved') {
         const reqStart = this.convertToDate(req.startDate)
         const reqEnd = this.convertToDate(req.endDate)
-        spent += reqStart && reqEnd ? regularMinutesForRange(reqStart, reqEnd) : 0
+        spent += reqStart && reqEnd ? leaveMinutesForRange(reqStart, reqEnd) : 0
       }
     }
 

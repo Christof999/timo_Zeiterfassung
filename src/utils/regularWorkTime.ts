@@ -1,3 +1,5 @@
+import { isLeaveWorkingDay } from './workingDays'
+
 // Regelarbeitszeit nach Wochentag.
 //
 // Montag bis Donnerstag 8 Std, Freitag 6 Std — macht 38 Std/Woche. Dieselbe
@@ -41,8 +43,10 @@ export const regularMinutesForDateKey = (
 }
 
 /**
- * Regelarbeitszeit über einen Zeitraum (beide Grenzen inklusive). Basis für
- * „Urlaub auf Überstunden": ein Freitag kostet nur 6 Std vom Konto.
+ * Regelarbeitszeit über einen Zeitraum (beide Grenzen inklusive), rein nach
+ * Wochentag. Feiertage zählen hier mit, weil sie im Zeiterfassungsbericht mit
+ * der Regelarbeitszeit vergütet werden. Für „Urlaub auf Überstunden" ist
+ * `leaveMinutesForRange` die richtige Funktion.
  */
 export const regularMinutesForRange = (
   start: Date,
@@ -56,6 +60,30 @@ export const regularMinutesForRange = (
   let total = 0
   while (current <= last) {
     total += regularMinutesForDate(current, config)
+    current.setDate(current.getDate() + 1)
+  }
+  return total
+}
+
+/**
+ * Was ein Urlaubszeitraum vom Überstundenkonto kostet.
+ *
+ * Wie `regularMinutesForRange`, aber gesetzliche Feiertage zählen mit 0: an
+ * einem Feiertag hat der Mitarbeiter ohnehin frei, dafür darf ihm keine
+ * Überstunde abgezogen werden.
+ */
+export const leaveMinutesForRange = (
+  start: Date,
+  end: Date,
+  config: RegularWorkTimeConfig = DEFAULT_REGULAR_WORK_TIME
+): number => {
+  const current = new Date(start)
+  current.setHours(12, 0, 0, 0)
+  const last = new Date(end)
+  last.setHours(12, 0, 0, 0)
+  let total = 0
+  while (current <= last) {
+    if (isLeaveWorkingDay(current)) total += regularMinutesForDate(current, config)
     current.setDate(current.getDate() + 1)
   }
   return total

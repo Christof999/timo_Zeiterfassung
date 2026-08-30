@@ -13,8 +13,8 @@ import { db, auth } from '../firebaseConfig'
 import type { Employee, LeaveRequest, SchoolDayKind } from '../../types'
 import { SCHOOL_DAY_LABELS } from '../../types'
 import { authReady, isDevMode, postWithIdToken } from './shared'
-import { regularMinutesForRange } from '../../utils/regularWorkTime'
-import { getBavariaHolidayName } from '../../utils/bavariaHolidays'
+import { leaveMinutesForRange } from '../../utils/regularWorkTime'
+import { countLeaveWorkingDays } from '../../utils/workingDays'
 
 export async function getLeaveRequestsByEmployee(employeeId: string): Promise<LeaveRequest[]> {
   await authReady
@@ -76,25 +76,6 @@ function toDateValue(value: unknown): Date | null {
 }
 
 /**
- * Werktage im Zeitraum – Wochenenden und bayerische Feiertage zählen nicht.
- * Gleiche Zählweise für gemeldete Abwesenheiten und nachgetragenen Urlaub.
- */
-function countWorkingDays(startDate: Date, endDate: Date): number {
-  const current = new Date(startDate)
-  current.setHours(12, 0, 0, 0)
-  const last = new Date(endDate)
-  last.setHours(12, 0, 0, 0)
-
-  let workingDays = 0
-  while (current <= last) {
-    const day = current.getDay()
-    if (day !== 0 && day !== 6 && !getBavariaHolidayName(current)) workingDays++
-    current.setDate(current.getDate() + 1)
-  }
-  return workingDays
-}
-
-/**
  * Krankheits- und Berufsschultage werden vom Admin gemeldet, nicht beantragt:
  * der Eintrag wird direkt als genehmigt gespeichert und löst keine
  * Benachrichtigung aus. Gezählt werden nur Werktage ohne gesetzlichen Feiertag
@@ -122,7 +103,7 @@ async function reportAbsence(
   }
 ): Promise<string> {
   await authReady
-  const workingDays = countWorkingDays(data.startDate, data.endDate)
+  const workingDays = countLeaveWorkingDays(data.startDate, data.endDate)
   if (workingDays === 0) {
     throw new Error('Im gewählten Zeitraum liegt kein Arbeitstag (Wochenenden und Feiertage zählen nicht).')
   }
@@ -240,7 +221,7 @@ export async function recordVacation(data: {
 }): Promise<string> {
   await authReady
   const type: RecordableVacationType = data.type || 'vacation'
-  const workingDays = countWorkingDays(data.startDate, data.endDate)
+  const workingDays = countLeaveWorkingDays(data.startDate, data.endDate)
   if (workingDays === 0) {
     throw new Error('Im gewählten Zeitraum liegt kein Arbeitstag (Wochenenden und Feiertage zählen nicht).')
   }
@@ -330,7 +311,7 @@ export async function approveLeaveRequest(id: string, approvedBy: string): Promi
         const rangeStart = toDateValue(leaveRequest.startDate)
         const rangeEnd = toDateValue(leaveRequest.endDate)
         const neededMinutes =
-          rangeStart && rangeEnd ? regularMinutesForRange(rangeStart, rangeEnd) : 0
+          rangeStart && rangeEnd ? leaveMinutesForRange(rangeStart, rangeEnd) : 0
         const employeeRef = doc(db, 'employees', leaveRequest.employeeId)
         const employeeDoc = await transaction.get(employeeRef)
         if (!employeeDoc.exists()) {
