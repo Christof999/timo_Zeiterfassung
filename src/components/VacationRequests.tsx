@@ -13,6 +13,13 @@ import { REGULAR_MINUTES_MON_THU } from '../utils/regularWorkTime'
 // Regelarbeitszeit Mo–Do; für die grobe Tages-Schätzung des Überstunden-Urlaubs.
 const REGULAR_DAY_MINUTES = REGULAR_MINUTES_MON_THU
 
+/**
+ * "2026-08-24" als Datum auf 12:00 Ortszeit – so wie es die
+ * Abwesenheitsmeldungen speichern. Ohne Uhrzeit läge der Wert auf
+ * UTC-Mitternacht und könnte je nach Zeitzone auf den Vortag rutschen.
+ */
+const parseInputDate = (value: string): Date => new Date(`${value}T12:00:00`)
+
 const VacationRequests: React.FC = () => {
   const navigate = useNavigate()
   const [currentUser, setCurrentUser] = useState<Employee | null>(null)
@@ -37,8 +44,8 @@ const VacationRequests: React.FC = () => {
   // Arbeitstage berechnen wenn Datum sich ändert
   useEffect(() => {
     if (formData.startDate && formData.endDate) {
-      const start = new Date(formData.startDate)
-      const end = new Date(formData.endDate)
+      const start = parseInputDate(formData.startDate)
+      const end = parseInputDate(formData.endDate)
       if (end >= start) {
         const days = DataService.calculateWorkingDays(start, end)
         setWorkingDays(days)
@@ -81,7 +88,7 @@ const VacationRequests: React.FC = () => {
     
     if (!currentUser) return
     
-    if (new Date(formData.endDate) < new Date(formData.startDate)) {
+    if (parseInputDate(formData.endDate) < parseInputDate(formData.startDate)) {
       toast.error('Das Enddatum muss nach dem Startdatum liegen')
       return
     }
@@ -106,8 +113,8 @@ const VacationRequests: React.FC = () => {
       await DataService.createLeaveRequest({
         employeeId: currentUser.id!,
         employeeName: currentUser.name || `${currentUser.firstName} ${currentUser.lastName}`,
-        startDate: new Date(formData.startDate),
-        endDate: new Date(formData.endDate),
+        startDate: parseInputDate(formData.startDate),
+        endDate: parseInputDate(formData.endDate),
         type: formData.type,
         reason: formData.reason,
         workingDays
@@ -176,15 +183,15 @@ const VacationRequests: React.FC = () => {
 
   // Urlaubskonto berechnen:
   // - "Genutzt" (Basis) kommt aus dem hinterlegten Urlaubskonto
-  // - zusätzlich werden bereits genehmigte, zukünftige Urlaubstage im aktuellen Jahr reserviert
+  // - dazu kommen alle genehmigten Urlaubstage des laufenden Jahres. Bewusst
+  //   ohne Stichtag "heute": seit Urlaub auch rückwirkend beantragt werden
+  //   kann, würden sonst gerade die Nachträge im Konto fehlen.
   const currentYear = new Date().getFullYear()
   const vacationAccount = currentUser?.vacationDays || { total: 30, used: 0, year: currentYear }
   const totalVacationDays = Number(vacationAccount.total || 30)
   const takenVacationDays = Number(vacationAccount.used || 0)
-  const todayDate = new Date()
-  todayDate.setHours(0, 0, 0, 0)
 
-  const approvedPlannedVacationDays = leaveRequests.reduce((sum, request) => {
+  const approvedVacationDaysThisYear = leaveRequests.reduce((sum, request) => {
     if (request.type !== 'vacation' || request.status !== 'approved') {
       return sum
     }
@@ -199,17 +206,16 @@ const VacationRequests: React.FC = () => {
     const yearEnd = new Date(currentYear, 11, 31)
 
     const rangeStart = startDate > yearStart ? startDate : yearStart
-    const effectiveStart = rangeStart > todayDate ? rangeStart : todayDate
     const rangeEnd = endDate < yearEnd ? endDate : yearEnd
 
-    if (rangeEnd < effectiveStart) {
+    if (rangeEnd < rangeStart) {
       return sum
     }
 
-    return sum + DataService.calculateWorkingDays(effectiveStart, rangeEnd)
+    return sum + DataService.calculateWorkingDays(rangeStart, rangeEnd)
   }, 0)
 
-  const usedForAccount = takenVacationDays + approvedPlannedVacationDays
+  const usedForAccount = takenVacationDays + approvedVacationDaysThisYear
   const remaining = Math.max(0, totalVacationDays - usedForAccount)
 
   // Überstundenkonto
@@ -218,8 +224,11 @@ const VacationRequests: React.FC = () => {
   const overtimeDaysAvailable = Math.floor(overtimeMinutes / REGULAR_DAY_MINUTES)
   const canUseOvertime = overtimeMinutes >= REGULAR_DAY_MINUTES
 
-  // Min-Datum für Datumseingaben (heute)
+  // Heutiges Datum – nur noch, um Nachträge im Formular zu kennzeichnen.
+  // Ein Mindestdatum gibt es bewusst nicht: Urlaub darf auch rückwirkend
+  // beantragt werden (z.B. ein vergessener Tag aus dem Vormonat).
   const today = getTodayLocalDateString()
+  const isBackdated = !!formData.startDate && formData.startDate < today
 
   if (isLoading) {
     return (
@@ -291,7 +300,6 @@ const VacationRequests: React.FC = () => {
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  min={today}
                   required
                 />
               </div>
@@ -301,11 +309,17 @@ const VacationRequests: React.FC = () => {
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  min={formData.startDate || today}
+                  min={formData.startDate || undefined}
                   required
                 />
               </div>
             </div>
+
+            {isBackdated && (
+              <div className="working-days-info info">
+                Nachträglicher Antrag – der Zeitraum liegt in der Vergangenheit.
+              </div>
+            )}
 
             {workingDays > 0 && (
               formData.type === 'overtime' ? (

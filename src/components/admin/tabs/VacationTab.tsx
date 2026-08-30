@@ -1,22 +1,41 @@
 import { useState, useEffect } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, LeaveRequest } from '../../../types'
+import type { RecordableVacationType } from '../../../services/data/leave'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import '../../../styles/AdminTabs.css'
+
+/** Was der Admin selbst hinterlegen kann. */
+type AbsenceKind = 'sick' | 'school' | 'vacation'
+
+const ABSENCE_TITLES: Record<AbsenceKind, string> = {
+  sick: 'Krankheit melden',
+  school: 'Berufsschule melden',
+  vacation: 'Urlaub eintragen'
+}
+
+const VACATION_TYPE_OPTIONS: { value: RecordableVacationType; label: string }[] = [
+  { value: 'vacation', label: 'Urlaub' },
+  { value: 'special', label: 'Sonderurlaub' },
+  { value: 'unpaid', label: 'Unbezahlter Urlaub' },
+  { value: 'overtime', label: 'Urlaub auf Überstunden' }
+]
 
 const VacationTab: React.FC = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  /** Welche Abwesenheit der Admin gerade meldet – beide laufen gleich ab. */
-  const [absenceModal, setAbsenceModal] = useState<'sick' | 'school' | null>(null)
+  /** Welche Abwesenheit der Admin gerade meldet – alle laufen gleich ab. */
+  const [absenceModal, setAbsenceModal] = useState<AbsenceKind | null>(null)
   const [isSavingAbsence, setIsSavingAbsence] = useState(false)
   const [absenceForm, setAbsenceForm] = useState({
     employeeId: '',
     startDate: formatDateForInputLocal(new Date()),
     endDate: formatDateForInputLocal(new Date()),
-    reason: ''
+    reason: '',
+    /** Nur für 'vacation': welche Urlaubsart hinterlegt wird. */
+    vacationType: 'vacation' as RecordableVacationType
   })
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
@@ -68,7 +87,11 @@ const VacationTab: React.FC = () => {
     employee.id ||
     'Mitarbeiter'
 
-  /** Krankheit und Berufsschule werden identisch gemeldet – nur der Typ wechselt. */
+  /**
+   * Krankheit, Berufsschule und Urlaub werden identisch gemeldet – nur der Typ
+   * wechselt. Ein Mindestdatum gibt es bewusst nicht: der Admin muss auch
+   * rückwirkend nachtragen können, was jemand vergessen hat zu beantragen.
+   */
   const handleReportAbsence = async () => {
     if (!absenceModal) return
     if (!absenceForm.employeeId) {
@@ -98,9 +121,15 @@ const VacationTab: React.FC = () => {
         reportedBy: 'Admin'
       }
       if (absenceModal === 'school') await DataService.reportSchoolDays(daten)
-      else await DataService.reportSickLeave(daten)
+      else if (absenceModal === 'vacation') {
+        await DataService.recordVacation({ ...daten, type: absenceForm.vacationType })
+      } else await DataService.reportSickLeave(daten)
       toast.success(
-        absenceModal === 'school' ? 'Berufsschultage gespeichert' : 'Krankmeldung gespeichert'
+        absenceModal === 'school'
+          ? 'Berufsschultage gespeichert'
+          : absenceModal === 'vacation'
+            ? 'Urlaub eingetragen und genehmigt'
+            : 'Krankmeldung gespeichert'
       )
       setAbsenceModal(null)
       setAbsenceForm(prev => ({ ...prev, reason: '' }))
@@ -194,6 +223,13 @@ const VacationTab: React.FC = () => {
           )}
         </h3>
         <div className="tab-header-actions">
+          <button
+            type="button"
+            className="btn secondary-btn"
+            onClick={() => setAbsenceModal('vacation')}
+          >
+            Urlaub eintragen
+          </button>
           <button
             type="button"
             className="btn secondary-btn"
@@ -336,7 +372,7 @@ const VacationTab: React.FC = () => {
         <div className="modal-overlay" onClick={() => setAbsenceModal(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{absenceModal === 'school' ? 'Berufsschule melden' : 'Krankheit melden'}</h3>
+              <h3>{ABSENCE_TITLES[absenceModal]}</h3>
               <button className="modal-close" onClick={() => setAbsenceModal(null)}>×</button>
             </div>
             <div className="modal-body">
@@ -355,6 +391,26 @@ const VacationTab: React.FC = () => {
                   ))}
                 </select>
               </div>
+              {absenceModal === 'vacation' && (
+                <div className="form-group">
+                  <label>Art des Urlaubs:</label>
+                  <select
+                    value={absenceForm.vacationType}
+                    onChange={(e) =>
+                      setAbsenceForm({
+                        ...absenceForm,
+                        vacationType: e.target.value as RecordableVacationType
+                      })
+                    }
+                  >
+                    {VACATION_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="form-group">
                 <label>Von:</label>
                 <input
@@ -377,7 +433,11 @@ const VacationTab: React.FC = () => {
                   value={absenceForm.reason}
                   onChange={(e) => setAbsenceForm({ ...absenceForm, reason: e.target.value })}
                   placeholder={
-                    absenceModal === 'school' ? 'z.B. Blockunterricht' : 'z.B. Attest liegt vor'
+                    absenceModal === 'school'
+                      ? 'z.B. Blockunterricht'
+                      : absenceModal === 'vacation'
+                        ? 'z.B. nachträglich eingetragen'
+                        : 'z.B. Attest liegt vor'
                   }
                   rows={2}
                 />
@@ -392,6 +452,13 @@ const VacationTab: React.FC = () => {
                     steht damit der Grund, warum an dem Tag nicht gearbeitet wurde.
                   </>
                 )}
+                {absenceModal === 'vacation' && (
+                  <>
+                    {' '}Der Urlaub wird sofort als genehmigt gespeichert – auch rückwirkend, wenn
+                    ein Zeitraum in der Vergangenheit gewählt wird. „Urlaub auf Überstunden“
+                    belastet dabei das Überstundenkonto des Mitarbeiters.
+                  </>
+                )}
               </p>
             </div>
             <div className="modal-actions">
@@ -403,7 +470,11 @@ const VacationTab: React.FC = () => {
                 className="btn primary-btn"
                 disabled={isSavingAbsence}
               >
-                {isSavingAbsence ? 'Speichert…' : 'Meldung speichern'}
+                {isSavingAbsence
+                  ? 'Speichert…'
+                  : absenceModal === 'vacation'
+                    ? 'Urlaub speichern'
+                    : 'Meldung speichern'}
               </button>
             </div>
           </div>

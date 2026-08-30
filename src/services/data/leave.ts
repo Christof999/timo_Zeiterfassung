@@ -76,6 +76,25 @@ function toDateValue(value: unknown): Date | null {
 }
 
 /**
+ * Werktage im Zeitraum – Wochenenden und bayerische Feiertage zählen nicht.
+ * Gleiche Zählweise für gemeldete Abwesenheiten und nachgetragenen Urlaub.
+ */
+function countWorkingDays(startDate: Date, endDate: Date): number {
+  const current = new Date(startDate)
+  current.setHours(12, 0, 0, 0)
+  const last = new Date(endDate)
+  last.setHours(12, 0, 0, 0)
+
+  let workingDays = 0
+  while (current <= last) {
+    const day = current.getDay()
+    if (day !== 0 && day !== 6 && !getBavariaHolidayName(current)) workingDays++
+    current.setDate(current.getDate() + 1)
+  }
+  return workingDays
+}
+
+/**
  * Krankheits- und Berufsschultage werden vom Admin gemeldet, nicht beantragt:
  * der Eintrag wird direkt als genehmigt gespeichert und löst keine
  * Benachrichtigung aus. Gezählt werden nur Werktage ohne gesetzlichen Feiertag
@@ -103,17 +122,7 @@ async function reportAbsence(
   }
 ): Promise<string> {
   await authReady
-  const current = new Date(data.startDate)
-  current.setHours(12, 0, 0, 0)
-  const last = new Date(data.endDate)
-  last.setHours(12, 0, 0, 0)
-
-  let workingDays = 0
-  while (current <= last) {
-    const day = current.getDay()
-    if (day !== 0 && day !== 6 && !getBavariaHolidayName(current)) workingDays++
-    current.setDate(current.getDate() + 1)
-  }
+  const workingDays = countWorkingDays(data.startDate, data.endDate)
   if (workingDays === 0) {
     throw new Error('Im gewählten Zeitraum liegt kein Arbeitstag (Wochenenden und Feiertage zählen nicht).')
   }
@@ -205,6 +214,57 @@ export async function reportOwnSchoolDay(data: {
     reportedBy: data.employeeName || 'Mitarbeiter',
     selfReported: true
   })
+}
+
+/** Urlaubsarten, die der Admin direkt eintragen kann. */
+export type RecordableVacationType = 'vacation' | 'special' | 'unpaid' | 'overtime'
+
+/**
+ * Urlaub, den der Admin für einen Mitarbeiter hinterlegt – auch rückwirkend.
+ * Der Eintrag wird sofort genehmigt (der Admin genehmigt sich hier selbst) und
+ * löst keine Benachrichtigung aus.
+ *
+ * Der Umweg über `approveLeaveRequest` ist Absicht: nur dort wird bei „Urlaub
+ * auf Überstunden“ das Überstundenkonto belastet und geprüft. Schlägt die
+ * Genehmigung fehl (z.B. zu wenig Überstunden), wird der eben angelegte
+ * Antrag wieder entfernt, damit kein halber Eintrag zurückbleibt.
+ */
+export async function recordVacation(data: {
+  employeeId: string
+  employeeName?: string
+  startDate: Date
+  endDate: Date
+  type?: RecordableVacationType
+  reason?: string
+  reportedBy?: string
+}): Promise<string> {
+  await authReady
+  const type: RecordableVacationType = data.type || 'vacation'
+  const workingDays = countWorkingDays(data.startDate, data.endDate)
+  if (workingDays === 0) {
+    throw new Error('Im gewählten Zeitraum liegt kein Arbeitstag (Wochenenden und Feiertage zählen nicht).')
+  }
+
+  const docRef = await addDoc(collection(db, 'leaveRequests'), {
+    employeeId: data.employeeId,
+    employeeName: data.employeeName || '',
+    startDate: data.startDate,
+    endDate: data.endDate,
+    type,
+    reason: data.reason || '',
+    workingDays,
+    status: 'pending',
+    createdAt: new Date()
+  })
+
+  try {
+    await approveLeaveRequest(docRef.id, data.reportedBy || 'Admin')
+  } catch (error) {
+    await deleteDoc(doc(db, 'leaveRequests', docRef.id)).catch(() => {})
+    throw error
+  }
+
+  return docRef.id
 }
 
 export async function createLeaveRequest(requestData: Partial<LeaveRequest>): Promise<string> {

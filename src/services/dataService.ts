@@ -2349,6 +2349,22 @@ class DataServiceClass {
     return leave.createLeaveRequest(requestData)
   }
 
+  /**
+   * Urlaub, den der Admin für einen Mitarbeiter hinterlegt – auch rückwirkend.
+   * Wird direkt als genehmigt gespeichert.
+   */
+  recordVacation(data: {
+    employeeId: string
+    employeeName?: string
+    startDate: Date
+    endDate: Date
+    type?: leave.RecordableVacationType
+    reason?: string
+    reportedBy?: string
+  }): Promise<string> {
+    return leave.recordVacation(data)
+  }
+
   /** Krankmeldung durch den Admin – wird direkt als genehmigt gespeichert. */
   reportSickLeave(data: {
     employeeId: string
