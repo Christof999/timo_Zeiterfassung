@@ -50,7 +50,14 @@ export interface Employee {
   heroEmployeeId?: string
   heroContactNr?: string
   vacationDays?: {
+    /** Urlaubsanspruch des Jahres in Tagen. */
     total: number
+    /**
+     * Altlast: wurde früher beim Genehmigen hochgezählt, heute nicht mehr.
+     * Der Verbrauch wird aus den genehmigten Anträgen abgeleitet
+     * (`leaveWorkingDaysInYear`), damit Feiertage und Stornos korrekt
+     * herausfallen. Nicht als Basis für neue Berechnungen verwenden.
+     */
     used: number
     year: number
   }

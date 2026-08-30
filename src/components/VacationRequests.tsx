@@ -8,7 +8,11 @@ import ThemeToggle from './ThemeToggle'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 import { REGULAR_MINUTES_MON_THU, leaveMinutesForRange } from '../utils/regularWorkTime'
-import { countLeaveWorkingDays } from '../utils/workingDays'
+import {
+  countLeaveWorkingDays,
+  effectiveLeaveWorkingDays,
+  leaveWorkingDaysInYear
+} from '../utils/workingDays'
 import { getBavariaHolidayName } from '../utils/bavariaHolidays'
 
 // Reguläre Tagesarbeitszeit in Minuten (= Kosten eines „Urlaub auf Überstunden"-Tages).
@@ -208,41 +212,25 @@ const VacationRequests: React.FC = () => {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Urlaubskonto berechnen:
-  // - "Genutzt" (Basis) kommt aus dem hinterlegten Urlaubskonto
-  // - dazu kommen alle genehmigten Urlaubstage des laufenden Jahres. Bewusst
-  //   ohne Stichtag "heute": seit Urlaub auch rückwirkend beantragt werden
-  //   kann, würden sonst gerade die Nachträge im Konto fehlen.
+  // Urlaubskonto: "Genutzt" wird komplett aus den genehmigten Anträgen des
+  // laufenden Jahres abgeleitet – ohne Wochenenden, ohne gesetzliche Feiertage
+  // und ohne stornierte Tage. Das gilt damit auch rückwirkend für Anträge, die
+  // noch mit der alten Zählung (Feiertage inklusive) gespeichert wurden.
+  //
+  // Der Zähler `vacationDays.used` wird bewusst nicht mehr addiert: er wurde
+  // früher beim Genehmigen hochgezählt, inzwischen nicht mehr. Würde man ihn
+  // weiter als Basis nehmen, zählten alte Urlaube doppelt – einmal im Zähler,
+  // einmal über die Ableitung.
   const currentYear = new Date().getFullYear()
   const vacationAccount = currentUser?.vacationDays || { total: 30, used: 0, year: currentYear }
   const totalVacationDays = Number(vacationAccount.total || 30)
-  const takenVacationDays = Number(vacationAccount.used || 0)
 
-  const approvedVacationDaysThisYear = leaveRequests.reduce((sum, request) => {
+  const usedForAccount = leaveRequests.reduce((sum, request) => {
     if (request.type !== 'vacation' || request.status !== 'approved') {
       return sum
     }
-
-    const startDate = toDate(request.startDate)
-    const endDate = toDate(request.endDate)
-    if (!startDate || !endDate) {
-      return sum
-    }
-
-    const yearStart = new Date(currentYear, 0, 1)
-    const yearEnd = new Date(currentYear, 11, 31)
-
-    const rangeStart = startDate > yearStart ? startDate : yearStart
-    const rangeEnd = endDate < yearEnd ? endDate : yearEnd
-
-    if (rangeEnd < rangeStart) {
-      return sum
-    }
-
-    return sum + countLeaveWorkingDays(rangeStart, rangeEnd)
+    return sum + leaveWorkingDaysInYear(request, currentYear)
   }, 0)
-
-  const usedForAccount = takenVacationDays + approvedVacationDaysThisYear
   const remaining = Math.max(0, totalVacationDays - usedForAccount)
 
   // Überstundenkonto
@@ -437,7 +425,7 @@ const VacationRequests: React.FC = () => {
                 <span className="date-range">
                   {formatDate(request.startDate)} - {formatDate(request.endDate)}
                 </span>
-                <span className="days-count">{request.workingDays} Arbeitstage</span>
+                <span className="days-count">{effectiveLeaveWorkingDays(request)} Arbeitstage</span>
               </div>
               
               {request.reason && (

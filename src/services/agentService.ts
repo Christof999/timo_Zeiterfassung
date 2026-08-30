@@ -4,6 +4,7 @@ import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import { roundedSpanMs } from '../utils/timeRounding'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
 import type { TimeEntry, TimeEntryMaterialUsage } from '../types'
+import { effectiveLeaveWorkingDays } from '../utils/workingDays'
 
 // Mörgel – der KI-Assistent fürs Admin-Panel.
 // Der Gesprächs-/Tool-Loop läuft hier im Client: Die Function /api/agent ist
@@ -1042,7 +1043,7 @@ async function executeTool(
             von: fmtDateTime(r.startDate),
             bis: fmtDateTime(r.endDate),
             typ: r.type,
-            tage: r.workingDays,
+            tage: effectiveLeaveWorkingDays(r),
             status: r.status
           }))
         )

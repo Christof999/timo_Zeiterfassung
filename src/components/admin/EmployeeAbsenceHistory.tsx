@@ -3,6 +3,7 @@ import { DataService } from '../../services/dataService'
 import type { LeaveRequest, SchoolDayKind } from '../../types'
 import { SCHOOL_DAY_LABELS } from '../../types'
 import { convertToDate } from '../../services/data/shared'
+import { effectiveLeaveWorkingDays } from '../../utils/workingDays'
 
 interface EmployeeAbsenceHistoryProps {
   employeeId: string
@@ -96,8 +97,8 @@ const EmployeeAbsenceHistory: React.FC<EmployeeAbsenceHistoryProps> = ({ employe
             <li key={entry.id} className="absence-history-item">
               <span className="absence-history-item-range">{formatRange(entry)}</span>
               <span className="absence-history-item-meta">
-                {labelFor(entry)} · {entry.workingDays} Arbeitstag
-                {entry.workingDays !== 1 ? 'e' : ''}
+                {labelFor(entry)} · {effectiveLeaveWorkingDays(entry)} Arbeitstag
+                {effectiveLeaveWorkingDays(entry) !== 1 ? 'e' : ''}
                 {entry.selfReported ? ' · selbst gemeldet' : ''}
                 {entry.reason ? ` · ${entry.reason}` : ''}
               </span>

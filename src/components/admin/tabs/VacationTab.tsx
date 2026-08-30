@@ -4,6 +4,7 @@ import type { Employee, LeaveRequest } from '../../../types'
 import type { RecordableVacationType } from '../../../services/data/leave'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
+import { effectiveLeaveWorkingDays } from '../../../utils/workingDays'
 import '../../../styles/AdminTabs.css'
 
 /** Was der Admin selbst hinterlegen kann. */
@@ -292,7 +293,7 @@ const VacationTab: React.FC = () => {
                   <span className="period-dates">
                     {formatDate(request.startDate)} - {formatDate(request.endDate)}
                   </span>
-                  <span className="period-days">{request.workingDays} Tage</span>
+                  <span className="period-days">{effectiveLeaveWorkingDays(request)} Tage</span>
                 </div>
                 
                 {request.reason && (

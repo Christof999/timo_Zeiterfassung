@@ -22,6 +22,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { db, storage } from './firebaseConfig'
 import { authReady, convertToDate as sharedConvertToDate } from './data/shared'
 import { regularMinutesForDateKey, leaveMinutesForRange } from '../utils/regularWorkTime'
+import { leaveWorkingDayKeys } from '../utils/workingDays'
 import * as session from './data/session'
 import * as customers from './data/customers'
 import * as vehicles from './data/vehicles'
@@ -359,38 +360,13 @@ class DataServiceClass {
     return formatDateForInputLocal(new Date(date.getFullYear(), date.getMonth(), date.getDate()))
   }
 
-  private isWeekendDate(date: Date): boolean {
-    const day = date.getDay()
-    return day === 0 || day === 6
-  }
-
-  private getCancelledLeaveDateKeys(leaveRequest: LeaveRequest): Set<string> {
-    return new Set(
-      (leaveRequest.cancelledDates || [])
-        .map((value) => String(value || '').slice(0, 10))
-        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
-    )
-  }
-
+  /**
+   * Die noch offenen Urlaubstage eines Antrags. Feiertage sind keine
+   * Urlaubstage: an ihnen kann nichts storniert und nichts gutgeschrieben
+   * werden, weil sie den Antrag auch nichts gekostet haben.
+   */
   private getActiveVacationDayKeys(leaveRequest: LeaveRequest): string[] {
-    const start = this.convertToDate(leaveRequest.startDate)
-    const end = this.convertToDate(leaveRequest.endDate)
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return []
-
-    const cancelled = this.getCancelledLeaveDateKeys(leaveRequest)
-    const keys: string[] = []
-    const current = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-
-    while (current <= last) {
-      const key = formatDateForInputLocal(current)
-      if (!this.isWeekendDate(current) && !cancelled.has(key)) {
-        keys.push(key)
-      }
-      current.setDate(current.getDate() + 1)
-    }
-
-    return keys
+    return leaveWorkingDayKeys(leaveRequest)
   }
 
   private leaveRequestCoversActiveVacationDate(leaveRequest: LeaveRequest, dateKey: string): boolean {
@@ -433,7 +409,6 @@ class DataServiceClass {
     const remainingActiveKeys = activeKeys.filter((key) => key !== workedDateKey)
     const dateLabel = new Date(`${workedDateKey}T12:00:00`).toLocaleDateString('de-DE')
     const reason = `Automatisch storniert: Mitarbeiter hat am ${dateLabel} gestempelt.`
-    const existingWorkingDays = Number(leaveRequest.workingDays)
 
     const update: Record<string, unknown> = {
       cancelledDates: arrayUnion(workedDateKey),
@@ -443,17 +418,12 @@ class DataServiceClass {
       updatedAt: new Date()
     }
 
+    // Den verbleibenden Rest neu ableiten statt vom gespeicherten Wert
+    // herunterzuzählen: Altbestände haben dort noch Feiertage mitgezählt.
+    update.workingDays = remainingActiveKeys.length
     if (remainingActiveKeys.length === 0) {
       update.status = 'rejected'
       update.rejectionReason = reason
-      update.workingDays = 0
-    } else {
-      update.workingDays = Math.max(
-        0,
-        (Number.isFinite(existingWorkingDays) && existingWorkingDays > 0
-          ? existingWorkingDays
-          : activeKeys.length) - 1
-      )
     }
 
     return { update, creditDays: 1 }
