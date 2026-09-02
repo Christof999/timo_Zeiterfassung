@@ -9,6 +9,11 @@ import { formatDateForInputLocal } from '../../../../utils/dateUtils'
  * Kalendertag** – mehrere Stempelungen eines Tages (Projektwechsel) werden
  * deshalb zu Beginn/Ende/Pause/Dauer zusammengefasst. Projekt und
  * Dokumentation kommen bewusst nicht vor.
+ *
+ * Abwesenheitstage (Urlaub, Krank, Feiertag, Berufsschule) stehen mit ihrer
+ * Regelarbeitszeit in der Dauer und in der Summe – das Blatt weist damit die
+ * bezahlten Stunden des Monats aus, nicht nur die gestempelten. Woher die
+ * Stunden kommen, sagt das Kürzel in der "*"-Spalte.
  */
 
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
@@ -92,18 +97,22 @@ export const buildDatevRows = (
     let spaetester: number | null = null
     let pauseMinutes = 0
     let workMinutes = 0
+    /** Regelstunden eines Abwesenheitstags – zählen nur, wenn nicht gestempelt wurde. */
+    let absenceMinutes = 0
     let key: DatevKey = ''
     const bemerkungen: string[] = []
 
     for (const entry of tagesEintraege) {
       if (entry.absenceKind) {
-        // Urlaub, Krankheit und Feiertag sind keine Arbeitszeit: Das Blatt
-        // dokumentiert nach ArbZG die geleistete Arbeit, dafür gibt es die
-        // Kürzel-Spalte. Die Dauer bleibt leer, damit die Summe unten der
-        // gemeldeten Stundenzahl entspricht.
+        // Urlaub, Krankheit, Feiertag und Berufsschule sind bezahlte Tage: die
+        // Regelarbeitszeit (Mo–Do 8 Std, Fr 6 Std) steht in der Dauer und zählt
+        // in die Summe. Das Kürzel in der "*"-Spalte sagt weiterhin, warum an
+        // dem Tag nicht gestempelt wurde. Beginn und Ende bleiben leer – es
+        // gibt keine Kommen-/Gehen-Zeit.
         key = KEY_BY_ABSENCE[entry.absenceKind] || key
         const label = REMARK_BY_ABSENCE[entry.absenceKind]
         if (label && !bemerkungen.includes(label)) bemerkungen.push(label)
+        absenceMinutes = Math.max(absenceMinutes, entry.effectiveWorkMinutes)
         continue
       }
 
@@ -114,6 +123,11 @@ export const buildDatevRows = (
       if (beginn !== null) fruehester = fruehester === null ? beginn : Math.min(fruehester, beginn)
       if (ende !== null) spaetester = spaetester === null ? ende : Math.max(spaetester, ende)
     }
+
+    // Ein Tag ist entweder gearbeitet oder abwesend. Falls doch beides
+    // vorliegt (z.B. halber Tag gestempelt), gewinnt die echte Arbeitszeit –
+    // sonst stünden auf einem Tag 8 Std Urlaub plus die gestempelten Stunden.
+    if (workMinutes === 0) workMinutes = absenceMinutes
 
     const alsUhrzeit = (minuten: number | null): string =>
       minuten === null ? '' : minutesToHoursLabel(minuten).padStart(5, '0')

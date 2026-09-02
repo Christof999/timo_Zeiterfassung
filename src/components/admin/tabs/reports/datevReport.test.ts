@@ -97,18 +97,47 @@ describe('buildDatevRows', () => {
     expect(rows.map((r) => r.remark)).toEqual(['Urlaub', 'Krank', 'Feiertag'])
   })
 
-  it('lässt bei Abwesenheit die Dauer leer – nur das Kürzel steht da', () => {
-    // Das Blatt dokumentiert Arbeitszeit; Urlaub ist keine. Sonst wiche die
-    // Summe unten dauerhaft von den gemeldeten Stunden ab.
+  it('weist bei Urlaub die Regelstunden aus, ohne Kommen- und Gehen-Zeit', () => {
     const rows = buildDatevRows(
       [zeile(1, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })],
       '2026-07-01',
       '2026-07-01'
     )
-    expect(rows[0]).toMatchObject({ begin: '', end: '', pauseMinutes: 0, workMinutes: 0, key: 'U' })
+    expect(rows[0]).toMatchObject({
+      begin: '',
+      end: '',
+      pauseMinutes: 0,
+      workMinutes: 8 * 60,
+      key: 'U'
+    })
   })
 
-  it('summiert nur Arbeitszeit – die Summe trifft die gemeldeten Stunden', () => {
+  it('übernimmt am Freitag die kürzere Regelarbeitszeit', () => {
+    // 03.07.2026 ist ein Freitag: 6 Std statt 8. Die Minuten kommen aus dem
+    // Bericht, die Vorlage rechnet sie nicht selbst aus.
+    const rows = buildDatevRows(
+      [zeile(3, { absenceKind: 'vacation', effectiveWorkMinutes: 6 * 60 })],
+      '2026-07-03',
+      '2026-07-03'
+    )
+    expect(rows[0]).toMatchObject({ workMinutes: 6 * 60, key: 'U' })
+  })
+
+  it('zählt auch Krank, Feiertag und Berufsschule mit ihren Stunden', () => {
+    const rows = buildDatevRows(
+      [
+        zeile(1, { absenceKind: 'sick', effectiveWorkMinutes: 8 * 60 }),
+        zeile(2, { absenceKind: 'holiday', effectiveWorkMinutes: 8 * 60 }),
+        zeile(3, { absenceKind: 'school', effectiveWorkMinutes: 6 * 60 })
+      ],
+      '2026-07-01',
+      '2026-07-03'
+    )
+    expect(rows.map((r) => r.workMinutes)).toEqual([8 * 60, 8 * 60, 6 * 60])
+    expect(datevTotalMinutes(rows)).toBe(22 * 60)
+  })
+
+  it('nimmt Abwesenheits- und Arbeitsstunden in die Summe', () => {
     const rows = buildDatevRows(
       [
         zeile(1),
@@ -118,7 +147,20 @@ describe('buildDatevRows', () => {
       '2026-07-01',
       '2026-07-03'
     )
-    expect(datevTotalMinutes(rows)).toBe(2 * (8 * 60 + 30))
+    expect(datevTotalMinutes(rows)).toBe(2 * (8 * 60 + 30) + 8 * 60)
+  })
+
+  it('zählt an einem Tag mit Stempelung nicht zusätzlich die Urlaubsstunden', () => {
+    // Sonst stünden auf einem Tag die gestempelten Stunden plus 8 Std Urlaub.
+    const rows = buildDatevRows(
+      [
+        zeile(1),
+        zeile(1, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })
+      ],
+      '2026-07-01',
+      '2026-07-01'
+    )
+    expect(rows[0]).toMatchObject({ workMinutes: 8 * 60 + 30, key: 'U' })
   })
 
   it('nennt kein Projekt – die Vorlage hat dafür keine Spalte', () => {
