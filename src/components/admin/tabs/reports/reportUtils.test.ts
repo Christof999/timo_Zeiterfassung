@@ -388,6 +388,23 @@ describe('Abrechnungs-Summen für den Beleg', () => {
     expect(report.summary.mealAllowanceAmount).toBe(28)
   })
 
+  it('löst für Urlaub, Krankheit und Feiertag KEINEN Verpflegungsmehraufwand aus', () => {
+    // Der steuerfreie Satz setzt eine Auswärtstätigkeit voraus. Ein Urlaubstag
+    // wird mit 8 Std Regelarbeitszeit ausgewiesen, ist aber keine Anwesenheit –
+    // er darf den Satz deshalb nicht auslösen.
+    const report = buildAdjustedReport(
+      [
+        absenceEntry(2, 'vacation', 8 * 60),
+        absenceEntry(3, 'sick', 8 * 60),
+        absenceEntry(4, 'holiday', 8 * 60)
+      ],
+      { mealAllowanceRate: 14 }
+    )
+    expect(report.summary.vacationMinutes).toBe(8 * 60)
+    expect(report.summary.mealAllowanceDays).toBe(0)
+    expect(report.summary.mealAllowanceAmount).toBe(0)
+  })
+
   it('weist nur die noch offenen Überstunden aus', () => {
     const report = buildAdjustedReport([workEntry(2, '07:00', '17:00')], {
       regularDayMinutes: 480,
