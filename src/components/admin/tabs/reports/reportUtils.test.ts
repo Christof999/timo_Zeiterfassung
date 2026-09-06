@@ -16,6 +16,7 @@ import {
   isReportSelectableEmployee,
   employeeHourlyMargin,
   employeeLaborCostRate,
+  employeeWageRate,
   planSettlementTarget,
   parseMealAllowanceInput,
   DEFAULT_MEAL_ALLOWANCE_EUR,
@@ -738,6 +739,26 @@ describe('planSettlementTarget – gemeldete Stunden treffen', () => {
     // gemeldeten Stunden vollständig als Auszahlung angefordert werden.
     expect(planSettlementTarget([], 0).payoutMinutes).toBe(0)
     expect(planSettlementTarget([], 120).payoutMinutes).toBe(120)
+  })
+})
+
+describe('employeeWageRate', () => {
+  it('nimmt allein den Kostensatz der Mitarbeiterkarte', () => {
+    expect(employeeWageRate({ hourlyCostRate: 39 })).toBe(39)
+  })
+
+  it('lässt die Lohnnebenkosten außen vor – die sind nur interne Kalkulation', () => {
+    expect(employeeWageRate({ hourlyCostRate: 39, ancillaryWageCosts: 12.5 } as never)).toBe(39)
+  })
+
+  it('ignoriert den Verrechnungssatz vollständig', () => {
+    expect(employeeWageRate({ hourlyRate: 65, hourlyWage: 55 } as never)).toBe(0)
+  })
+
+  it('rechnet fehlende oder unsinnige Werte als 0', () => {
+    expect(employeeWageRate(undefined)).toBe(0)
+    expect(employeeWageRate({})).toBe(0)
+    expect(employeeWageRate({ hourlyCostRate: -5 })).toBe(0)
   })
 })
 

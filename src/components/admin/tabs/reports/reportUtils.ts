@@ -64,13 +64,28 @@ export interface EmployeeSummary {
 }
 
 /**
- * Lohnkosten-Satz eines Mitarbeiters in EUR/Std – die Grundlage aller Beträge
- * im Zeiterfassungsbericht (inkl. DATEV-Nachweis).
+ * Lohnsatz eines Mitarbeiters in EUR/Std – die Grundlage aller Beträge im
+ * Zeiterfassungsbericht (inkl. DATEV-Nachweis).
  *
- * Bewusst „was kostet mich der Mitarbeiter" + Lohnnebenkosten und **nicht** der
- * Verrechnungssatz (`hourlyRate`): der Verrechnungssatz ist der Preis, zu dem
- * die Stunde verkauft wird, und gehört damit in die Nachkalkulation
- * (Verrechnungssatz − Lohnkosten = Marge). Als Lohn ausgewiesen wäre er zu hoch.
+ * Das ist **allein** der Kostensatz aus der Mitarbeiterkarte
+ * (`hourlyCostRate`), also der Lohn, den der Mitarbeiter bekommt:
+ * - **ohne Lohnnebenkosten** (`ancillaryWageCosts`): die trägt der Betrieb
+ *   zusätzlich, sie stehen nie auf einem Lohnbeleg und dienen nur der internen
+ *   Kalkulation (siehe `employeeLaborCostRate`).
+ * - **ohne Verrechnungssatz** (`hourlyRate`): das ist der Preis, zu dem die
+ *   Stunde verkauft wird – als Lohn ausgewiesen wäre er zu hoch.
+ */
+export const employeeWageRate = (employee?: Pick<Employee, 'hourlyCostRate'> | null): number => {
+  const rate = employee?.hourlyCostRate
+  return typeof rate === 'number' && isFinite(rate) && rate > 0 ? Math.round(rate * 100) / 100 : 0
+}
+
+/**
+ * Interne Lohnkosten eines Mitarbeiters in EUR/Std: Kostensatz +
+ * Lohnnebenkosten – was die Stunde den Betrieb wirklich kostet.
+ *
+ * Nur für die Nachkalkulation (Verrechnungssatz − Lohnkosten = Marge). Auf dem
+ * Lohnbeleg steht der Satz **nicht**, dort zählt allein `employeeWageRate`.
  */
 export const employeeLaborCostRate = (
   employee?: Pick<Employee, 'hourlyCostRate' | 'ancillaryWageCosts'> | null

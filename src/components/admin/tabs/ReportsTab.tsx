@@ -36,6 +36,7 @@ import {
   buildAdjustedReport,
   buildAdjustedReportForTarget,
   employeeLaborCostRate,
+  employeeWageRate,
   employeeBillingRate,
   isReportSelectableEmployee,
   type BuildAdjustedReportOptions,
@@ -868,8 +869,11 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   // ---------- Gesetzliche Korrektur & Überstunden (reine Anzeige) ----------
 
   const selectedEmployeeRecord = employees.find(e => e.id === selectedEmployeeId)
-  /** Lohnbasis des Belegs: Kostensatz + Lohnnebenkosten, nicht der Verrechnungssatz. */
-  const employeeHourlyRate = employeeLaborCostRate(selectedEmployeeRecord)
+  /**
+   * Lohnbasis des Belegs: allein der Kostensatz der Mitarbeiterkarte – ohne
+   * Lohnnebenkosten (nur interne Kalkulation) und ohne Verrechnungssatz.
+   */
+  const employeeHourlyRate = employeeWageRate(selectedEmployeeRecord)
   /** Azubis werden pauschal vergütet – im Bericht steht dann kein Stundensatz. */
   const employeeIsApprentice = selectedEmployeeRecord?.isApprentice === true
   const employeeFixedSalary = selectedEmployeeRecord?.fixedMonthlySalary || 0
@@ -1963,8 +1967,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
   /**
    * Baut die Auswertung eines Mitarbeiters ohne den Umweg über die Ansicht –
-   * Grundlage des Sammeldrucks. Lohnkostensatz, Verpflegungssatz und
-   * Azubi/Fixlohn kommen wie in der Einzelansicht von der Mitarbeiterkarte.
+   * Grundlage des Sammeldrucks. Kostensatz, Verpflegungssatz und Azubi/Fixlohn
+   * kommen wie in der Einzelansicht von der Mitarbeiterkarte.
    */
   const buildBatchReport = async (employeeId: string, range: { start: string; end: string }) => {
     const emp =
@@ -1976,7 +1980,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     })
 
     const options: BuildAdjustedReportOptions = {
-      hourlyRate: employeeLaborCostRate(emp),
+      hourlyRate: employeeWageRate(emp),
       mealAllowanceRate:
         typeof emp?.mealAllowanceRate === 'number'
           ? emp.mealAllowanceRate
@@ -3277,9 +3281,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   ) : (
                     adjustedReport.summary.hourlyRate === 0 && (
                       <p className="settlement-summary-hint no-print">
-                        Für {selectedEmployeeName} sind weder Kostensatz noch Lohnnebenkosten
-                        hinterlegt – die Beträge bleiben deshalb bei 0,00 €. Beide Sätze lassen sich
-                        im Mitarbeiter-Profil setzen; der Verrechnungssatz wird hier bewusst nicht
+                        Für {selectedEmployeeName} ist kein Kostensatz hinterlegt – die Beträge
+                        bleiben deshalb bei 0,00 €. Der Satz lässt sich im Mitarbeiter-Profil
+                        setzen; Lohnnebenkosten und Verrechnungssatz werden hier bewusst nicht
                         verwendet.
                       </p>
                     )

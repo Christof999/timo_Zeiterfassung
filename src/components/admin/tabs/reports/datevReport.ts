@@ -10,10 +10,15 @@ import { formatDateForInputLocal } from '../../../../utils/dateUtils'
  * deshalb zu Beginn/Ende/Pause/Dauer zusammengefasst. Projekt und
  * Dokumentation kommen bewusst nicht vor.
  *
- * Abwesenheitstage (Urlaub, Krank, Feiertag, Berufsschule) stehen mit ihrer
+ * Bezahlte Abwesenheitstage (Krank, Feiertag, Berufsschule) stehen mit ihrer
  * Regelarbeitszeit in der Dauer und in der Summe – das Blatt weist damit die
- * bezahlten Stunden des Monats aus, nicht nur die gestempelten. Woher die
- * Stunden kommen, sagt das Kürzel in der "*"-Spalte.
+ * Stunden aus, die auch die Abrechnung vergütet. Woher die Stunden kommen,
+ * sagt das Kürzel in der "*"-Spalte.
+ *
+ * URLAUB ist die Ausnahme: er wird im Baulohn über die Urlaubskasse gesondert
+ * abgerechnet und steht deshalb ohne Stunden auf dem Blatt – nur mit dem
+ * Kürzel "U" und der Bemerkung. Sonst wiese die Summe hier mehr Stunden aus,
+ * als die Abrechnung darunter vergütet.
  */
 
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
@@ -104,15 +109,20 @@ export const buildDatevRows = (
 
     for (const entry of tagesEintraege) {
       if (entry.absenceKind) {
-        // Urlaub, Krankheit, Feiertag und Berufsschule sind bezahlte Tage: die
-        // Regelarbeitszeit (Mo–Do 8 Std, Fr 6 Std) steht in der Dauer und zählt
-        // in die Summe. Das Kürzel in der "*"-Spalte sagt weiterhin, warum an
-        // dem Tag nicht gestempelt wurde. Beginn und Ende bleiben leer – es
-        // gibt keine Kommen-/Gehen-Zeit.
+        // Krankheit, Feiertag und Berufsschule sind über den Bruttolohn
+        // bezahlte Tage: die Regelarbeitszeit (Mo–Do 8 Std, Fr 6 Std) steht in
+        // der Dauer und zählt in die Summe. Urlaub bleibt ohne Stunden – er
+        // läuft im Baulohn über die Urlaubskasse und ist im Bruttolohn nicht
+        // enthalten; die Summe des Blatts muss zur Abrechnung passen.
+        // Das Kürzel in der "*"-Spalte sagt weiterhin, warum an dem Tag nicht
+        // gestempelt wurde. Beginn und Ende bleiben leer – es gibt keine
+        // Kommen-/Gehen-Zeit.
         key = KEY_BY_ABSENCE[entry.absenceKind] || key
         const label = REMARK_BY_ABSENCE[entry.absenceKind]
         if (label && !bemerkungen.includes(label)) bemerkungen.push(label)
-        absenceMinutes = Math.max(absenceMinutes, entry.effectiveWorkMinutes)
+        if (entry.absenceKind !== 'vacation') {
+          absenceMinutes = Math.max(absenceMinutes, entry.effectiveWorkMinutes)
+        }
         continue
       }
 
@@ -126,7 +136,7 @@ export const buildDatevRows = (
 
     // Ein Tag ist entweder gearbeitet oder abwesend. Falls doch beides
     // vorliegt (z.B. halber Tag gestempelt), gewinnt die echte Arbeitszeit –
-    // sonst stünden auf einem Tag 8 Std Urlaub plus die gestempelten Stunden.
+    // sonst stünden auf einem Tag 8 Std Krank plus die gestempelten Stunden.
     if (workMinutes === 0) workMinutes = absenceMinutes
 
     const alsUhrzeit = (minuten: number | null): string =>
