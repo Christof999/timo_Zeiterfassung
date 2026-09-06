@@ -250,9 +250,11 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
     },
     {
       // Urlaub steht bewusst NACH dem Bruttolohn und ohne Betrag: der Baulohn
-      // rechnet ihn über die Urlaubskasse selbst, gemeldet werden nur die Tage.
+      // rechnet ihn über die Urlaubskasse selbst. Die Stunden gehören trotzdem
+      // dazu – sie stehen so auch im Nachweis darüber und die Lohnbuchhaltung
+      // sucht sie sonst zwischen Blatt und Abrechnung zusammen.
       label: 'Urlaubstage',
-      detail: `${days(summary.vacationDays)} – Abrechnung im Baulohn, nicht im Bruttolohn enthalten`,
+      detail: `${days(summary.vacationDays)} (${hours(summary.vacationMinutes)}) – Abrechnung im Baulohn, nicht im Bruttolohn enthalten`,
       amount: '—',
       isNote: true
     },

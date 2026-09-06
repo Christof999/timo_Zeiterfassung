@@ -97,10 +97,7 @@ describe('buildDatevRows', () => {
     expect(rows.map((r) => r.remark)).toEqual(['Urlaub', 'Krank', 'Feiertag'])
   })
 
-  it('weist Urlaub nur mit Kürzel aus – ohne Stunden, Kommen und Gehen', () => {
-    // Urlaub wird im Baulohn über die Urlaubskasse abgerechnet und ist im
-    // Bruttolohn nicht enthalten. Stünde er hier mit Stunden, wiese das Blatt
-    // mehr aus, als die Abrechnung darunter vergütet.
+  it('weist bei Urlaub die Regelstunden aus, ohne Kommen- und Gehen-Zeit', () => {
     const rows = buildDatevRows(
       [zeile(1, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })],
       '2026-07-01',
@@ -110,22 +107,20 @@ describe('buildDatevRows', () => {
       begin: '',
       end: '',
       pauseMinutes: 0,
-      workMinutes: 0,
-      key: 'U',
-      remark: 'Urlaub'
+      workMinutes: 8 * 60,
+      key: 'U'
     })
-    expect(datevTotalMinutes(rows)).toBe(0)
   })
 
   it('übernimmt am Freitag die kürzere Regelarbeitszeit', () => {
     // 03.07.2026 ist ein Freitag: 6 Std statt 8. Die Minuten kommen aus dem
     // Bericht, die Vorlage rechnet sie nicht selbst aus.
     const rows = buildDatevRows(
-      [zeile(3, { absenceKind: 'sick', effectiveWorkMinutes: 6 * 60 })],
+      [zeile(3, { absenceKind: 'vacation', effectiveWorkMinutes: 6 * 60 })],
       '2026-07-03',
       '2026-07-03'
     )
-    expect(rows[0]).toMatchObject({ workMinutes: 6 * 60, key: 'K' })
+    expect(rows[0]).toMatchObject({ workMinutes: 6 * 60, key: 'U' })
   })
 
   it('zählt auch Krank, Feiertag und Berufsschule mit ihren Stunden', () => {
@@ -142,16 +137,15 @@ describe('buildDatevRows', () => {
     expect(datevTotalMinutes(rows)).toBe(22 * 60)
   })
 
-  it('nimmt bezahlte Abwesenheits- und Arbeitsstunden in die Summe, Urlaub nicht', () => {
+  it('nimmt Abwesenheits- und Arbeitsstunden in die Summe', () => {
     const rows = buildDatevRows(
       [
         zeile(1),
         zeile(2),
-        zeile(3, { absenceKind: 'sick', effectiveWorkMinutes: 8 * 60 }),
-        zeile(4, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })
+        zeile(3, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })
       ],
       '2026-07-01',
-      '2026-07-04'
+      '2026-07-03'
     )
     expect(datevTotalMinutes(rows)).toBe(2 * (8 * 60 + 30) + 8 * 60)
   })
