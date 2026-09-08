@@ -64,6 +64,26 @@ export interface EmployeeSummary {
 }
 
 /**
+ * Dateiname eines Berichts-Anhangs: sprechend und im Postfach sortierbar.
+ *
+ * Die Endung ist fest `.pdf` – die Berichte gehen ausschließlich als PDF raus
+ * (siehe `reportPdf.ts`). Eine andere Endung macht den Anhang unbrauchbar:
+ * Outlook öffnet ihn dann mit dem falschen Programm und die Empfängerin sieht
+ * statt des Nachweises den Rohtext der PDF-Datei.
+ */
+export const reportAttachmentFilename = (
+  prefix: string,
+  employeeName: string,
+  range: { start: string; end: string }
+): string => {
+  const safeName = (employeeName || 'mitarbeiter')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  return `${prefix}-${safeName}-${range.start}_${range.end}.pdf`
+}
+
+/**
  * Lohnsatz eines Mitarbeiters in EUR/Std – die Grundlage aller Beträge im
  * Zeiterfassungsbericht (inkl. DATEV-Nachweis).
  *

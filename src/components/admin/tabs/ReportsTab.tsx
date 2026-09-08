@@ -37,6 +37,7 @@ import {
   buildAdjustedReportForTarget,
   employeeLaborCostRate,
   employeeWageRate,
+  reportAttachmentFilename,
   employeeBillingRate,
   isReportSelectableEmployee,
   type BuildAdjustedReportOptions,
@@ -1856,19 +1857,6 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const formatRangeLabel = (range: { start: string; end: string }): string =>
     `${new Date(range.start).toLocaleDateString('de-DE')} - ${new Date(range.end).toLocaleDateString('de-DE')}`
 
-  /** Dateiname eines Berichts-Anhangs: sprechend und im Postfach sortierbar. */
-  const reportFilename = (
-    prefix: string,
-    employeeName: string,
-    range: { start: string; end: string }
-  ): string => {
-    const safeName = (employeeName || 'mitarbeiter')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-    return `${prefix}-${safeName}-${range.start}_${range.end}.html`
-  }
-
   const exitBatchMode = () => {
     setBatchEmployeeIds([])
     setBatchPeriod(null)
@@ -2369,12 +2357,13 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         ? await buildDatevReportPdf(daten as DatevPrintParams)
         : await buildEmployeeReportPdf(daten as EmployeePrintParams)
     return {
-      filename: reportFilename(
+      filename: reportAttachmentFilename(
         art === 'datev' ? 'datev-nachweis' : 'zeiterfassungsbericht',
         daten.employeeName,
         range
       ),
-      contentBase64: pdfToBase64(bytes)
+      contentBase64: pdfToBase64(bytes),
+      contentType: 'application/pdf'
     }
   }
 

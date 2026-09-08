@@ -52,6 +52,16 @@ async function authorizeRequest(req) {
 const isValidEmail = (value) => typeof value === 'string' && /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value)
 
 /**
+ * Erzwingt die zum Inhalt passende Dateiendung. Ein PDF, das `.html` heißt,
+ * kommt beim Steuerberater als Rohtext an — Outlook geht nach der Endung, nicht
+ * nach dem Content-Type. Letzte Kontrolle, bevor die Mail rausgeht.
+ */
+function withExtension(filename, fallback, extension) {
+  const name = typeof filename === 'string' && filename.trim() ? filename.trim() : fallback
+  return name.toLowerCase().endsWith(extension) ? name : `${name.replace(/\.[^.]{1,5}$/, '')}${extension}`
+}
+
+/**
  * Holt das App-Logo vom eigenen Host, damit es als CID-Anhang in der Mail
  * eingebettet werden kann. Bewusst über den Host des Requests statt über eine
  * fest verdrahtete Domain — so funktioniert es auf Produktion und Preview
@@ -138,13 +148,13 @@ module.exports = async (req, res) => {
     const nummer = index > 0 ? `-${index + 1}` : ''
     if (bericht.contentBase64) {
       return {
-        filename: bericht.filename || `zeiterfassungsbericht${nummer}.pdf`,
+        filename: withExtension(bericht.filename, `zeiterfassungsbericht${nummer}`, '.pdf'),
         content: bericht.contentBase64,
         contentType: bericht.contentType || 'application/pdf'
       }
     }
     return {
-      filename: bericht.filename || `zeiterfassungsbericht${nummer}.html`,
+      filename: withExtension(bericht.filename, `zeiterfassungsbericht${nummer}`, '.html'),
       content: Buffer.from(bericht.html, 'utf8').toString('base64'),
       contentType: 'text/html; charset=utf-8'
     }
