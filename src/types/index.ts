@@ -86,9 +86,23 @@ export interface DashboardWidgetInstance {
   size: DashboardWidgetSize
 }
 
+/**
+ * Gemeinkosten-Projekte: Zeiten, die der Betrieb bezahlt, für die es aber keinen
+ * Ertrag gibt (Nachbesserung auf einer abgeschlossenen Baustelle, Lagerarbeit).
+ * Sie werden als feste Default-Projekte angelegt und in der Nachkalkulation
+ * bewusst ohne Verrechnung, aber mit Lohnkosten geführt.
+ */
+export type OverheadProjectKind = 'rework' | 'warehouse'
+
 export interface Project {
   id: string
   name?: string
+  /**
+   * Gesetzt bei den beiden Default-Gemeinkosten-Projekten (Nachbesserung,
+   * Lager). Solche Projekte erzeugen keinen Umsatz – ihre Stunden zählen im
+   * Tagesbericht nur als Kosten gegen den Ertrag.
+   */
+  overheadKind?: OverheadProjectKind
   client?: string
   location?: string
   address?: string

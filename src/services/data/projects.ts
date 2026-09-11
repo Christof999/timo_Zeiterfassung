@@ -1,14 +1,72 @@
-import { addDoc, collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebaseConfig'
 import type { Project } from '../../types'
 import { authReady } from './shared'
+import { OVERHEAD_PROJECT_DEFS, overheadKindOf } from '../../constants/overheadProjects'
+
+/**
+ * Legt die fehlenden Gemeinkosten-Projekte (Nachbesserung, Lager) an und
+ * liefert die neu erzeugten zurück.
+ *
+ * `known` ist die vollständige, gerade gelesene Projektliste – so braucht das
+ * Anlegen keine zusätzliche Abfrage. Dank fester Dokument-IDs ist der Vorgang
+ * idempotent; ein bewusst archiviertes Gemeinkosten-Projekt taucht in `known`
+ * weiter auf und wird deshalb nicht wieder aktiviert.
+ */
+export async function ensureOverheadProjects(known: Project[]): Promise<Project[]> {
+  const missing = OVERHEAD_PROJECT_DEFS.filter(
+    (def) => !known.some((project) => overheadKindOf(project) === def.kind)
+  )
+  if (missing.length === 0) return []
+
+  const created: Project[] = []
+  for (const def of missing) {
+    const project: Project = {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      overheadKind: def.kind,
+      status: 'active',
+      isActive: true
+    }
+    try {
+      const { id, ...payload } = project
+      await setDoc(doc(db, 'projects', id), payload)
+      created.push(project)
+    } catch (error) {
+      console.error(`Gemeinkosten-Projekt „${def.name}" konnte nicht angelegt werden:`, error)
+    }
+  }
+  return created
+}
+
+/**
+ * Einmal je Sitzung: fehlende Gemeinkosten-Projekte anlegen. Schlägt das
+ * Anlegen fehl (z. B. offline), wird beim nächsten Projekt-Laden erneut
+ * versucht, statt die Lücke bis zum Neustart mitzuschleppen.
+ */
+let overheadSeedPromise: Promise<Project[]> | null = null
+
+async function seedOverheadProjects(known: Project[]): Promise<Project[]> {
+  if (!overheadSeedPromise) {
+    overheadSeedPromise = ensureOverheadProjects(known).then((created) => {
+      const complete = OVERHEAD_PROJECT_DEFS.every((def) =>
+        [...known, ...created].some((project) => overheadKindOf(project) === def.kind)
+      )
+      if (!complete) overheadSeedPromise = null
+      return created
+    })
+  }
+  return overheadSeedPromise
+}
 
 export async function getActiveProjects(): Promise<Project[]> {
   await authReady
   try {
     const projectsRef = collection(db, 'projects')
     const snapshot = await getDocs(projectsRef)
-    let projects = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
+    const all = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
+    let projects = [...all, ...(await seedOverheadProjects(all))]
 
     projects = projects.filter((project) => {
       const isActiveFlag = project.isActive !== false
@@ -50,7 +108,8 @@ export async function getAllProjects(): Promise<Project[]> {
   try {
     const projectsRef = collection(db, 'projects')
     const snapshot = await getDocs(projectsRef)
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
+    const all = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Project))
+    return [...all, ...(await seedOverheadProjects(all))]
   } catch (error) {
     console.error('Fehler beim Abrufen aller Projekte:', error)
     return []

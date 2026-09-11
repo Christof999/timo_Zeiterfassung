@@ -43,6 +43,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
   const hasMaterial = report.materials.length > 0
   /** Ohne hinterlegte Lohnkosten gibt es keine Personalmarge – dann bleiben die Spalten weg. */
   const hasLaborCost = report.employees.some((e) => e.hasCostRate)
+  const hasOverhead = report.overheadProjects.length > 0
   const totalMargin = report.totalLaborMarginTotal + report.materialMarginTotal
   /** Rot statt grün, sobald eine Marge ins Minus läuft. */
   const negIf = (value: number): string => (value < 0 ? ' is-negative' : '')
@@ -82,6 +83,16 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                     <span className="daily-kpi-icon" aria-hidden="true">👷</span>
                     <span className="daily-kpi-label">Personal-Marge</span>
                     <span className="daily-kpi-value">{fmtEur(report.totalLaborMarginTotal)}</span>
+                  </div>
+                )}
+                {hasOverhead && (
+                  <div className="daily-kpi kpi-overhead">
+                    <span className="daily-kpi-icon" aria-hidden="true">🔧</span>
+                    <span className="daily-kpi-label">Nachbesserung &amp; Lager</span>
+                    <span className="daily-kpi-value">{fmtHours(report.totalOverheadHours)}</span>
+                    {hasLaborCost && (
+                      <span className="daily-kpi-sub">{fmtEur(report.totalOverheadCost)} Kosten</span>
+                    )}
                   </div>
                 )}
                 {hasMaterial && (
@@ -138,14 +149,34 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                           <td>
                             <ul className="daily-project-list">
                               {emp.projects.map((p) => (
-                                <li key={p.projectName}>
-                                  <span className="daily-project-name">{p.projectName}</span>
+                                <li
+                                  key={p.projectName}
+                                  className={p.isOverhead ? 'is-overhead' : undefined}
+                                >
+                                  <span className="daily-project-name">
+                                    {p.projectName}
+                                    {p.isOverhead && (
+                                      <span
+                                        className="daily-overhead-badge"
+                                        title="Gemeinkosten – wird nicht verrechnet"
+                                      >
+                                        ohne Ertrag
+                                      </span>
+                                    )}
+                                  </span>
                                   <span className="daily-project-hours">{fmtHours(p.hours)}</span>
                                 </li>
                               ))}
                             </ul>
                           </td>
-                          <td className="num">{fmtHours(emp.totalHours)}</td>
+                          <td className="num">
+                            {fmtHours(emp.totalHours)}
+                            {emp.overheadHours > 0 && (
+                              <span className="daily-hours-note">
+                                davon {fmtHours(emp.overheadHours)} ohne Ertrag
+                              </span>
+                            )}
+                          </td>
                           <td className="num">{emp.hourlyRate > 0 ? fmtEur(emp.hourlyRate) : '—'}</td>
                           <td className="num">{emp.hourlyRate > 0 ? fmtEur(emp.laborCost) : '—'}</td>
                           {hasLaborCost && (
@@ -191,6 +222,55 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                   </table>
                 </div>
               </section>
+
+              {/* Gemeinkosten: Nachbesserung & Lager */}
+              {hasOverhead && (
+                <section className="daily-report-section">
+                  <h3 className="daily-section-title">
+                    <span aria-hidden="true">🔧</span> Nachbesserung &amp; Lager
+                  </h3>
+                  <div className="daily-table-wrap">
+                    <table className="daily-table">
+                      <thead>
+                        <tr>
+                          <th>Projekt</th>
+                          <th className="num">Stunden</th>
+                          <th className="num">Kosten</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.overheadProjects.map((line) => (
+                          <tr key={line.kind}>
+                            <td>{line.name}</td>
+                            <td className="num">{fmtHours(line.hours)}</td>
+                            <td className="num daily-margin-neg">
+                              {hasLaborCost ? fmtEur(line.cost) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td>
+                            <strong>Gesamt</strong>
+                          </td>
+                          <td className="num">
+                            <strong>{fmtHours(report.totalOverheadHours)}</strong>
+                          </td>
+                          <td className="num daily-margin-neg">
+                            <strong>{hasLaborCost ? fmtEur(report.totalOverheadCost) : '—'}</strong>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <p className="daily-report-note">
+                    Diese Stunden werden niemandem berechnet: sie gehen mit dem Lohnkostensatz
+                    (Kostensatz + Lohnnebenkosten) voll gegen den Ertrag und stecken bereits in
+                    den Lohnkosten und der Personal-Marge oben.
+                  </p>
+                </section>
+              )}
 
               {/* Material kumuliert */}
               <section className="daily-report-section">
@@ -271,6 +351,15 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                       </div>
                     </>
                   )}
+                  {hasOverhead && (
+                    <div className="daily-overview-row daily-overview-margin is-negative">
+                      <span>
+                        davon Nachbesserung &amp; Lager ({fmtHours(report.totalOverheadHours)}) –
+                        Kosten ohne Ertrag
+                      </span>
+                      <strong>{hasLaborCost ? fmtEur(-report.totalOverheadCost) : '—'}</strong>
+                    </div>
+                  )}
                   {hasMaterial && (
                     <>
                       <div className="daily-overview-row">
@@ -299,7 +388,9 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({
                   )}
                 </div>
                 <p className="daily-report-note">
-                  Verrechnung = gearbeitete Stunden je Mitarbeiter × Verrechnungssatz. In
+                  Verrechnung = verrechenbare Stunden je Mitarbeiter × Verrechnungssatz; Stunden
+                  auf Nachbesserung und Lager bleiben dabei außen vor, zählen aber voll in den
+                  Lohnkosten. In
                   Lohnkosten/Marge fließen nur Mitarbeiter mit hinterlegtem Kostensatz bzw.
                   Lohnnebenkosten ein, ins Material-Ergebnis nur Positionen mit hinterlegtem
                   Einkaufspreis.

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Project } from '../../../types'
 import { isProjectArchivedOrCompleted } from '../../../utils/projectArchive'
+import { isOverheadProject } from '../../../constants/overheadProjects'
 import { toast } from '../../ToastContainer'
 import ProjectModal from '../ProjectModal'
 import ProjectDetailModal from '../ProjectDetailModal'
@@ -167,7 +168,17 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                 <tbody>
                   {filteredProjects.map((project) => (
                 <tr key={project.id}>
-                  <td data-label="Name">{project.name}</td>
+                  <td data-label="Name">
+                    {project.name}
+                    {isOverheadProject(project) && (
+                      <span
+                        className="status-badge overhead"
+                        title="Gemeinkosten-Projekt: gebuchte Stunden kosten Lohn, bringen aber keinen Ertrag"
+                      >
+                        Gemeinkosten
+                      </span>
+                    )}
+                  </td>
                   <td data-label="Kunde">{project.client || '-'}</td>
                   <td data-label="Status">{getStatusBadge(project.status)}</td>
                   <td className="action-buttons" data-label="">
@@ -185,7 +196,9 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                     >
                       Bearbeiten
                     </button>
-                    {variant === 'active' && (
+                    {/* Nachbesserung und Lager sind Default-Projekte – ohne sie
+                        fehlt den Mitarbeitern das Ziel für Gemeinkosten-Zeiten. */}
+                    {variant === 'active' && !isOverheadProject(project) && (
                       <button 
                         onClick={() => handleDelete(project.id!)} 
                         className="action-btn delete-btn"

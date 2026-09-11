@@ -81,6 +81,16 @@
 .daily-kpi.kpi-hours .daily-kpi-value { color: var(--primary-color); }
 .daily-kpi.kpi-margin .daily-kpi-value { color: var(--success-color); }
 
+/* Nachbesserung/Lager: bezahlte Stunden ohne Ertrag – bewusst als Warnung. */
+.daily-kpi.kpi-overhead::before { background: var(--warning-color, #d97706); }
+.daily-kpi.kpi-overhead .daily-kpi-value { color: var(--warning-color, #d97706); }
+
+.daily-kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .daily-report-hint {
   margin: -0.5rem 0 0;
   font-size: 0.82rem;
@@ -199,6 +209,32 @@
   border-radius: 50%;
   background: var(--primary-color);
   opacity: 0.65;
+}
+
+/* Gemeinkosten-Zeile: gedämpfter Punkt, damit sie sich vom Ertrag abhebt. */
+.daily-project-list li.is-overhead .daily-project-name::before {
+  background: var(--warning-color, #d97706);
+  opacity: 0.9;
+}
+
+.daily-overhead-badge {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--warning-color, #d97706);
+  background: var(--warning-light, rgba(217, 119, 6, 0.12));
+  white-space: nowrap;
+}
+
+.daily-hours-note {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--warning-color, #d97706);
 }
 
 .daily-project-hours {

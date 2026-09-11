@@ -21,7 +21,9 @@ const employees: Employee[] = [
 
 const projects: Project[] = [
   { id: 'p1', name: 'BV Strobel' },
-  { id: 'p2', name: 'BV Wilhelm-Löhe-Schule' }
+  { id: 'p2', name: 'BV Wilhelm-Löhe-Schule' },
+  { id: 'overhead-nachbesserung', name: 'Nachbesserung', overheadKind: 'rework' },
+  { id: 'overhead-lager', name: 'Lager', overheadKind: 'warehouse' }
 ]
 
 const materialTypes: MaterialType[] = [
@@ -189,5 +191,119 @@ describe('buildDailyReport – Personalmarge', () => {
     expect(r.totalLaborCost).toBe(240) // 8 × 30
     expect(r.totalLaborPurchaseCost).toBe(320) // 8 × 40
     expect(r.totalLaborMarginTotal).toBe(-80)
+  })
+})
+
+describe('buildDailyReport – Nachbesserung & Lager', () => {
+  it('verrechnet Gemeinkosten-Stunden nicht, belastet sie aber mit dem Kostensatz', () => {
+    const entries = [
+      // Ali: 4 h Baustelle + 4 h Nachbesserung, Verrechnung 60 €, Lohnkosten 33 €
+      entry({
+        employeeId: 'e3',
+        projectId: 'p1',
+        clockInTime: at(8, 0),
+        clockOutTime: at(12, 0),
+        pauseTotalTime: 0
+      }),
+      entry({
+        employeeId: 'e3',
+        projectId: 'overhead-nachbesserung',
+        clockInTime: at(12, 0),
+        clockOutTime: at(16, 0),
+        pauseTotalTime: 0
+      })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+    const ali = r.employees[0]
+
+    expect(ali.totalHours).toBe(8)
+    expect(ali.billableHours).toBe(4)
+    expect(ali.overheadHours).toBe(4)
+    expect(ali.laborCost).toBe(240) // nur 4 verrechenbare Stunden × 60
+    expect(ali.laborPurchaseCost).toBe(264) // alle 8 Stunden × 33
+    expect(ali.overheadCost).toBe(132) // 4 × 33
+
+    expect(r.totalOverheadHours).toBe(4)
+    expect(r.totalOverheadCost).toBe(132)
+    // Die Gemeinkosten-Stunden drücken die Marge: 240 − 264
+    expect(r.totalLaborMarginTotal).toBe(-24)
+  })
+
+  it('weist Nachbesserung und Lager getrennt aus', () => {
+    const entries = [
+      entry({
+        employeeId: 'e3',
+        projectId: 'overhead-nachbesserung',
+        clockInTime: at(8, 0),
+        clockOutTime: at(11, 0),
+        pauseTotalTime: 0
+      }),
+      entry({
+        employeeId: 'e3',
+        projectId: 'overhead-lager',
+        clockInTime: at(11, 0),
+        clockOutTime: at(13, 0),
+        pauseTotalTime: 0
+      })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+
+    const byKind = new Map(r.overheadProjects.map((o) => [o.kind, o]))
+    expect(byKind.get('rework')!.hours).toBe(3)
+    expect(byKind.get('rework')!.cost).toBe(99) // 3 × 33
+    expect(byKind.get('warehouse')!.hours).toBe(2)
+    expect(byKind.get('warehouse')!.cost).toBe(66) // 2 × 33
+    expect(r.totalLaborCost).toBe(0) // nichts zu verrechnen
+  })
+
+  it('markiert die Gemeinkosten-Zeile in der Projektaufstellung', () => {
+    const entries = [
+      entry({ employeeId: 'e1', projectId: 'p1', clockInTime: at(8, 0), clockOutTime: at(12, 0), pauseTotalTime: 0 }),
+      entry({
+        employeeId: 'e1',
+        projectId: 'overhead-lager',
+        clockInTime: at(13, 0),
+        clockOutTime: at(15, 0),
+        pauseTotalTime: 0
+      })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+    const byName = new Map(r.employees[0].projects.map((p) => [p.projectName, p]))
+    expect(byName.get('BV Strobel')!.isOverhead).toBe(false)
+    expect(byName.get('Lager')!.isOverhead).toBe(true)
+  })
+
+  it('behandelt einen Kleinauftrag am Kunden nie als Gemeinkosten', () => {
+    const entries = [
+      entry({
+        employeeId: 'e3',
+        projectId: '',
+        customerId: 'c1',
+        customerName: 'Lager Müller',
+        clockInTime: at(8, 0),
+        clockOutTime: at(12, 0),
+        pauseTotalTime: 0
+      })
+    ]
+    const r = buildDailyReport(entries, employees, projects, materialTypes, today)
+    expect(r.totalOverheadHours).toBe(0)
+    expect(r.employees[0].billableHours).toBe(4)
+    expect(r.totalLaborCost).toBe(240)
+  })
+
+  it('erkennt gleichnamige, manuell angelegte Projekte ohne overheadKind', () => {
+    const legacy: Project[] = [{ id: 'alt1', name: 'Nachbesserung' }]
+    const entries = [
+      entry({
+        employeeId: 'e3',
+        projectId: 'alt1',
+        clockInTime: at(8, 0),
+        clockOutTime: at(12, 0),
+        pauseTotalTime: 0
+      })
+    ]
+    const r = buildDailyReport(entries, employees, legacy, materialTypes, today)
+    expect(r.totalOverheadHours).toBe(4)
+    expect(r.totalLaborCost).toBe(0)
   })
 })

@@ -4,6 +4,7 @@ import { DataService } from '../../services/dataService'
 import type { Project, Customer } from '../../types'
 import { toast } from '../ToastContainer'
 import { toDateInputValue } from '../../utils/dateUtils'
+import { isOverheadProject } from '../../constants/overheadProjects'
 import '../../styles/Modal.css'
 
 interface ProjectModalProps {
@@ -122,6 +123,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit} className="modal-form">
+          {project && isOverheadProject(project) && (
+            <p className="form-hint">
+              <strong>Gemeinkosten-Projekt.</strong> Zeiten auf dieses Projekt werden niemandem
+              berechnet – sie gehen im Tagesbericht mit dem Lohnkostensatz des Mitarbeiters gegen
+              den Ertrag. Bitte nicht umbenennen oder archivieren, sonst fehlt den Mitarbeitern
+              das Ziel für diese Stunden.
+            </p>
+          )}
           <div className="form-group">
             <label>Projektname:</label>
             <input
