@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { workedMinutesForMonth } from './monthlyWorkedMinutes'
+import { workedMinutesForDay, workedMinutesForMonth } from './monthlyWorkedMinutes'
 import type { TimeEntry } from '../types'
 
 const eintrag = (
@@ -73,5 +73,49 @@ describe('workedMinutesForMonth', () => {
 
   it('gibt 0 zurück, wenn nichts vorliegt', () => {
     expect(workedMinutesForMonth([], '2026-07')).toBe(0)
+  })
+
+  it('zählt aus dem Überstundenkonto aufgefüllte Minuten mit', () => {
+    // 07:00–13:00 = 6:00 geleistet, 2:00 aus dem Konto aufgefüllt → 8:00.
+    // Nur so bleibt das Konto schlüssig: die Stunden wurden ihm entnommen und
+    // müssen im Monat auch abgerechnet werden können.
+    const aufgefuellt = eintrag(8, [7, 0], [13, 0], 0, {
+      overtimeFillMinutes: 120
+    } as Partial<TimeEntry>)
+    expect(workedMinutesForMonth([aufgefuellt], '2026-07')).toBe(8 * 60)
+  })
+})
+
+// 2026-07-08 ist ein Mittwoch.
+describe('workedMinutesForDay', () => {
+  it('rechnet nur den verlangten Kalendertag', () => {
+    const tage = [8, 9].map((t) => eintrag(t, [7, 0], [15, 30], 30))
+    expect(workedMinutesForDay(tage, '2026-07-08')).toBe(8 * 60)
+  })
+
+  it('fasst mehrere Stempelungen des Tages zusammen', () => {
+    const minuten = workedMinutesForDay(
+      [eintrag(8, [7, 0], [11, 0], 0), eintrag(8, [11, 30], [14, 0], 0)],
+      '2026-07-08'
+    )
+    expect(minuten).toBe(6 * 60 + 30)
+  })
+
+  it('enthält eine bereits gebuchte Auffüllung', () => {
+    // Damit derselbe Tag nicht zweimal aufgefüllt wird.
+    const aufgefuellt = eintrag(8, [7, 0], [13, 0], 0, {
+      overtimeFillMinutes: 120
+    } as Partial<TimeEntry>)
+    expect(workedMinutesForDay([aufgefuellt], '2026-07-08')).toBe(8 * 60)
+  })
+
+  it('ignoriert laufende Stempelungen ohne Gehen-Zeit', () => {
+    const laufend = eintrag(8, [7, 0], [15, 30], 30)
+    laufend.clockOutTime = null as any
+    expect(workedMinutesForDay([laufend], '2026-07-08')).toBe(0)
+  })
+
+  it('gibt 0 zurück, wenn an dem Tag nichts vorliegt', () => {
+    expect(workedMinutesForDay([eintrag(9, [7, 0], [15, 30], 30)], '2026-07-08')).toBe(0)
   })
 })

@@ -240,6 +240,16 @@ export interface TimeEntry {
   returnTravelMinutes?: number
   /** Der gebuchten Arbeitszeit gutgeschriebene Fahrtzeit (Millisekunden) */
   returnTravelCreditMs?: number
+  /**
+   * Aus dem Überstundenkonto auf die Regelarbeitszeit aufgefüllte Minuten
+   * (Mo–Do 8 Std, Fr 6 Std). Wird vom Mitarbeiter selbst gebucht und beim
+   * Buchen vom Überstundenkonto abgezogen; im Zeiterfassungsbericht zählt die
+   * Zeit wie geleistete Arbeit, in der Projekt-Nachkalkulation dagegen nicht.
+   * Liegt immer auf dem letzten abgeschlossenen Stempelsatz des Tages.
+   */
+  overtimeFillMinutes?: number
+  /** Zeitpunkt der Auffüll-Buchung (Audit-Trail). */
+  overtimeFillAt?: Date | any
   pauseDetails?: Array<{
     start: any
     end: any

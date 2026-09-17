@@ -33,6 +33,7 @@ import * as leave from './data/leave'
 import * as settlements from './data/settlements'
 import * as overtimeSettlements from './data/overtimeSettlements'
 import * as overtimeBroadcast from './data/overtimeBroadcast'
+import * as overtimeDayFill from './data/overtimeDayFill'
 import * as hero from './data/hero'
 import * as dashboard from './data/dashboard'
 import type {
@@ -55,7 +56,8 @@ import type {
   DashboardWidgetInstance
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
-import { workedMinutesForMonth } from '../utils/monthlyWorkedMinutes'
+import { workedMinutesForDay, workedMinutesForMonth } from '../utils/monthlyWorkedMinutes'
+import { canOfferDayFill, planDayFill, type DayFillPlan } from '../utils/overtimeDayFill'
 import { withTimeout } from '../utils/withTimeout'
 import { getFileImageSrc } from '../utils/fileImageSrc'
 import { toFileUploadRef } from '../utils/fileUploadRef'
@@ -64,6 +66,18 @@ import { estimateReturnTravel, getReturnTravelCreditMs } from '../utils/returnTr
 import { roundTimeToStep, roundedSpanMs } from '../utils/timeRounding'
 
 const isDevMode = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV
+
+/**
+ * Auffüll-Plan eines Tages samt der Angaben, die nur die Datenschicht kennt:
+ * welcher Stempelsatz die Buchung trägt und ob der Knopf überhaupt angeboten
+ * werden darf.
+ */
+export interface OvertimeDayFillPlan extends DayFillPlan {
+  /** Letztes Ausstempeln des Tages – dort wird die Auffüllung gebucht. */
+  timeEntryId: string | null
+  /** true, wenn „Tag mit Überstunden auffüllen" angeboten werden soll. */
+  canFill: boolean
+}
 
 /** Optionen beim Laden von Datei-Uploads — bei includeBinary=false bleibt Base64 außen vor. */
 export type FileUploadLoadOptions = { includeBinary?: boolean }
@@ -878,12 +892,61 @@ class DataServiceClass {
   }
 
   /**
+   * Stutzt eine Auffüllung, die der Tag nicht mehr trägt.
+   *
+   * „Tag mit Überstunden auffüllen" wird im ausgestempelten Zustand gebucht.
+   * Danach kann der Tag trotzdem noch wachsen – der Mitarbeiter stempelt sich
+   * erneut ein, oder der Admin korrigiert eine Zeit nach oben. Der Überhang
+   * geht dann ans Überstundenkonto zurück, statt den Tag über seine
+   * Regelarbeitszeit zu heben.
+   */
+  private async reconcileOvertimeDayFill(employeeId: string, dateKey: string): Promise<void> {
+    try {
+      const [year, month, day] = dateKey.split('-').map(Number)
+      if (!year || !month || !day) return
+
+      const entries = (
+        await this.getTimeEntriesByEmployeeId(employeeId, {
+          from: new Date(year, month - 1, day, 0, 0, 0, 0),
+          to: new Date(year, month - 1, day, 23, 59, 59, 999)
+        })
+      ).filter((entry) => this.getDateKeyFromValue(entry.clockInTime) === dateKey)
+
+      const filled = entries.filter((entry) => Number(entry.overtimeFillMinutes) > 0)
+      if (filled.length === 0) return
+
+      // Gearbeitete Zeit des Tages ohne die Auffüllung – nur sie entscheidet,
+      // wie viel noch bis zur Regelarbeitszeit fehlt.
+      const workedMinutes = workedMinutesForDay(
+        entries.map((entry) => ({ ...entry, overtimeFillMinutes: 0 })),
+        dateKey
+      )
+      let allowance = Math.max(0, regularMinutesForDateKey(dateKey) - workedMinutes)
+
+      for (const entry of filled) {
+        const current = Math.max(0, Math.round(Number(entry.overtimeFillMinutes) || 0))
+        const keep = Math.min(current, allowance)
+        allowance -= keep
+        if (keep === current) continue
+        await overtimeDayFill.releaseOvertimeDayFill({
+          employeeId,
+          timeEntryId: entry.id,
+          minutes: current - keep
+        })
+      }
+    } catch (error) {
+      console.warn('Auffüllung konnte nicht nachgeführt werden:', error)
+    }
+  }
+
+  /**
    * Berechnet die Überstunden eines Kalendertags neu und passt den Saldo des
    * Mitarbeiters um die Differenz zum bisher gespeicherten Tageswert an.
    * Deckt Ausstempeln, Korrekturen und Nachträge ab (Tages-Summe).
    */
   async recomputeOvertimeForDay(employeeId: string, dateKey: string): Promise<void> {
     if (!employeeId || !dateKey) return
+    await this.reconcileOvertimeDayFill(employeeId, dateKey)
     try {
       const dayOvertime = await this.overtimeMinutesForDay(employeeId, dateKey)
       const employeeRef = doc(db, 'employees', employeeId)
@@ -956,6 +1019,13 @@ class DataServiceClass {
         const reqEnd = this.convertToDate(req.endDate)
         spent += reqStart && reqEnd ? leaveMinutesForRange(reqStart, reqEnd) : 0
       }
+    }
+
+    // Ebenso die Tage, die der Mitarbeiter aus dem Konto auf die
+    // Regelarbeitszeit aufgefüllt hat – sonst gäbe die Neuberechnung ihm die
+    // längst entnommenen Stunden zurück.
+    for (const entry of entries) {
+      spent += Math.max(0, Math.round(Number(entry.overtimeFillMinutes) || 0))
     }
 
     const balance = Math.max(0, earned - spent)
@@ -2444,6 +2514,97 @@ class DataServiceClass {
       minutes,
       workedMinutes
     )
+  }
+
+  // ============ TAG MIT ÜBERSTUNDEN AUFFÜLLEN (data/overtimeDayFill.ts) ============
+
+  /**
+   * Was für einen Kalendertag aus dem Überstundenkonto aufgefüllt werden kann.
+   *
+   * Liefert neben der Rechnung auch den Stempelsatz, der die Buchung tragen
+   * würde (das letzte Ausstempeln des Tages), und ob der Mitarbeiter gerade
+   * noch eingestempelt ist – solange wächst die Tageszeit weiter und eine
+   * Auffüllung wäre sofort wieder falsch.
+   */
+  async getOvertimeDayFillPlan(
+    employeeId: string,
+    dateKey: string
+  ): Promise<OvertimeDayFillPlan> {
+    await this.authReadyPromise
+    const empty: OvertimeDayFillPlan = {
+      ...planDayFill({ dateKey, workedMinutes: 0, balanceMinutes: 0 }),
+      timeEntryId: null,
+      canFill: false
+    }
+    if (!employeeId || !dateKey) return empty
+
+    const [year, month, day] = dateKey.split('-').map(Number)
+    if (!year || !month || !day) return empty
+
+    const entries = await this.getTimeEntriesByEmployeeId(employeeId, {
+      from: new Date(year, month - 1, day, 0, 0, 0, 0),
+      to: new Date(year, month - 1, day, 23, 59, 59, 999)
+    })
+    const dayEntries = entries.filter(
+      (entry) => this.getDateKeyFromValue(entry.clockInTime) === dateKey
+    )
+    const completed = dayEntries.filter((entry) => !!entry.clockOutTime && !entry.isVacationDay)
+    const isClockedIn = dayEntries.some((entry) => !entry.clockOutTime)
+
+    // Die Auffüllung trägt das letzte Ausstempeln des Tages – dort endet der
+    // Arbeitstag, dort schlägt auch der Bericht Überstunden auf.
+    let last: TimeEntry | null = null
+    for (const entry of completed) {
+      if (
+        !last ||
+        this.convertToDate(entry.clockOutTime).getTime() >
+          this.convertToDate(last.clockOutTime).getTime()
+      ) {
+        last = entry
+      }
+    }
+
+    const employee = await this.getEmployeeById(employeeId)
+    const plan = planDayFill({
+      dateKey,
+      workedMinutes: workedMinutesForDay(dayEntries, dateKey),
+      balanceMinutes: Math.max(0, Number(employee?.overtimeBalanceMinutes) || 0)
+    })
+
+    return {
+      ...plan,
+      timeEntryId: last?.id || null,
+      canFill:
+        !!last?.id &&
+        canOfferDayFill(plan, { isClockedIn, hasCompletedEntry: completed.length > 0 })
+    }
+  }
+
+  /**
+   * Bucht die Auffüllung eines Tages aus dem Überstundenkonto.
+   *
+   * Der Plan wird unmittelbar vor der Buchung frisch gerechnet, damit nicht
+   * ein veralteter Wert aus dem Browser gebucht wird (z. B. wenn der Admin in
+   * der Zwischenzeit eine Zeit korrigiert hat).
+   *
+   * @returns die gebuchten Minuten und der neue Kontostand
+   */
+  async fillDayWithOvertime(
+    employeeId: string,
+    dateKey: string
+  ): Promise<{ filledMinutes: number; balanceMinutes: number }> {
+    const plan = await this.getOvertimeDayFillPlan(employeeId, dateKey)
+    if (!plan.canFill || !plan.timeEntryId) {
+      throw new Error('Für diesen Tag gibt es nichts aufzufüllen.')
+    }
+
+    const result = await overtimeDayFill.bookOvertimeDayFill({
+      employeeId,
+      timeEntryId: plan.timeEntryId,
+      minutes: plan.fillMinutes,
+      regularMinutes: plan.regularMinutes
+    })
+    return { filledMinutes: plan.fillMinutes, balanceMinutes: result.balanceMinutes }
   }
 
   /** Im Monat geleistete Arbeitszeit – Grundlage der Abrechnungsmeldung. */

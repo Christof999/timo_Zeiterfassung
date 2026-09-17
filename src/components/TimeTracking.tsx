@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
+import type { OvertimeDayFillPlan } from '../services/dataService'
 import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
 import ManualTimeEntryModal from './ManualTimeEntryModal'
@@ -12,10 +13,13 @@ import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
 import OvertimeReminderModal from './OvertimeReminderModal'
+import OvertimeDayFillModal from './OvertimeDayFillModal'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
 import { currentMonthKey } from '../utils/overtimeMonth'
+import { formatDateForInputLocal } from '../utils/dateUtils'
+import { minutesToHoursLabel } from '../utils/hoursInput'
 import {
   readDismissedBroadcastAt,
   readDismissedMonth,
@@ -29,6 +33,24 @@ import '../styles/TimeTracking.css'
 
 /** Frühestmöglicher Einstempel-Zeitpunkt (06:30 Uhr) in Minuten ab Mitternacht. */
 const EARLIEST_CLOCK_IN_MINUTES = 6 * 60 + 30
+
+/**
+ * Was sich heute aus dem Überstundenkonto auffüllen lässt – null, wenn nichts
+ * anzubieten ist. Bewusst außerhalb der Komponente, damit sowohl der erste
+ * Ladevorgang als auch spätere Aktualisierungen denselben Weg nehmen.
+ */
+const loadDayFillPlan = async (employeeId: string): Promise<OvertimeDayFillPlan | null> => {
+  try {
+    const plan = await DataService.getOvertimeDayFillPlan(
+      employeeId,
+      formatDateForInputLocal(new Date())
+    )
+    return plan.canFill ? plan : null
+  } catch (error) {
+    console.warn('Auffüllbare Stunden konnten nicht ermittelt werden:', error)
+    return null
+  }
+}
 
 /** Synthetisches Projekt-Objekt für Direkt-Buchungen auf einen Kunden (Kleinauftrag). */
 const buildCustomerProject = (customerName?: string): Project => ({
@@ -49,6 +71,9 @@ const TimeTracking: React.FC = () => {
   const [showSickLeaveModal, setShowSickLeaveModal] = useState(false)
   const [showSchoolDayModal, setShowSchoolDayModal] = useState(false)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
+  /** Was sich heute aus dem Überstundenkonto auffüllen lässt (null = nichts). */
+  const [dayFillPlan, setDayFillPlan] = useState<OvertimeDayFillPlan | null>(null)
+  const [showDayFillModal, setShowDayFillModal] = useState(false)
   /** Monatsend-Erinnerung an die Überstunden-Verrechnung (null = kein Hinweis). */
   const [overtimeReminder, setOvertimeReminder] = useState<{
     month: string
@@ -91,6 +116,41 @@ const TimeTracking: React.FC = () => {
       setOvertimeReminder({ month, balanceMinutes })
     } catch (error) {
       console.warn('Überstunden-Erinnerung konnte nicht geprüft werden:', error)
+    }
+  }
+
+  /**
+   * Prüft, ob der heutige Tag unter der Regelarbeitszeit liegt und aus dem
+   * Überstundenkonto aufgefüllt werden kann. Läuft nach dem Laden und nach
+   * jedem Ausstempeln – solange jemand eingestempelt ist, wächst die Tageszeit
+   * noch und der Knopf bleibt aus.
+   */
+  const refreshDayFillPlan = async (employeeId?: string) => {
+    const id = employeeId || currentUser?.id
+    if (!id) return
+    setDayFillPlan(await loadDayFillPlan(id))
+  }
+
+  const handleConfirmDayFill = async () => {
+    if (!currentUser?.id || !dayFillPlan) return
+    try {
+      const { filledMinutes } = await DataService.fillDayWithOvertime(
+        currentUser.id,
+        formatDateForInputLocal(new Date())
+      )
+      setShowDayFillModal(false)
+      setDayFillPlan(null)
+      await refreshEmployeeBalances()
+      await refreshDayFillPlan(currentUser.id)
+      setActivitiesRefreshKey((k) => k + 1)
+      toast.success(
+        `Heute um ${minutesToHoursLabel(filledMinutes)} Std aus dem Überstundenkonto aufgefüllt.`
+      )
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
+      toast.error('Auffüllen fehlgeschlagen: ' + msg)
+      // Der Plan kann veraltet sein (z. B. Korrektur durch den Admin).
+      await refreshDayFillPlan(currentUser.id)
     }
   }
 
@@ -169,6 +229,7 @@ const TimeTracking: React.FC = () => {
 
       // Prüfe auf aktiven Zeiteintrag
       const timeEntry = await DataService.getCurrentTimeEntry(user.id)
+      loadDayFillPlan(user.id).then(setDayFillPlan)
       if (timeEntry) {
         setCurrentTimeEntry(timeEntry)
         const project = timeEntry.customerId && !timeEntry.projectId
@@ -238,6 +299,8 @@ const TimeTracking: React.FC = () => {
         : await DataService.getProjectById(target.projectId!)
       setCurrentProject(project)
       setClockInTime(now)
+      // Solange gestempelt wird, wächst die Tageszeit weiter.
+      setDayFillPlan(null)
 
       toast.success('Sie wurden erfolgreich eingestempelt!')
     } catch (error: any) {
@@ -288,6 +351,8 @@ const TimeTracking: React.FC = () => {
     setClockInTime(null)
     setElapsedTime('00:00:00')
     refreshEmployeeBalances()
+    // Erst jetzt steht die Tageszeit fest – der Auffüll-Knopf kann erscheinen.
+    refreshDayFillPlan()
   }
 
   // Aktuellen Überstunden-/Urlaubsstand frisch laden (z. B. nach dem Ausstempeln)
@@ -420,6 +485,24 @@ const TimeTracking: React.FC = () => {
           </div>
         </div>
 
+        {!currentTimeEntry && dayFillPlan && (
+          <div className="day-fill-banner">
+            <p className="day-fill-banner-text">
+              Heute sind <strong>{minutesToHoursLabel(dayFillPlan.workedMinutes)} Std</strong> von{' '}
+              <strong>{minutesToHoursLabel(dayFillPlan.regularMinutes)} Std</strong> erfasst. Sie
+              können {minutesToHoursLabel(dayFillPlan.fillMinutes)} Std aus Ihrem
+              Überstundenkonto auffüllen.
+            </p>
+            <button
+              type="button"
+              className="day-fill-btn"
+              onClick={() => setShowDayFillModal(true)}
+            >
+              Tag mit Überstunden auffüllen
+            </button>
+          </div>
+        )}
+
         {/* Abwesenheiten: Krankmeldung für alle, Ausbildungstag nur für Azubis */}
         <div className="absence-actions">
           <button
@@ -503,6 +586,14 @@ const TimeTracking: React.FC = () => {
             employee={currentUser}
             onClose={() => setShowRetroDocListModal(false)}
             onDocumentationSaved={() => setActivitiesRefreshKey((k) => k + 1)}
+          />
+        )}
+
+        {showDayFillModal && dayFillPlan && (
+          <OvertimeDayFillModal
+            plan={dayFillPlan}
+            onConfirm={handleConfirmDayFill}
+            onClose={() => setShowDayFillModal(false)}
           />
         )}
 

@@ -5,21 +5,16 @@ import { formatDateForInputLocal } from './dateUtils'
 import { roundTimeToStep } from './timeRounding'
 
 /**
- * Im Monat geleistete Arbeitszeit in Minuten.
+ * Berichtszeilen aus abgeschlossenen Stempelsätzen – die gemeinsame Basis für
+ * Monats- und Tagessummen.
  *
- * Bewusst über dieselben Bausteine wie der Zeiterfassungsbericht gerechnet –
- * 15-Minuten-Raster und 10-Std-Deckel. Sonst sähe der Mitarbeiter eine andere
- * Zahl als das Lohnbüro, und beide würden über dieselben Stunden streiten.
- *
- * Die gesetzliche Pause kürzt die Arbeitszeit dabei NICHT: sie wird auf die
- * ausgewiesene Anwesenheit draufgerechnet (siehe workTimeRules.ts). Wer
- * faktisch durcharbeitet, verliert die Stunden also nicht.
- *
- * Urlaub, Feiertag und Krankheit zählen nicht mit: gefragt ist geleistete
- * Arbeit, nicht bezahlte Abwesenheit. Laufende Stempelungen ohne Gehen-Zeit
- * bleiben ebenfalls außen vor.
+ * `keepDateKey` entscheidet, welche Kalendertage einfließen. Urlaub und noch
+ * offene Stempelungen fallen grundsätzlich heraus.
  */
-export const workedMinutesForMonth = (entries: TimeEntry[], monthKey: string): number => {
+const buildWorkTimeRows = (
+  entries: TimeEntry[],
+  keepDateKey: (dateKey: string) => boolean
+): WorkTimeRowInput[] => {
   const orderByDate = new Map<string, number>()
   const rows: WorkTimeRowInput[] = []
 
@@ -30,7 +25,7 @@ export const workedMinutesForMonth = (entries: TimeEntry[], monthKey: string): n
     if (!clockIn || !clockOut) continue
 
     const dateKey = formatDateForInputLocal(clockIn)
-    if (dateKey.slice(0, 7) !== monthKey) continue
+    if (!keepDateKey(dateKey)) continue
 
     const order = orderByDate.get(dateKey) || 0
     orderByDate.set(dateKey, order + 1)
@@ -47,8 +42,42 @@ export const workedMinutesForMonth = (entries: TimeEntry[], monthKey: string): n
     })
   }
 
-  if (rows.length === 0) return 0
+  return rows
+}
 
+/** Summe der gesetzlich anrechenbaren Arbeitszeit der übergebenen Zeilen. */
+const legalWorkMinutes = (rows: WorkTimeRowInput[]): number => {
+  if (rows.length === 0) return 0
   const result = applyWorkTimeRules(rows, { regularDayMinutes: null })
   return result.days.reduce((sum, day) => sum + day.legalWorkMinutes, 0)
 }
+
+/**
+ * Im Monat geleistete Arbeitszeit in Minuten.
+ *
+ * Bewusst über dieselben Bausteine wie der Zeiterfassungsbericht gerechnet –
+ * 15-Minuten-Raster und 10-Std-Deckel. Sonst sähe der Mitarbeiter eine andere
+ * Zahl als das Lohnbüro, und beide würden über dieselben Stunden streiten.
+ *
+ * Die gesetzliche Pause kürzt die Arbeitszeit dabei NICHT: sie wird auf die
+ * ausgewiesene Anwesenheit draufgerechnet (siehe workTimeRules.ts). Wer
+ * faktisch durcharbeitet, verliert die Stunden also nicht.
+ *
+ * Aus dem Überstundenkonto aufgefüllte Minuten zählen mit (sie stecken in
+ * `entryCreditMinutes`): sie wurden dem Konto entnommen und sollen im Monat
+ * abgerechnet werden können. Urlaub, Feiertag und Krankheit zählen dagegen
+ * nicht mit – gefragt ist geleistete Arbeit, nicht bezahlte Abwesenheit.
+ * Laufende Stempelungen ohne Gehen-Zeit bleiben ebenfalls außen vor.
+ */
+export const workedMinutesForMonth = (entries: TimeEntry[], monthKey: string): number =>
+  legalWorkMinutes(buildWorkTimeRows(entries, (dateKey) => dateKey.slice(0, 7) === monthKey))
+
+/**
+ * An einem Kalendertag ("YYYY-MM-DD") geleistete Arbeitszeit in Minuten –
+ * dieselbe Rechnung wie im Monat, nur auf einen Tag eingegrenzt.
+ *
+ * Grundlage für „Tag mit Überstunden auffüllen": bereits gebuchte
+ * Auffüllungen sind enthalten, damit ein Tag nicht zweimal aufgefüllt wird.
+ */
+export const workedMinutesForDay = (entries: TimeEntry[], dateKey: string): number =>
+  legalWorkMinutes(buildWorkTimeRows(entries, (key) => key === dateKey))

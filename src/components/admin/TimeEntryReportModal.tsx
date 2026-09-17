@@ -4,7 +4,8 @@ import {
   convertToDate,
   workMinutesFromOriginalEntry,
   minutesToHoursLabel,
-  entryCreditMinutes
+  entryCreditMinutes,
+  entryOvertimeFillMinutes
 } from './tabs/reports/reportUtils'
 import '../../styles/Modal.css'
 import '../../styles/EmployeeTimeEntries.css'
@@ -61,7 +62,10 @@ const TimeEntryReportModal: React.FC<TimeEntryReportModalProps> = ({ entry, proj
   const clockOut = entry.clockOutTime ? convertToDate(entry.clockOutTime) : null
   const pauseMinutes = Math.round((entry.pauseTotalTime || 0) / 60000)
   const workMinutes = workMinutesFromOriginalEntry(entry)
-  const creditMinutes = entryCreditMinutes(entry)
+  // Getrennt ausweisen: Fahrtzeit ist gearbeitet, aufgefüllte Zeit kommt aus
+  // dem Überstundenkonto. `entryCreditMinutes` enthält beides.
+  const fillMinutes = entryOvertimeFillMinutes(entry)
+  const travelCreditMinutes = entryCreditMinutes(entry) - fillMinutes
 
   const whereLabel = entry.projectId
     ? project?.name || 'Projekt'
@@ -100,10 +104,17 @@ const TimeEntryReportModal: React.FC<TimeEntryReportModalProps> = ({ entry, proj
             <dt>Arbeitszeit (netto)</dt>
             <dd><strong>{minutesToHoursLabel(workMinutes)} h</strong></dd>
 
-            {creditMinutes > 0 && (
+            {travelCreditMinutes > 0 && (
               <>
                 <dt>Rückfahrt-Gutschrift</dt>
-                <dd>{creditMinutes} Min</dd>
+                <dd>{travelCreditMinutes} Min</dd>
+              </>
+            )}
+
+            {fillMinutes > 0 && (
+              <>
+                <dt>Aus Überstunden aufgefüllt</dt>
+                <dd>{minutesToHoursLabel(fillMinutes)} h</dd>
               </>
             )}
 

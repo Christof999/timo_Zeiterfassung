@@ -329,9 +329,24 @@ export const calculateWorkHours = (
 
 export const msToMinutes = (ms: number): number => Math.round(ms / (1000 * 60))
 
-/** Beim Ausstempeln gutgeschriebene Fahrtzeit laut Entfernungs-Staffel (in Minuten). */
+/** Aus dem Überstundenkonto auf die Regelarbeitszeit aufgefüllte Minuten. */
+export const entryOvertimeFillMinutes = (entry: Pick<TimeEntry, 'overtimeFillMinutes'>): number => {
+  const minutes = Number(entry?.overtimeFillMinutes)
+  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 0
+}
+
+/**
+ * Was einem Stempelsatz über die reine Anwesenheit hinaus als Arbeitszeit
+ * gutgeschrieben wird: die Fahrtzeit laut Entfernungs-Staffel plus die aus dem
+ * Überstundenkonto aufgefüllte Zeit.
+ *
+ * Gilt bewusst nur für den Zeiterfassungsbericht und die Lohnabrechnung. Die
+ * Projekt-Nachkalkulation rechnet direkt mit `getReturnTravelCreditMs` weiter –
+ * aufgefüllte Stunden wurden nicht auf dem Projekt gearbeitet und dürfen seine
+ * Lohnkosten nicht verfälschen.
+ */
 export const entryCreditMinutes = (entry: TimeEntry): number =>
-  msToMinutes(getReturnTravelCreditMs(entry))
+  msToMinutes(getReturnTravelCreditMs(entry)) + entryOvertimeFillMinutes(entry)
 
 export const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMinutes: number): number => {
   if (!clockIn || !clockOut) return 0

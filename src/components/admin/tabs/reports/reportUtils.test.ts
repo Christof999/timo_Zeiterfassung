@@ -9,6 +9,9 @@ import {
   getWeekEnd,
   enumerateDays,
   convertToDate,
+  entryCreditMinutes,
+  entryOvertimeFillMinutes,
+  workMinutesFromOriginalEntry,
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
@@ -57,6 +60,48 @@ describe('convertToDate – liest alle clockInTime-Formate', () => {
     expect(convertToDate(null)).toBeNull()
     expect(convertToDate(undefined)).toBeNull()
     expect(convertToDate('kein-datum')).toBeNull()
+  })
+})
+
+describe('entryCreditMinutes – Fahrtzeit und aufgefüllte Überstunden', () => {
+  const stempelsatz = (extra: Partial<TimeEntry>): TimeEntry =>
+    ({
+      id: 'e1',
+      employeeId: 'm1',
+      projectId: 'p1',
+      clockInTime: new Date(2026, 6, 8, 7, 0),
+      clockOutTime: new Date(2026, 6, 8, 13, 0),
+      pauseTotalTime: 0,
+      ...extra
+    }) as TimeEntry
+
+  it('ist 0 ohne Gutschrift und ohne Auffüllung', () => {
+    expect(entryCreditMinutes(stempelsatz({}))).toBe(0)
+  })
+
+  it('rechnet die Rückfahrt-Gutschrift in Minuten um', () => {
+    expect(entryCreditMinutes(stempelsatz({ returnTravelCreditMs: 30 * 60 * 1000 }))).toBe(30)
+  })
+
+  it('schlägt aus dem Überstundenkonto aufgefüllte Minuten auf', () => {
+    expect(entryCreditMinutes(stempelsatz({ overtimeFillMinutes: 120 }))).toBe(120)
+  })
+
+  it('addiert beides', () => {
+    const entry = stempelsatz({ returnTravelCreditMs: 30 * 60 * 1000, overtimeFillMinutes: 90 })
+    expect(entryCreditMinutes(entry)).toBe(120)
+  })
+
+  it('ignoriert unsinnige Auffüll-Werte', () => {
+    expect(entryOvertimeFillMinutes({ overtimeFillMinutes: -60 })).toBe(0)
+    expect(entryOvertimeFillMinutes({ overtimeFillMinutes: Number.NaN })).toBe(0)
+    expect(entryOvertimeFillMinutes({})).toBe(0)
+  })
+
+  it('hebt die ausgewiesene Arbeitszeit des Tages auf die Regelarbeitszeit', () => {
+    // 07:00–13:00 = 6:00 gestempelt, 2:00 aufgefüllt → 8:00 im Bericht.
+    const entry = stempelsatz({ overtimeFillMinutes: 120 })
+    expect(workMinutesFromOriginalEntry(entry)).toBe(8 * 60)
   })
 })
 
