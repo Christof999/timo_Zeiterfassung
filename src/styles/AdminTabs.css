@@ -285,6 +285,13 @@
   color: var(--text-secondary);
 }
 
+/* Nachbesserung / Lager: Default-Projekte ohne Ertrag */
+.status-badge.overhead {
+  margin-left: 0.5rem;
+  background: var(--warning-light, #FFF3E0);
+  color: var(--warning-color, #B8860B);
+}
+
 .no-data {
   text-align: center;
   padding: var(--spacing-xl);
