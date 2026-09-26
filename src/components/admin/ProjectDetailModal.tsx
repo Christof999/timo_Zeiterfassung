@@ -14,6 +14,8 @@ import { toast } from '../ToastContainer'
 import { MaterialCombobox, type PickOption } from '../MaterialUsageFields'
 import { getFileImageSrc } from '../../utils/fileImageSrc'
 import { getReturnTravelCreditMs } from '../../utils/returnTravel'
+import { offerHoursUsage, quotedLaborHours, sumBookedHours } from '../../utils/offerHours'
+import OfferHoursBar from './OfferHoursBar'
 import { roundedSpanMs } from '../../utils/timeRounding'
 import { collectEntryDocumentation } from '../../utils/entryDocumentation'
 import '../../styles/Modal.css'
@@ -819,6 +821,12 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     )
   }
 
+  const quotedHours = quotedLaborHours(offerPositions)
+  const bookedHours = sumBookedHours(timeEntries)
+  const offerUsage = quotedHours != null ? offerHoursUsage(quotedHours, bookedHours) : null
+  const offerTone =
+    offerUsage == null ? '' : offerUsage.percent > 100 ? 'is-over' : offerUsage.percent >= 85 ? 'is-warning' : ''
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div ref={modalContentRef} className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
@@ -826,6 +834,23 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           <h2>{project.name}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
+
+        {offerUsage != null && !isLoading && (
+          <div className={`offer-hours-card offer-hours-project${offerTone ? ` ${offerTone}` : ''}`}>
+            <div className="offer-hours-card-head">
+              <div className="offer-hours-card-title">
+                <strong>Angebotsstunden</strong>
+                <span>Gebucht von den Stunden aus dem Angebot</span>
+              </div>
+              <span className="offer-hours-card-percent">{offerUsage.percent}%</span>
+            </div>
+            <OfferHoursBar
+              quotedHours={offerUsage.quotedHours}
+              bookedHours={offerUsage.bookedHours}
+              hidePercent
+            />
+          </div>
+        )}
         
         <div
           ref={detailInfoRef}

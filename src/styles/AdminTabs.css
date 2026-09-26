@@ -776,6 +776,27 @@
     content: none;
   }
 
+  /* Angebotsbalken unter dem Projektnamen, über die ganze Kartenbreite */
+  .data-table td[data-label='Angebot'] {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    gap: 8px;
+  }
+
+  .data-table td[data-label='Angebot']::before {
+    flex: none;
+    width: auto;
+  }
+
+  .data-table td[data-label='Angebot'] .offer-hours {
+    max-width: none;
+  }
+
+  .data-table td[data-label='Angebot'] .offer-hours-track {
+    height: 16px;
+  }
+
   /* Aktions-Buttons: volle Breite, untereinander */
   .data-table td.action-buttons {
     flex-direction: column;

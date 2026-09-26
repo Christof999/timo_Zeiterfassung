@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Project } from '../../../types'
 import { isProjectArchivedOrCompleted } from '../../../utils/projectArchive'
+import { bookedHoursByProject, quotedLaborHours } from '../../../utils/offerHours'
 import { isOverheadProject } from '../../../constants/overheadProjects'
 import { toast } from '../../ToastContainer'
 import ProjectModal from '../ProjectModal'
 import ProjectDetailModal from '../ProjectDetailModal'
+import OfferHoursBar from '../OfferHoursBar'
 import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
@@ -17,6 +19,7 @@ interface ProjectsTabProps {
 
 const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
   const [projects, setProjects] = useState<Project[]>([])
+  const [bookedByProject, setBookedByProject] = useState<Map<string, number>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
@@ -34,21 +37,25 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
     )
   }, [projects, searchTerm])
 
-  const loadProjects = async () => {
-    setIsLoading(true)
+  const loadProjects = async (silent = false) => {
+    if (!silent) setIsLoading(true)
     try {
-      const allProjects = await DataService.getAllProjects()
+      const [allProjects, entries] = await Promise.all([
+        DataService.getAllProjects(),
+        DataService.getAllTimeEntries()
+      ])
       const filtered = allProjects.filter((p) =>
         variant === 'archived'
           ? isProjectArchivedOrCompleted(p)
           : !isProjectArchivedOrCompleted(p)
       )
       setProjects(filtered)
+      setBookedByProject(bookedHoursByProject(entries))
     } catch (error) {
       console.error('Fehler beim Laden der Projekte:', error)
       toast.error('Fehler beim Laden der Projekte')
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }
 
@@ -162,11 +169,14 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                     <th>Name</th>
                     <th>Kunde</th>
                     <th>Status</th>
+                    <th>Angebot</th>
                     <th>Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProjects.map((project) => (
+                  {filteredProjects.map((project) => {
+                    const quotedHours = quotedLaborHours(project.offerPositions)
+                    return (
                 <tr key={project.id}>
                   <td data-label="Name">
                     {project.name}
@@ -181,6 +191,16 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                   </td>
                   <td data-label="Kunde">{project.client || '-'}</td>
                   <td data-label="Status">{getStatusBadge(project.status)}</td>
+                  <td data-label="Angebot">
+                    {quotedHours == null ? (
+                      <span className="offer-hours-empty">—</span>
+                    ) : (
+                      <OfferHoursBar
+                        quotedHours={quotedHours}
+                        bookedHours={bookedByProject.get(project.id) || 0}
+                      />
+                    )}
+                  </td>
                   <td className="action-buttons" data-label="">
                     <button 
                       onClick={() => handleView(project)} 
@@ -209,7 +229,8 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
                     )}
                   </td>
                 </tr>
-              ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -234,6 +255,7 @@ const ProjectsTab: React.FC<ProjectsTabProps> = ({ variant = 'active' }) => {
           onClose={() => {
             setShowDetailModal(false)
             setSelectedProject(null)
+            loadProjects(true)
           }}
         />
       )}
