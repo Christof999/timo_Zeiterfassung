@@ -4,6 +4,7 @@ import { generateLvFromDescription, transcribe } from '../../services/inspection
 import { getArticleCatalog } from '../../services/data/inspections'
 import { bestArticleMatch, type CatalogArticle } from '../../utils/articleMatch'
 import { blobToDataUrl } from '../../utils/imageFile'
+import { buildLvText, isUsableLvText } from '../../utils/lvText'
 import { newId } from '../../utils/roomGeometry'
 import SearchableSelect from '../SearchableSelect'
 import { toast } from '../ToastContainer'
@@ -107,7 +108,10 @@ const LvSection: React.FC<LvSectionProps> = ({ description, lvTitle, lvText, pos
       const result = await generateLvFromDescription(description, roomSummaries, catalog)
       // Was die KI nicht zuordnen konnte, noch einmal selbst gegen den Stamm prüfen.
       const { positions: checked } = linkArticles(result.positions, catalog)
-      onChange({ lvTitle: result.title, lvText: result.text, lvPositions: checked })
+      // Ohne brauchbaren Text der KI den Text aus den Positionen bauen – ins Angebot
+      // soll immer ein vollständiges Leistungsverzeichnis.
+      const text = isUsableLvText(result.text) ? result.text : buildLvText(result.title, checked)
+      onChange({ lvTitle: result.title, lvText: text, lvPositions: checked })
       const withArticle = checked.filter((p) => p.articleId).length
       toast.success(`${checked.length} Positionen erzeugt, ${withArticle} davon mit Artikel aus dem Stamm`)
     } catch (error: any) {
@@ -186,8 +190,17 @@ const LvSection: React.FC<LvSectionProps> = ({ description, lvTitle, lvText, pos
       )}
 
       {(lvText || positions.length > 0) && (
-        <details className="lv-text" open={!!lvText}>
-          <summary>Leistungsbeschreibung (Text fürs Angebot)</summary>
+        <details className="lv-text" open>
+          <summary>Leistungsbeschreibung – kommt oben ins Angebot</summary>
+          {!isUsableLvText(lvText) && positions.length > 0 && (
+            <button
+              type="button"
+              className="btn secondary-btn full-width"
+              onClick={() => onChange({ lvText: buildLvText(lvTitle, positions) })}
+            >
+              Aus den Positionen erstellen
+            </button>
+          )}
           <textarea
             rows={12}
             value={lvText || ''}
