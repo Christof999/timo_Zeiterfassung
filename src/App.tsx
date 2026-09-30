@@ -17,6 +17,7 @@ import './styles/App.css'
 // Nachkalkulation und KI-Chat nicht mit herunterladen.
 const AdminLogin = lazy(() => import('./components/admin/AdminLogin'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
+const InspectionEditor = lazy(() => import('./components/besichtigung/InspectionEditor'))
 
 function App() {
   const [isLoading, setIsLoading] = useState(true)
@@ -71,6 +72,7 @@ function App() {
           <Route path="/overtime" element={<OvertimeSettlements />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/besichtigung/:id" element={<InspectionEditor />} />
           <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>

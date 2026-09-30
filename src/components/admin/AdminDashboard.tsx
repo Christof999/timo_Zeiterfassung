@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DataService } from '../../services/dataService'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
@@ -15,6 +15,7 @@ import HeroIntegrationTab from './tabs/HeroIntegrationTab'
 // TEMPORÄR: Diagnose-Seite (Projekt-/Buchungszuordnung). Zum Entfernen diesen
 // Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
 import DiagnosticsTab from './tabs/DiagnosticsTab'
+import InspectionsTab from '../besichtigung/InspectionsTab'
 import { allowedAdminTabs, isTabAllowedForRole, resolveAdminRole } from '../../utils/adminRole'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
@@ -30,6 +31,7 @@ type TabType =
   | 'projects'
   | 'projectsArchived'
   | 'customers'
+  | 'inspections'
   | 'material'
   | 'costing'
   | 'hero'
@@ -38,7 +40,11 @@ type TabType =
   | 'diagnostics'
 
 const AdminDashboard: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<TabType>('overview')
+  const location = useLocation()
+  // Zurück aus einer Besichtigung landet man wieder in deren Liste.
+  const [currentTab, setCurrentTab] = useState<TabType>(
+    () => ((location.state as { tab?: TabType } | null)?.tab) || 'overview'
+  )
   const [currentAdmin, setCurrentAdmin] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -208,6 +214,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'projects' as TabType, label: 'Projekte' },
     { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
     { id: 'customers' as TabType, label: 'Kunden' },
+    { id: 'inspections' as TabType, label: 'Besichtigungen' },
     { id: 'material' as TabType, label: 'Material' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
     ...(HERO_INTEGRATION_UI_ENABLED
@@ -381,6 +388,9 @@ const AdminDashboard: React.FC = () => {
           {isTabAllowedForRole(adminRole, 'projects') && currentTab === 'projects' && <ProjectsTab variant="active" />}
           {isTabAllowedForRole(adminRole, 'projectsArchived') && currentTab === 'projectsArchived' && <ProjectsTab variant="archived" />}
           {isTabAllowedForRole(adminRole, 'customers') && currentTab === 'customers' && <CustomersTab />}
+          {isTabAllowedForRole(adminRole, 'inspections') && currentTab === 'inspections' && (
+            <InspectionsTab adminName={currentAdmin.name || currentAdmin.username} />
+          )}
           {isTabAllowedForRole(adminRole, 'material') && currentTab === 'material' && <MaterialTypesTab />}
           {isTabAllowedForRole(adminRole, 'costing') && currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {isTabAllowedForRole(adminRole, 'hero') && currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
