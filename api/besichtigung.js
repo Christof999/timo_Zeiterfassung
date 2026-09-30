@@ -19,6 +19,8 @@ const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
 /** Bilder werden nur aus dem eigenen Firebase Storage nachgeladen, nicht von beliebigen Adressen. */
 const ALLOWED_IMAGE_HOSTS = ['firebasestorage.googleapis.com', 'storage.googleapis.com']
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+/** Mehr Artikel blähen den Prompt auf, ohne die Zuordnung besser zu machen. */
+const MAX_ARTICLES = 800
 
 function assertEnv() {
   const missing = requiredEnv.filter((name) => !process.env[name])
@@ -74,21 +76,29 @@ function parts(data) {
 
 const LV_INSTRUCTION = `Du erstellst Leistungsverzeichnisse für einen deutschen Fliesenleger-Meisterbetrieb, der auch Bäder komplett saniert.
 
-Eingabe: die Notizen des Handwerkers aus der Besichtigung beim Kunden, dazu – falls vorhanden – die gemessenen Räume mit Flächen.
+Eingabe: die Notizen des Handwerkers aus der Besichtigung beim Kunden, dazu – falls vorhanden – die gemessenen Räume mit Flächen und der Artikelstamm des Betriebs.
 
-Aufgabe: Mache daraus Positionen für ein Angebot.
+Aufgabe 1 – text: eine ausformulierte Leistungsbeschreibung für das Anschreiben des Angebots.
+- Erste Zeile: dieselbe Überschrift wie title.
+- Danach nummerierte Abschnitte: Zeile "<Nummer>. <Titel>", darunter zwei bis vier Sätze, die anschaulich beschreiben, was ausgeführt wird, wie es ausgeführt wird und worauf der Betrieb dabei achtet (Untergrund, Abdichtung, Gefälle, Fugenbild, saubere Anschlüsse, Schutz der Wohnung, Entsorgung).
+- Fachlich korrekt, wertig und für den Kunden verständlich, in der dritten Form ("Die vorhandenen Fliesen werden …"). Keine Anrede, keine Grußformel, keine Preise, keine Mengen, keine Markdown-Zeichen wie ** oder #.
+- Die Abschnitte folgen dem Ablauf auf der Baustelle, von der Einrichtung bis zur Reinigung.
+
+Aufgabe 2 – positions: die Positionen für das Angebot.
 - Jede Position hat einen Abschnitt (group), einen Kurztext (shortText, max. 70 Zeichen), einen Langtext (longText, ein bis zwei Sätze in der im Bauwesen üblichen Sprache: "fachgerecht verlegen", "einschließlich Zuschnitt"), eine Menge (quantity) und eine Einheit (unit).
 - Einheiten: "m²", "m" (laufende Meter), "Stk", "psch" (pauschal), "h".
 - Mengen aus den Raummaßen ableiten: Boden = Bodenfläche, Wand = Wandfläche (bei Teilhöhen anteilig), Sockel = Umfang. Ist eine Menge nicht ableitbar, quantity = null.
 - Baustelleneinrichtung am Anfang und Baustellenreinigung am Ende ergänzen (je 1 psch).
 - Alles, was in den Notizen steht, muss sich wiederfinden. Nichts erfinden, was dort nicht steht, außer fachlich zwingend nötigen Arbeitsschritten (z. B. Grundierung vor Abdichtung).
 - KEINE Preise.
-- title: "Leistungsverzeichnis - <Gewerk> <Raum/Ort>".`
+- title: "Leistungsverzeichnis - <Gewerk> <Raum/Ort>".
+- articleId: Passt ein Artikel aus dem Artikelstamm fachlich zur Position, trage seine ID ein – exakt wie in der Liste – und übernimm die Einheit des Artikels. Nur eindeutige Treffer zuordnen, sonst articleId = null. Niemals eine ID erfinden.`
 
 const LV_SCHEMA = {
   type: 'OBJECT',
   properties: {
     title: { type: 'STRING' },
+    text: { type: 'STRING' },
     positions: {
       type: 'ARRAY',
       items: {
@@ -98,18 +108,35 @@ const LV_SCHEMA = {
           shortText: { type: 'STRING' },
           longText: { type: 'STRING' },
           quantity: { type: 'NUMBER', nullable: true },
-          unit: { type: 'STRING' }
+          unit: { type: 'STRING' },
+          articleId: { type: 'STRING', nullable: true }
         },
         required: ['shortText', 'unit']
       }
     }
   },
-  required: ['title', 'positions']
+  required: ['title', 'text', 'positions']
+}
+
+/** Markdown-Reste entfernen, falls das Modell trotz Ansage welche schickt. */
+function cleanText(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^[ \t]*#+[ \t]*/gm, '')
+    .replace(/\*+/g, '')
+    .trim()
 }
 
 async function generateLv(body) {
   const description = typeof body.description === 'string' ? body.description.trim() : ''
   const rooms = Array.isArray(body.rooms) ? body.rooms.filter((r) => typeof r === 'string') : []
+  // Artikelstamm: nur, was die KI zum Zuordnen braucht. Die Liste kommt vom
+  // angemeldeten Client aus der Collection materialTypes.
+  const articles = (Array.isArray(body.articles) ? body.articles : [])
+    .filter((a) => a && typeof a.id === 'string' && typeof a.name === 'string')
+    .slice(0, MAX_ARTICLES)
+    .map((a) => ({ id: a.id, name: a.name.slice(0, 120), unit: String(a.unit || '').slice(0, 20) }))
+  const articleById = new Map(articles.map((a) => [a.id, a]))
   if (description.length < 10) {
     return { status: 400, body: { success: false, error: 'Bitte zuerst beschreiben, was gemacht werden soll.' } }
   }
@@ -119,7 +146,10 @@ async function generateLv(body) {
 
   const userText = [
     `Notizen aus der Besichtigung:\n${description}`,
-    rooms.length ? `Gemessene Räume:\n${rooms.map((r) => `- ${r}`).join('\n')}` : 'Es wurden noch keine Räume gemessen.'
+    rooms.length ? `Gemessene Räume:\n${rooms.map((r) => `- ${r}`).join('\n')}` : 'Es wurden noch keine Räume gemessen.',
+    articles.length
+      ? `Artikelstamm (ID | Name | Einheit):\n${articles.map((a) => `${a.id} | ${a.name} | ${a.unit}`).join('\n')}`
+      : 'Es ist kein Artikelstamm hinterlegt – articleId ist immer null.'
   ].join('\n\n')
 
   let lastError = null
@@ -129,7 +159,7 @@ async function generateLv(body) {
         system_instruction: { parts: [{ text: LV_INSTRUCTION }] },
         contents: [{ role: 'user', parts: [{ text: userText }] }],
         generationConfig: {
-          temperature: 0.3,
+          temperature: 0.4,
           responseMimeType: 'application/json',
           responseSchema: LV_SCHEMA
         }
@@ -138,17 +168,30 @@ async function generateLv(body) {
       const parsed = JSON.parse(text)
       const positions = (Array.isArray(parsed.positions) ? parsed.positions : [])
         .filter((p) => p && typeof p.shortText === 'string' && p.shortText.trim())
-        .map((p) => ({
-          group: typeof p.group === 'string' ? p.group.trim() : '',
-          shortText: p.shortText.trim(),
-          longText: typeof p.longText === 'string' ? p.longText.trim() : '',
-          quantity: typeof p.quantity === 'number' && isFinite(p.quantity) ? Math.round(p.quantity * 100) / 100 : null,
-          unit: typeof p.unit === 'string' && p.unit.trim() ? p.unit.trim() : 'psch'
-        }))
+        .map((p) => {
+          // Nur IDs übernehmen, die es wirklich gibt – erfundene fallen hier raus.
+          const article = typeof p.articleId === 'string' ? articleById.get(p.articleId.trim()) : undefined
+          return {
+            group: typeof p.group === 'string' ? p.group.trim() : '',
+            shortText: p.shortText.trim(),
+            longText: typeof p.longText === 'string' ? p.longText.trim() : '',
+            quantity: typeof p.quantity === 'number' && isFinite(p.quantity) ? Math.round(p.quantity * 100) / 100 : null,
+            unit: article?.unit || (typeof p.unit === 'string' && p.unit.trim() ? p.unit.trim() : 'psch'),
+            ...(article ? { articleId: article.id, articleName: article.name } : {})
+          }
+        })
       if (positions.length === 0) {
         return { status: 502, body: { success: false, error: 'Die KI hat keine Positionen geliefert. Bitte die Beschreibung ergänzen.' } }
       }
-      return { status: 200, body: { success: true, title: String(parsed.title || 'Leistungsverzeichnis'), positions } }
+      return {
+        status: 200,
+        body: {
+          success: true,
+          title: String(parsed.title || 'Leistungsverzeichnis'),
+          text: cleanText(typeof parsed.text === 'string' ? parsed.text : ''),
+          positions
+        }
+      }
     } catch (error) {
       lastError = error
       // Nur ein nicht freigeschaltetes Modell rechtfertigt den nächsten Versuch.

@@ -702,3 +702,46 @@
   gap: 4px 12px;
   align-items: center;
 }
+
+.lv-text summary {
+  cursor: pointer;
+  min-height: 36px;
+  font-weight: var(--font-weight-medium);
+}
+
+.lv-text textarea {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 15px !important;
+}
+
+.lv-check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-light);
+  font-size: var(--font-size-sm);
+}
+
+.lv-check.complete { background: var(--success-light); }
+
+.lv-article {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px 2px 2.2em;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.lv-article.linked { color: var(--success-color); }
+.lv-article.free { color: var(--warning-color); }
+.lv-article.missing { color: var(--danger-color); }

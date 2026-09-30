@@ -2,6 +2,7 @@ import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, updateDoc } from '
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes, uploadString } from 'firebase/storage'
 import { db, storage } from '../firebaseConfig'
 import type { Inspection } from '../../types/inspection'
+import type { CatalogArticle } from '../../utils/articleMatch'
 import { roomSummary } from '../../utils/roomGeometry'
 import { authReady, convertToDate } from './shared'
 
@@ -125,4 +126,32 @@ export async function deleteInspectionImage(storagePath?: string): Promise<void>
   if (!storagePath) return
   await authReady
   await deleteObject(storageRef(storage, storagePath)).catch(() => undefined)
+}
+
+/**
+ * Der Artikelstamm fürs Leistungsverzeichnis. Er liegt in `materialTypes` und
+ * wird vom Rechnungsprogramm gepflegt (Felder `unit`, `articleNumber`,
+ * `parentId`); die Zeiterfassung selbst kennt davon nur Name und Einheit.
+ * Variationen tragen den Namen des Hauptartikels vorne, sonst hieße eine
+ * Variation nur „60 × 60“.
+ */
+export async function getArticleCatalog(): Promise<CatalogArticle[]> {
+  await authReady
+  const snapshot = await getDocs(collection(db, 'materialTypes'))
+  const raw = snapshot.docs
+    .map((d) => ({ ...(d.data() as Record<string, any>), id: d.id }) as Record<string, any>)
+    .filter((m) => m.isActive !== false && String(m.name || '').trim())
+  const nameById = new Map(raw.map((m) => [m.id, String(m.name).trim()]))
+  return raw
+    .map((m) => {
+      const parentName = m.parentId ? nameById.get(m.parentId) : undefined
+      const name = String(m.name).trim()
+      return {
+        id: m.id,
+        name: parentName && !name.startsWith(parentName) ? `${parentName} – ${name}` : name,
+        unit: String(m.unit || m.unitLabel || '').trim(),
+        ...(m.articleNumber ? { articleNumber: String(m.articleNumber) } : {})
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }

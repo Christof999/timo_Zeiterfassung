@@ -2,6 +2,7 @@ import { auth } from './firebaseConfig'
 import { authReady } from './data/shared'
 import type { LvPosition } from '../types/inspection'
 import { newId } from '../utils/roomGeometry'
+import type { CatalogArticle } from '../utils/articleMatch'
 
 // Aufrufe der KI-Funktionen für die Besichtigung (/api/besichtigung).
 // Der Gemini-Schlüssel liegt nur auf dem Server.
@@ -35,14 +36,16 @@ async function post<T>(path: string, body: Record<string, unknown>): Promise<T> 
 
 export async function generateLvFromDescription(
   description: string,
-  roomSummaries: string[]
-): Promise<{ title: string; positions: LvPosition[] }> {
-  const data = await post<{ title: string; positions: Omit<LvPosition, 'id'>[] }>('/api/besichtigung', {
+  roomSummaries: string[],
+  articles: CatalogArticle[]
+): Promise<{ title: string; text: string; positions: LvPosition[] }> {
+  const data = await post<{ title: string; text: string; positions: Omit<LvPosition, 'id'>[] }>('/api/besichtigung', {
     mode: 'lv',
     description,
-    rooms: roomSummaries
+    rooms: roomSummaries,
+    articles: articles.map(({ id, name, unit }) => ({ id, name, unit }))
   })
-  return { title: data.title, positions: data.positions.map((p) => ({ ...p, id: newId('pos') })) }
+  return { title: data.title, text: data.text || '', positions: data.positions.map((p) => ({ ...p, id: newId('pos') })) }
 }
 
 export interface VisualizeSurface {

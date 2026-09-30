@@ -294,6 +294,7 @@ const InspectionEditor: React.FC = () => {
         <LvSection
           description={inspection.description}
           lvTitle={inspection.lvTitle}
+          lvText={inspection.lvText}
           positions={inspection.lvPositions}
           roomSummaries={roomSummaries}
           onChange={update}

@@ -85,6 +85,10 @@ export interface LvPosition {
   longText?: string
   quantity: number | null
   unit: string
+  /** Artikel aus dem Artikelstamm (Collection materialTypes), falls zugeordnet */
+  articleId?: string
+  /** Name des Artikels zum Zeitpunkt der Zuordnung – zur Anzeige */
+  articleName?: string
 }
 
 export interface InspectionGeo {
@@ -107,6 +111,8 @@ export interface Inspection {
   geo?: InspectionGeo
   description: string
   lvTitle?: string
+  /** Ausformulierte Leistungsbeschreibung – wird zum Anschreiben des Angebots */
+  lvText?: string
   lvPositions: LvPosition[]
   rooms: InspectionRoom[]
   /** Beim Speichern abgeleitet, z. B. „Bad: Bodenfläche 6,20 m² …“ – fürs Rechnungsprogramm */
