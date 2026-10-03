@@ -113,6 +113,24 @@
   border-color: var(--primary-color);
 }
 
+/* Stunden und Minuten nebeneinander, je ein reines Ziffernfeld */
+.overtime-time-fields {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.overtime-time-fields input {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+}
+
+.overtime-time-unit {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
 .overtime-form .form-hint {
   display: block;
   margin-top: var(--spacing-xs);

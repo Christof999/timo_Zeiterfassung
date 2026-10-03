@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { minutesToDecimalHours, minutesToHoursLabel, parseHoursMinutesInput } from './hoursInput'
+import {
+  minutesFromHourMinuteFields,
+  minutesToDecimalHours,
+  minutesToHoursLabel,
+  parseHoursMinutesInput
+} from './hoursInput'
 
 describe('minutesToDecimalHours', () => {
   it('rechnet Minuten in Dezimalstunden mit deutschem Komma um', () => {
@@ -26,5 +31,31 @@ describe('minutesToDecimalHours', () => {
     expect(parseHoursMinutesInput(minutesToDecimalHours(minuten))).toBe(minuten)
     // Die Stunden:Minuten-Schreibweise bleibt daneben unverändert bestehen.
     expect(minutesToHoursLabel(minuten)).toBe('8:30')
+  })
+})
+
+describe('minutesFromHourMinuteFields', () => {
+  it('setzt Stunden und Minuten zusammen', () => {
+    expect(minutesFromHourMinuteFields('152', '40')).toBe(152 * 60 + 40)
+    expect(minutesFromHourMinuteFields('8', '05')).toBe(8 * 60 + 5)
+  })
+
+  it('zählt leere Minuten als 0', () => {
+    expect(minutesFromHourMinuteFields('150', '')).toBe(150 * 60)
+  })
+
+  it('nimmt 0 Std als bewusste Angabe, ein leeres Stundenfeld aber nicht', () => {
+    // Der Fall aus der Praxis: leeres Feld wurde als „0 Std abrechnen" gespeichert.
+    expect(minutesFromHourMinuteFields('0', '0')).toBe(0)
+    expect(minutesFromHourMinuteFields('', '')).toBeNull()
+    expect(minutesFromHourMinuteFields('', '30')).toBeNull()
+  })
+
+  it('lehnt Minuten über 59 und alles außer Ziffern ab', () => {
+    expect(minutesFromHourMinuteFields('152', '60')).toBeNull()
+    // „152,4" wurde früher als 152:24 gelesen, gemeint waren 152:40.
+    expect(minutesFromHourMinuteFields('152,4', '')).toBeNull()
+    expect(minutesFromHourMinuteFields('152:40', '')).toBeNull()
+    expect(minutesFromHourMinuteFields('-1', '0')).toBeNull()
   })
 })

@@ -1697,6 +1697,20 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
           </div>
         )}
 
+        {/* Keine Meldung für den Monat: sonst sucht die Lohnbuchhaltung
+            vergeblich nach „Übernehmen" und weiß nicht, was abgerechnet wird. */}
+        {!overtimeSettlement && periodMonthKey && reportEntries.length > 0 && (
+          <div className="employee-report-note employee-report-note-other no-print">
+            <div className="employee-report-note-text">
+              <h4>Keine Meldung für {monthKeyLabel(periodMonthKey)}</h4>
+              <p>
+                {selectedEmployeeName || 'Der Mitarbeiter'} hat für diesen Monat nichts gemeldet –
+                abgerechnet werden alle gestempelten Stunden, aufs Überstundenkonto geht nichts.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
             haben möchte. Angewendet wird sie erst auf Klick. */}
         {overtimeSettlement && reportEntries.length > 0 && (

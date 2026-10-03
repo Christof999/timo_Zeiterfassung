@@ -6,6 +6,7 @@ import {
   allocateOvertimePayout,
   applyWorkTimeRules,
   MAX_DAILY_WORK_MINUTES,
+  PAYOUT_STEP_MINUTES,
   type WorkTimeAdjustment,
   type WorkTimeDaySummary,
   type WorkTimeRowInput
@@ -556,28 +557,53 @@ export interface ReportSettlementSummary {
  * - Ziel über der gestempelten Zeit → die Differenz wird als ausbezahlte
  *   Überstunden auf die Tage verteilt (bis zur 10-Std-Grenze)
  *
+ * Der Deckel liegt auf dem Viertelstunden-Raster: ein minutengenauer Deckel
+ * träfe das Ziel zwar ebenso, stünde aber als „7,72 Std" an jedem langen Tag
+ * im Nachweis. Was über dem Rasterdeckel noch fehlt, wird in Viertelstunden
+ * der Reihe nach auf die langen Tage gelegt (`dayCapMinutes`) – die Tage
+ * unterscheiden sich so um höchstens eine Viertelstunde, und nur der letzte
+ * Rest unter einer Viertelstunde bleibt als Auszahlung für einen einzelnen Tag.
+ *
  * @param dayMinutes geleistete Minuten je Tag
  * @param targetMinutes gemeldete Gesamtminuten
+ * @param stepMinutes Raster des Tagesdeckels (1 = minutengenau)
  */
 export const planSettlementTarget = (
   dayMinutes: number[],
-  targetMinutes: number
-): { dailyCapMinutes: number; payoutMinutes: number } => {
+  targetMinutes: number,
+  stepMinutes: number = PAYOUT_STEP_MINUTES
+): {
+  /** einheitlicher Grunddeckel */
+  dailyCapMinutes: number
+  /** Deckel je Tag, in der Reihenfolge von `dayMinutes` */
+  dayCapMinutes: number[]
+  payoutMinutes: number
+} => {
+  const raster = Math.max(1, Math.round(stepMinutes))
   const ziel = Math.max(0, Math.round(targetMinutes))
   const summeBei = (deckel: number): number =>
     dayMinutes.reduce((sum, minutes) => sum + Math.min(minutes, deckel), 0)
 
   // Binäre Suche über den Tagesdeckel. Die Summe wächst monoton mit dem
   // Deckel, deshalb ist der größte Deckel mit Summe ≤ Ziel eindeutig.
+  // Gesucht wird in Rasterschritten; der Deckel ist dann `unten * raster`.
   let unten = 0
-  let oben = MAX_DAILY_WORK_MINUTES
+  let oben = Math.floor(MAX_DAILY_WORK_MINUTES / raster)
   while (unten < oben) {
     const mitte = Math.floor((unten + oben + 1) / 2)
-    if (summeBei(mitte) <= ziel) unten = mitte
+    if (summeBei(mitte * raster) <= ziel) unten = mitte
     else oben = mitte - 1
   }
+  const deckel = unten * raster
 
-  return { dailyCapMinutes: unten, payoutMinutes: Math.max(0, ziel - summeBei(unten)) }
+  let rest = Math.max(0, ziel - summeBei(deckel))
+  const dayCapMinutes = dayMinutes.map((minutes) => {
+    if (raster === 1 || rest < raster || minutes - deckel < raster) return deckel
+    rest -= raster
+    return deckel + raster
+  })
+
+  return { dailyCapMinutes: deckel, dayCapMinutes, payoutMinutes: rest }
 }
 
 export interface BuildAdjustedReportOptions {
@@ -813,13 +839,26 @@ export const buildAdjustedReportForTarget = (
   targetMinutes: number
 ): AdjustedReport => {
   const ungedeckelt = buildAdjustedReport(entries, options)
-  const plan = planSettlementTarget(
-    ungedeckelt.days.map((day) => day.legalWorkMinutes),
-    targetMinutes
-  )
-  return buildAdjustedReport(entries, {
-    ...options,
-    regularDayMinutes: plan.dailyCapMinutes,
-    requestedPayoutMinutes: plan.payoutMinutes
-  })
+  const tagesMinuten = ungedeckelt.days.map((day) => day.legalWorkMinutes)
+  const mitRaster = (stepMinutes: number): AdjustedReport => {
+    const plan = planSettlementTarget(tagesMinuten, targetMinutes, stepMinutes)
+    const deckelJeTag = new Map(
+      ungedeckelt.days.map((day, index) => [day.dateKey, plan.dayCapMinutes[index]])
+    )
+    return buildAdjustedReport(entries, {
+      ...options,
+      regularDayMinutes: (dateKey: string) => deckelJeTag.get(dateKey) ?? plan.dailyCapMinutes,
+      requestedPayoutMinutes: plan.payoutMinutes
+    })
+  }
+
+  const imRaster = mitRaster(PAYOUT_STEP_MINUTES)
+  // Liegen Tage selbst nicht auf dem Raster (krumme Pause, Fahrtzeit-
+  // Gutschrift), lässt sich der Rest über dem Rasterdeckel nicht immer
+  // innerhalb der gestempelten Zeit unterbringen. Dann stünde an einem Tag
+  // mehr als geleistet, obwohl gar keine Überstunden ausgezahlt werden – in
+  // dem Fall lieber minutengenau deckeln.
+  const geleistet = tagesMinuten.reduce((sum, minutes) => sum + minutes, 0)
+  if (targetMinutes <= geleistet && imRaster.payoutBeyondActualMinutes > 0) return mitRaster(1)
+  return imRaster
 }

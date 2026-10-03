@@ -4,7 +4,7 @@ import { DataService } from '../services/dataService'
 import type { Employee, OvertimeSettlement } from '../types'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
-import { minutesToHoursLabel, parseHoursMinutesInput } from '../utils/hoursInput'
+import { minutesFromHourMinuteFields, minutesToHoursLabel } from '../utils/hoursInput'
 import { maxSettleableMinutes } from '../utils/overtimeBalance'
 import { monthKeyLabel, previousMonthKey, settleableMonthKeys } from '../utils/overtimeMonth'
 import { pushNotificationService } from '../services/pushNotificationService'
@@ -29,7 +29,9 @@ const OvertimeSettlements: React.FC = () => {
   const [settlements, setSettlements] = useState<OvertimeSettlement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  /** Stunden und Minuten getrennt – siehe minutesFromHourMinuteFields. */
   const [hoursInput, setHoursInput] = useState('')
+  const [minutesInput, setMinutesInput] = useState('')
   /** Benachrichtigungen aufs Handy – ohne Anmeldung erreicht der Admin-Aufruf dieses Gerät nicht. */
   const [pushState, setPushState] = useState<{ supported: boolean; reason?: string; active: boolean }>(
     { supported: false, active: false }
@@ -49,11 +51,23 @@ const OvertimeSettlements: React.FC = () => {
     loadData()
   }, [])
 
-  /** Beim Monatswechsel den gespeicherten Wert dieses Monats ins Feld holen. */
+  /**
+   * Beim Monatswechsel den gespeicherten Wert dieses Monats ins Feld holen.
+   * Ohne Meldung stehen die geleisteten Stunden als Vorschlag drin: ein leeres
+   * Feld wurde sonst mit „Übernehmen" als 0 Std gemeldet, und der ganze Monat
+   * landete auf dem Überstundenkonto statt in der Abrechnung.
+   */
   useEffect(() => {
     const forMonth = settlements.find(entry => entry.month === selectedMonth)
-    setHoursInput(forMonth ? minutesToHoursLabel(forMonth.minutes) : '')
-  }, [selectedMonth, settlements])
+    const vorschlag = forMonth ? forMonth.minutes : workedMinutes
+    if (vorschlag === null) {
+      setHoursInput('')
+      setMinutesInput('')
+      return
+    }
+    setHoursInput(String(Math.floor(vorschlag / 60)))
+    setMinutesInput(String(Math.round(vorschlag % 60)).padStart(2, '0'))
+  }, [selectedMonth, settlements, workedMinutes])
 
   /** Geleistete Stunden des gewählten Monats frisch aus den Stempelzeiten. */
   useEffect(() => {
@@ -147,7 +161,7 @@ const OvertimeSettlements: React.FC = () => {
    */
   const maxSettleable =
     workedMinutes === null ? 0 : maxSettleableMinutes(balanceMinutes, eintragDesMonats, workedMinutes)
-  const eingegebeneMinuten = hoursInput.trim() === '' ? 0 : parseHoursMinutesInput(hoursInput.trim())
+  const eingegebeneMinuten = minutesFromHourMinuteFields(hoursInput, minutesInput)
   /** Positiv = geht aufs Konto, negativ = wird vom Konto ausgezahlt. */
   const kontoBewegung =
     workedMinutes !== null && eingegebeneMinuten !== null
@@ -163,11 +177,23 @@ const OvertimeSettlements: React.FC = () => {
       return
     }
 
-    const trimmed = hoursInput.trim()
-    // Leeres Feld = nichts abrechnen, alle Stunden bleiben auf dem Konto.
-    const minutes = trimmed === '' ? 0 : parseHoursMinutesInput(trimmed)
+    // Ein leeres Feld ist keine Meldung: 0 Std muss ausdrücklich dastehen.
+    if (hoursInput.trim() === '') {
+      toast.error('Bitte die Stunden eintragen, die abgerechnet werden sollen.')
+      return
+    }
+    const minutes = eingegebeneMinuten
     if (minutes === null) {
-      toast.error('Bitte Stunden als „8:30“ oder „8,5“ eingeben.')
+      toast.error('Bitte gültige Stunden und Minuten (0–59) eintragen.')
+      return
+    }
+    if (
+      minutes === 0 &&
+      workedMinutes > 0 &&
+      !confirm(
+        `Wirklich 0 Std für ${monthKeyLabel(selectedMonth)} abrechnen? Dann wird nichts ausgezahlt und alle ${minutesToHoursLabel(workedMinutes)} Std gehen aufs Überstundenkonto.`
+      )
+    ) {
       return
     }
     if (minutes > maxSettleable) {
@@ -270,15 +296,32 @@ const OvertimeSettlements: React.FC = () => {
           </div>
           <div className="form-group">
             <label htmlFor="overtime-hours">Davon abrechnen:</label>
-            <input
-              id="overtime-hours"
-              type="text"
-              inputMode="decimal"
-              value={hoursInput}
-              onChange={(e) => setHoursInput(e.target.value)}
-              placeholder="z. B. 8:30 oder 8,5"
-              disabled={isSaving || workedMinutes === null}
-            />
+            <div className="overtime-time-fields">
+              <input
+                id="overtime-hours"
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                value={hoursInput}
+                onChange={(e) => setHoursInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="152"
+                aria-label="Stunden"
+                disabled={isSaving || workedMinutes === null}
+              />
+              <span className="overtime-time-unit">Std</span>
+              <input
+                id="overtime-minutes"
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                value={minutesInput}
+                onChange={(e) => setMinutesInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="40"
+                aria-label="Minuten"
+                disabled={isSaving || workedMinutes === null}
+              />
+              <span className="overtime-time-unit">Min</span>
+            </div>
             <small className="form-hint">
               Höchstens {minutesToHoursLabel(maxSettleable)} Std:{' '}
               {workedMinutes === null ? '…' : minutesToHoursLabel(workedMinutes)} Std geleistet plus

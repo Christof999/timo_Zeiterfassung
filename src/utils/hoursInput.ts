@@ -36,3 +36,24 @@ export const parseHoursMinutesInput = (value: string): number | null => {
   if (!Number.isFinite(decimal) || decimal < 0) return null
   return Math.round(decimal * 60)
 }
+
+/**
+ * Getrennte Felder „Stunden" und „Minuten" → Minuten. Ungültig → null.
+ *
+ * Für die Abrechnungsmeldung des Mitarbeiters. Ein einzelnes Feld war dort
+ * mehrdeutig: die App zeigt „152:40", die Zifferntastatur des Handys hat aber
+ * nur ein Komma – und „152,40" wurde als 152,4 Std = 152:24 gelesen, der Rest
+ * wanderte unbemerkt aufs Überstundenkonto. Zwei reine Ziffernfelder lassen
+ * diese Lesart gar nicht erst zu.
+ *
+ * Die Stunden müssen dastehen (0 ist eine bewusste Angabe), leere Minuten
+ * zählen als 0.
+ */
+export const minutesFromHourMinuteFields = (hours: string, minutes: string): number | null => {
+  const std = (hours || '').trim()
+  const min = (minutes || '').trim()
+  if (!/^\d{1,4}$/.test(std) || !/^\d{0,2}$/.test(min)) return null
+  const minuten = min === '' ? 0 : Number(min)
+  if (minuten > 59) return null
+  return Number(std) * 60 + minuten
+}
