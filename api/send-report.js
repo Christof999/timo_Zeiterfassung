@@ -1,3 +1,5 @@
+const fs = require('fs')
+const path = require('path')
 const { initializeApp, cert, getApps } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
 
@@ -61,20 +63,46 @@ function withExtension(filename, fallback, extension) {
   return name.toLowerCase().endsWith(extension) ? name : `${name.replace(/\.[^.]{1,5}$/, '')}${extension}`
 }
 
+const PNG_SIGNATUR = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+const istPng = (buffer) => buffer.length > 8 && buffer.subarray(0, 4).equals(PNG_SIGNATUR)
+
+/** Das Logo aus dem Function-Bundle (siehe `includeFiles` in vercel.json). */
+function readBundledLogo() {
+  try {
+    const buffer = fs.readFileSync(path.join(process.cwd(), 'public', 'brand-logo.png'))
+    return istPng(buffer) ? buffer : null
+  } catch {
+    return null
+  }
+}
+
+/** Ausweichweg: das Logo vom eigenen Host holen. */
+async function fetchLogoFromHost(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  if (!host) return null
+  const protocol = host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https'
+  const response = await fetch(`${protocol}://${host}/brand-logo.png`)
+  if (!response.ok) return null
+  const buffer = Buffer.from(await response.arrayBuffer())
+  // Auf einer geschützten Preview leitet Vercel auf die Anmeldeseite um und
+  // antwortet mit 200 und HTML. Das ging als „logo.png" in die Mail und stand
+  // dort als kaputtes Bild – deshalb zählt nur, was wirklich ein PNG ist.
+  return istPng(buffer) ? buffer : null
+}
+
 /**
- * Holt das App-Logo vom eigenen Host, damit es als CID-Anhang in der Mail
- * eingebettet werden kann. Bewusst über den Host des Requests statt über eine
- * fest verdrahtete Domain — so funktioniert es auf Produktion und Preview
- * gleichermaßen. Schlägt es fehl, geht die Mail ohne Logo raus.
+ * Lädt das App-Logo, damit es als CID-Anhang in der Mail eingebettet werden
+ * kann. Zuerst aus dem Bundle – das funktioniert auf Produktion und Preview
+ * gleichermaßen und braucht keinen Netzwerkaufruf. Schlägt beides fehl, geht
+ * die Mail ohne Logo raus.
  */
 async function loadBrandLogo(req) {
   try {
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    if (!host) return null
-    const protocol = host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https'
-    const response = await fetch(`${protocol}://${host}/brand-logo.png`)
-    if (!response.ok) return null
-    const buffer = Buffer.from(await response.arrayBuffer())
+    const buffer = readBundledLogo() || (await fetchLogoFromHost(req))
+    if (!buffer) {
+      console.warn('Logo nicht gefunden, Mail geht ohne Logo raus.')
+      return null
+    }
     return {
       filename: 'logo.png',
       cid: 'brandlogo',
