@@ -217,6 +217,9 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         to,
+        // Das Postfach meldet sich mit seiner eigenen Adresse an; ohne
+        // Anzeigename stünde beim Empfänger nur die nackte Mailadresse.
+        fromName: senderName || 'Fliesen Reislöhner',
         template: 'zeitbericht',
         variables: {
           employeeName: employeeName || 'Mitarbeiter',
