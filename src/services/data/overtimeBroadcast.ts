@@ -21,6 +21,14 @@ export interface OvertimeReminderBroadcast {
 
 const BROADCAST_DOC = { collection: 'integrations', id: 'overtimeReminderBroadcast' }
 
+/**
+ * Gezielte Erinnerung an einen einzelnen Mitarbeiter – ein eigenes Dokument je
+ * Mitarbeiter. Über das gemeinsame Broadcast-Dokument ginge das nicht: die
+ * nächste Erinnerung an einen Kollegen würde es überschreiben, bevor der Erste
+ * die App geöffnet hat.
+ */
+const personalReminderDocId = (employeeId: string): string => `overtimeReminder_${employeeId}`
+
 const toBroadcast = (data: any): OvertimeReminderBroadcast | null => {
   if (!data?.month) return null
   const triggeredAt = convertToDate(data.triggeredAt)
@@ -59,6 +67,34 @@ export function subscribeToOvertimeReminderBroadcast(
         doc(db, BROADCAST_DOC.collection, BROADCAST_DOC.id),
         snap => onBroadcast(snap.exists() ? toBroadcast(snap.data()) : null),
         error => console.warn('Überstunden-Erinnerung: Live-Verbindung fehlgeschlagen:', error)
+      )
+    })
+    .catch(() => {})
+
+  return () => {
+    cancelled = true
+    if (unsubscribe) unsubscribe()
+  }
+}
+
+/**
+ * Hört live auf die gezielte Erinnerung an diesen Mitarbeiter. Gibt die
+ * Abmeldefunktion zurück.
+ */
+export function subscribeToPersonalOvertimeReminder(
+  employeeId: string,
+  onReminder: (reminder: OvertimeReminderBroadcast | null) => void
+): () => void {
+  let unsubscribe: (() => void) | null = null
+  let cancelled = false
+
+  authReady
+    .then(() => {
+      if (cancelled || !employeeId) return
+      unsubscribe = onSnapshot(
+        doc(db, BROADCAST_DOC.collection, personalReminderDocId(employeeId)),
+        snap => onReminder(snap.exists() ? toBroadcast(snap.data()) : null),
+        error => console.warn('Persönliche Erinnerung: Live-Verbindung fehlgeschlagen:', error)
       )
     })
     .catch(() => {})
@@ -109,6 +145,45 @@ export async function triggerOvertimeReminderBroadcast(
     }
   } catch (error: any) {
     // Popup steht bereits – der Push ist der Zusatz, nicht die Hauptsache.
+    return {
+      sent: 0,
+      failed: 0,
+      message: `Popup ausgelöst, aber der Push ist fehlgeschlagen: ${error?.message || 'unbekannter Fehler'}`
+    }
+  }
+}
+
+/**
+ * Erinnert einen einzelnen Mitarbeiter: eigenes Dokument (Popup in der App)
+ * und Push nur an seine Geräte. Gleiche Reihenfolge wie beim Aufruf an alle –
+ * erst das Dokument, dann der Push.
+ */
+export async function triggerPersonalOvertimeReminder(
+  employeeId: string,
+  month: string,
+  triggeredByName?: string
+): Promise<TriggerBroadcastResult> {
+  await authReady
+  if (!employeeId) throw new Error('Kein Mitarbeiter angegeben.')
+  await setDoc(doc(db, BROADCAST_DOC.collection, personalReminderDocId(employeeId)), {
+    month,
+    employeeId,
+    triggeredAt: new Date(),
+    triggeredByName: triggeredByName || null
+  })
+
+  try {
+    const result = await postWithIdToken('/api/push/overtime-reminder', {
+      month,
+      monthLabel: monthKeyLabel(month),
+      employeeIds: [employeeId]
+    })
+    return {
+      sent: Number(result?.sent) || 0,
+      failed: Number(result?.failed) || 0,
+      message: typeof result?.message === 'string' ? result.message : undefined
+    }
+  } catch (error: any) {
     return {
       sent: 0,
       failed: 0,

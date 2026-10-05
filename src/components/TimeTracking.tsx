@@ -17,7 +17,7 @@ import OvertimeDayFillModal from './OvertimeDayFillModal'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
-import { currentMonthKey } from '../utils/overtimeMonth'
+import { currentMonthKey, settleableMonthKeys } from '../utils/overtimeMonth'
 import { formatDateForInputLocal } from '../utils/dateUtils'
 import { minutesToHoursLabel } from '../utils/hoursInput'
 import {
@@ -201,7 +201,37 @@ const TimeTracking: React.FC = () => {
       })
     })
 
-    return unsubscribe
+    // Gezielte Erinnerung des Admins an genau diesen Mitarbeiter. Anders als
+    // beim Aufruf an alle erscheint sie auch, wenn schon eine Meldung vorliegt:
+    // der Admin bittet dann ausdrücklich darum, sie zu prüfen oder zu ändern.
+    const unsubscribePersonal = DataService.subscribeToPersonalOvertimeReminder(
+      employeeId,
+      reminder => {
+        if (
+          !shouldShowBroadcastReminder({
+            broadcastAt: reminder?.triggeredAt || null,
+            hasSettlementForMonth: false,
+            dismissedBroadcastAt: readDismissedBroadcastAt(employeeId)
+          })
+        ) {
+          return
+        }
+        // Das Dokument bleibt liegen. Auf einem neuen Gerät soll es nicht nach
+        // Monaten wieder aufpoppen, wenn sich für den Monat längst nichts mehr
+        // melden lässt.
+        if (!settleableMonthKeys().includes(reminder!.month)) return
+        setOvertimeReminder({
+          month: reminder!.month,
+          balanceMinutes,
+          broadcastAt: reminder!.triggeredAt.getTime()
+        })
+      }
+    )
+
+    return () => {
+      unsubscribe()
+      unsubscribePersonal()
+    }
   }, [currentUser?.id, currentUser?.overtimeBalanceMinutes])
 
   useEffect(() => {

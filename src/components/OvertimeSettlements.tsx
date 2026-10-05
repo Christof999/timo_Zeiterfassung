@@ -168,6 +168,20 @@ const OvertimeSettlements: React.FC = () => {
       ? workedMinutes - eingegebeneMinuten
       : null
 
+  /**
+   * Stundenfeld: nimmt nur Ziffern. Wer „100:45" am Stück tippt oder einfügt,
+   * bekommt die Minuten automatisch ins zweite Feld.
+   */
+  const handleHoursChange = (value: string) => {
+    const amStueck = /^(\d{1,4}):(\d{0,2})$/.exec(value.trim())
+    if (amStueck) {
+      setHoursInput(amStueck[1])
+      setMinutesInput(amStueck[2])
+      return
+    }
+    setHoursInput(value.replace(/\D/g, '').slice(0, 4))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentUser?.id) return
@@ -301,14 +315,14 @@ const OvertimeSettlements: React.FC = () => {
                 id="overtime-hours"
                 type="text"
                 inputMode="numeric"
-                maxLength={4}
+                maxLength={7}
                 value={hoursInput}
-                onChange={(e) => setHoursInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="152"
+                onChange={(e) => handleHoursChange(e.target.value)}
+                placeholder="100"
                 aria-label="Stunden"
                 disabled={isSaving || workedMinutes === null}
               />
-              <span className="overtime-time-unit">Std</span>
+              <span className="overtime-time-colon" aria-hidden="true">:</span>
               <input
                 id="overtime-minutes"
                 type="text"
@@ -316,12 +330,12 @@ const OvertimeSettlements: React.FC = () => {
                 maxLength={2}
                 value={minutesInput}
                 onChange={(e) => setMinutesInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="40"
+                placeholder="45"
                 aria-label="Minuten"
                 disabled={isSaving || workedMinutes === null}
               />
-              <span className="overtime-time-unit">Min</span>
             </div>
+            <small className="form-hint">Format Stunden:Minuten, z. B. 100:45</small>
             <small className="form-hint">
               Höchstens {minutesToHoursLabel(maxSettleable)} Std:{' '}
               {workedMinutes === null ? '…' : minutesToHoursLabel(workedMinutes)} Std geleistet plus

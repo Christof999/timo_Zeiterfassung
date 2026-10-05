@@ -126,9 +126,10 @@
   text-align: right;
 }
 
-.overtime-time-unit {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+.overtime-time-colon {
+  font-size: var(--font-size-xl, 1.25rem);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-color);
 }
 
 .overtime-form .form-hint {

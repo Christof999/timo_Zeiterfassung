@@ -2321,6 +2321,21 @@ class DataServiceClass {
     return overtimeBroadcast.triggerOvertimeReminderBroadcast(month, triggeredByName)
   }
 
+  subscribeToPersonalOvertimeReminder(
+    employeeId: string,
+    onReminder: (reminder: overtimeBroadcast.OvertimeReminderBroadcast | null) => void
+  ): () => void {
+    return overtimeBroadcast.subscribeToPersonalOvertimeReminder(employeeId, onReminder)
+  }
+
+  triggerPersonalOvertimeReminder(
+    employeeId: string,
+    month: string,
+    triggeredByName?: string
+  ): Promise<overtimeBroadcast.TriggerBroadcastResult> {
+    return overtimeBroadcast.triggerPersonalOvertimeReminder(employeeId, month, triggeredByName)
+  }
+
   authenticateAdmin(username: string, password: string): Promise<session.AdminSession | null> {
     return session.authenticateAdmin(username, password)
   }

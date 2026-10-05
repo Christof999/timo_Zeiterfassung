@@ -3,8 +3,9 @@ const { initializeApp, cert, getApps } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 
-// Monatsend-Erinnerung an alle Mitarbeiter: „Bitte abzurechnende Stunden
-// hinterlegen." Wird vom Admin im Zeiterfassungsbericht per Knopf ausgelöst.
+// Monatsend-Erinnerung an die Mitarbeiter: „Bitte abzurechnende Stunden
+// hinterlegen." Wird vom Admin im Zeiterfassungsbericht per Knopf ausgelöst –
+// an alle oder, mit `employeeIds`, gezielt an einzelne.
 //
 // Zwei Wege gehen parallel raus:
 //   1. Push auf die Geräte (diese Function)
@@ -61,7 +62,10 @@ async function authorizeRequest(req) {
   return { uid: decoded.uid }
 }
 
-async function loadActiveEmployeeSubscriptions() {
+/**
+ * @param {Set<string> | null} employeeIds nur diese Mitarbeiter; null = alle
+ */
+async function loadActiveEmployeeSubscriptions(employeeIds) {
   const db = getFirestore()
   const snapshot = await db
     .collection('employeePushSubscriptions')
@@ -72,6 +76,7 @@ async function loadActiveEmployeeSubscriptions() {
   snapshot.forEach((docSnap) => {
     const data = docSnap.data() || {}
     if (!data.endpoint || !data.keys?.p256dh || !data.keys?.auth) return
+    if (employeeIds && !employeeIds.has(data.employeeId)) return
     subscriptions.push({ id: docSnap.id, endpoint: data.endpoint, keys: data.keys })
   })
   return subscriptions
@@ -101,14 +106,23 @@ module.exports = async function handler(req, res) {
     initWebPush()
     await authorizeRequest(req)
 
-    const subscriptions = await loadActiveEmployeeSubscriptions()
+    // Gezielte Erinnerung: nur die Geräte der genannten Mitarbeiter.
+    const requestedIds = Array.isArray(req.body?.employeeIds)
+      ? req.body.employeeIds.filter((id) => typeof id === 'string' && id)
+      : []
+    const istGezielt = requestedIds.length > 0
+
+    const subscriptions = await loadActiveEmployeeSubscriptions(
+      istGezielt ? new Set(requestedIds) : null
+    )
     if (subscriptions.length === 0) {
       return res.status(200).json({
         success: true,
         sent: 0,
         failed: 0,
-        message:
-          'Keine Mitarbeiter-Geräte für Benachrichtigungen angemeldet. Das Popup in der App erscheint trotzdem.'
+        message: istGezielt
+          ? 'Für diesen Mitarbeiter ist kein Gerät für Benachrichtigungen angemeldet. Das Popup in der App erscheint trotzdem.'
+          : 'Keine Mitarbeiter-Geräte für Benachrichtigungen angemeldet. Das Popup in der App erscheint trotzdem.'
       })
     }
 
@@ -121,7 +135,9 @@ module.exports = async function handler(req, res) {
         : 'den letzten Monat'
     const payload = JSON.stringify({
       title: 'Stunden abrechnen',
-      body: `Wie viele Stunden sollen für ${monthLabel} abgerechnet werden?`,
+      body: istGezielt
+        ? `Bitte trage deine Stunden für ${monthLabel} nach bzw. prüfe deine Meldung.`
+        : `Wie viele Stunden sollen für ${monthLabel} abgerechnet werden?`,
       url: month ? `/overtime?month=${encodeURIComponent(month)}` : '/overtime',
       icon: '/icon-192.png',
       badge: '/icon-192.png'

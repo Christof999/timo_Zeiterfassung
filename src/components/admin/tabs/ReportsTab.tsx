@@ -54,7 +54,8 @@ import {
   monthKeyForPeriod,
   monthKeyLabel,
   monthRange,
-  previousMonthKey
+  previousMonthKey,
+  settleableMonthKeys
 } from '../../../utils/overtimeMonth'
 import {
   getReportMailConfig,
@@ -165,6 +166,8 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [appliedSettlementTarget, setAppliedSettlementTarget] = useState<number | null>(null)
   /** Monatsend-Aufruf an alle Mitarbeiter (Popup in der App + Push aufs Handy). */
   const [isBroadcasting, setIsBroadcasting] = useState(false)
+  /** Mitarbeiter, an den gerade eine Einzel-Erinnerung rausgeht. */
+  const [remindingEmployeeId, setRemindingEmployeeId] = useState<string | null>(null)
   // ---- Sammellauf „Auswertung für alle" ----
   /** Mitarbeiter mit mindestens einer Stempelung im Zeitraum, in Blätter-Reihenfolge. */
   const [batchEmployeeIds, setBatchEmployeeIds] = useState<string[]>([])
@@ -1709,6 +1712,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 abgerechnet werden alle gestempelten Stunden, aufs Überstundenkonto geht nichts.
               </p>
             </div>
+            <div className="employee-report-note-actions">{renderRemindButton('Erinnern')}</div>
           </div>
         )}
 
@@ -1770,6 +1774,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   Zurücksetzen
                 </button>
               )}
+              {renderRemindButton('Nochmal erinnern')}
             </div>
           </div>
         )}
@@ -2352,6 +2357,51 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       setIsBroadcasting(false)
     }
   }
+
+  /**
+   * Erinnert genau den angezeigten Mitarbeiter daran, seine Stunden für den
+   * Monat des Berichts zu melden – Popup in der App plus Push auf sein Handy.
+   */
+  const handleRemindEmployee = async () => {
+    if (!selectedEmployeeId || !periodMonthKey) return
+    const name = selectedEmployeeName || 'den Mitarbeiter'
+    if (!settleableMonthKeys().includes(periodMonthKey)) {
+      toast.error(
+        `Für ${monthKeyLabel(periodMonthKey)} kann nicht mehr gemeldet werden – nur der Vormonat und der laufende Monat sind offen.`
+      )
+      return
+    }
+    setRemindingEmployeeId(selectedEmployeeId)
+    try {
+      const result = await DataService.triggerPersonalOvertimeReminder(
+        selectedEmployeeId,
+        periodMonthKey
+      )
+      toast.success(
+        result.sent > 0
+          ? `${name} wurde erinnert (${result.sent} Gerät${result.sent === 1 ? '' : 'e'} benachrichtigt).`
+          : `Erinnerung für ${name} ausgelöst – sie erscheint beim nächsten Öffnen der App.`
+      )
+      if (result.message) toast.info(result.message)
+    } catch (error: any) {
+      toast.error(error?.message || 'Erinnerung konnte nicht ausgelöst werden.')
+    } finally {
+      setRemindingEmployeeId(null)
+    }
+  }
+
+  /** Knopf für die Einzel-Erinnerung – in beiden Hinweisen zur Meldung gleich. */
+  const renderRemindButton = (label: string) => (
+    <button
+      type="button"
+      className="btn secondary-btn"
+      onClick={() => void handleRemindEmployee()}
+      disabled={remindingEmployeeId !== null}
+      title="Popup in der App und Benachrichtigung aufs Handy – nur an diesen Mitarbeiter"
+    >
+      {remindingEmployeeId === selectedEmployeeId ? 'Sende…' : label}
+    </button>
+  )
 
   const handleSaveRecipient = async () => {
     try {
