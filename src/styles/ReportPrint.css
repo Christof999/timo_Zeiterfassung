@@ -542,6 +542,12 @@
   background: var(--light-color);
 }
 
+/* Vermerk zur Abrechnung unter dem Nachweis: geleistet / abzurechnen / Konto */
+.datev-settlement-note {
+  margin: var(--spacing-md) 0 0;
+  font-size: var(--font-size-sm);
+}
+
 .datev-legend {
   margin: var(--spacing-md) 0 0;
   font-size: var(--font-size-xs);

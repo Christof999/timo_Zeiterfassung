@@ -3,6 +3,7 @@ import { formatCurrency, minutesToDecimalHours, type ReportSettlementSummary } f
 import {
   COMPANY_NAME,
   buildEmployeePrintRows,
+  buildSettlementNote,
   buildSettlementSummaryLines,
   calculateEmployeePrintTotalHours,
   employeePrintTotalLabel,
@@ -552,6 +553,13 @@ export const buildDatevReportPdf = async (params: DatevPrintParams): Promise<Uin
     ['Summe:', minutesToDecimalHours(datevTotalMinutes(params.rows)), ''],
     { bold: true, size: 8, background: COLOR_HEAD_BG }
   )
+
+  // Vermerk zur Abrechnung direkt unter der Summe – wie im Ausdruck.
+  const vermerk = buildSettlementNote(params.summary)
+  if (vermerk) {
+    sheet.y -= 6
+    drawParagraph(sheet, `Abrechnung: ${vermerk}`, { size: 8, bold: true })
+  }
 
   sheet.onNewPage = null
   ensureSpace(sheet, 110)

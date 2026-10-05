@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { buildSettlementSummaryLines } from './printHtml'
+import { buildSettlementNote, buildSettlementSummaryLines } from './printHtml'
 import { formatCurrency, type ReportSettlementSummary } from './reportUtils'
 
 /** Abrechnung eines Monats mit 129:20 Std Arbeit und 4 Urlaubstagen (30 Std). */
 const summary = (overrides: Partial<ReportSettlementSummary> = {}): ReportSettlementSummary => ({
   workMinutes: 129 * 60 + 20,
+  settledWorkMinutes: null,
+  overtimeAccountDeltaMinutes: 0,
   workAmount: 3104,
   openOvertimeMinutes: 36 * 60 + 12,
   mealAllowanceDays: 11,
@@ -56,5 +58,49 @@ describe('buildSettlementSummaryLines', () => {
 
   it('rechnet die geleisteten Stunden mit dem Kostensatz der Mitarbeiterkarte', () => {
     expect(zeile('Geleistete Arbeitsstunden')?.detail).toBe(`129,33 Std × ${formatCurrency(24)}`)
+  })
+})
+
+describe('Abrechnung mit übernommener Meldung', () => {
+  /** 112:00 geleistet, 100:00 gemeldet – 12:00 gehen aufs Überstundenkonto. */
+  const gemeldet = summary({
+    workMinutes: 112 * 60,
+    settledWorkMinutes: 100 * 60,
+    overtimeAccountDeltaMinutes: 12 * 60,
+    workAmount: 2400,
+    grossWageMinutes: 100 * 60,
+    grossWageAmount: 2400
+  })
+
+  it('zeigt geleistet, abzurechnen und die Kontobewegung getrennt', () => {
+    const lines = buildSettlementSummaryLines(gemeldet)
+    expect(zeile('Geleistete Arbeitsstunden', lines)).toMatchObject({
+      detail: '112,00 Std',
+      amount: '—'
+    })
+    expect(zeile('Davon abzurechnen', lines)).toMatchObject({
+      detail: `100,00 Std × ${formatCurrency(24)}`,
+      amount: formatCurrency(2400)
+    })
+    expect(zeile('Aufs Überstundenkonto', lines)?.detail).toBe('12,00 Std')
+  })
+
+  it('nennt eine Auszahlung vom Konto beim Namen', () => {
+    const lines = buildSettlementSummaryLines(
+      summary({ settledWorkMinutes: 140 * 60, overtimeAccountDeltaMinutes: -(10 * 60 + 40) })
+    )
+    expect(zeile('Vom Überstundenkonto ausgezahlt', lines)?.detail).toBe('10,67 Std')
+    expect(zeile('Aufs Überstundenkonto', lines)).toBeUndefined()
+  })
+
+  it('schreibt den Vermerk für den Nachweis', () => {
+    expect(buildSettlementNote(gemeldet)).toBe(
+      'Geleistete Arbeitsstunden: 112,00 Std · davon abzurechnen: 100,00 Std · aufs Überstundenkonto: 12,00 Std'
+    )
+  })
+
+  it('lässt den Vermerk ohne Meldung weg', () => {
+    expect(buildSettlementNote(summary())).toBeNull()
+    expect(buildSettlementNote(undefined)).toBeNull()
   })
 })

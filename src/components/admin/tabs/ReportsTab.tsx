@@ -74,6 +74,7 @@ import {
   buildEmployeeBatchPrintHtml,
   buildEmployeePrintHtml,
   buildProjectStaffPrintHtml,
+  buildSettlementNote,
   type EmployeePrintParams
 } from './reports/printHtml'
 import SearchableSelect from '../../SearchableSelect'
@@ -186,7 +187,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [batchPrintProgress, setBatchPrintProgress] = useState<number | null>(null)
   /** Fortschritt des Sammelversands, null = es läuft keiner. */
   const [batchMailProgress, setBatchMailProgress] = useState<number | null>(null)
-  /** Gemeldete Stunden im Sammellauf automatisch in die Zeilen übernehmen. */
+  /** Gemeldete Stunden im Sammellauf automatisch zur Abrechnung übernehmen. */
   const [batchApplyReported, setBatchApplyReported] = useState(true)
   /** E-Mail-Versand des Berichts – Empfänger ist gepflegt, nicht fest verdrahtet. */
   const [mailRecipient, setMailRecipient] = useState('')
@@ -899,9 +900,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         overtimeBalanceMinutes: employeeOvertimeBalance
       }
 
-      // Übernommene Meldung schlägt die manuelle Regelarbeitszeit-Sicht: die
-      // Zeilen werden so gedeckelt bzw. aufgefüllt, dass die Summe die
-      // gemeldete Stundenzahl exakt trifft.
+      // Übernommene Meldung schlägt die manuelle Regelarbeitszeit-Sicht. Die
+      // Zeilen bleiben, wie sie geleistet wurden – die Meldung bestimmt nur,
+      // wie viele Stunden abgerechnet werden und was das Konto bewegt.
       if (appliedSettlementTarget !== null) {
         return buildAdjustedReportForTarget(reportEntries, gemeinsam, appliedSettlementTarget)
       }
@@ -1739,12 +1740,16 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 )}
               </p>
               <p className="employee-report-note-state">
-                In der Liste stehen aktuell{' '}
-                <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
-                Arbeitszeit
-                {adjustedReport.summary.workMinutes === overtimeSettlement.minutes
-                  ? ' – die Meldung ist übernommen.'
-                  : ' – weicht von der Meldung ab.'}
+                {appliedSettlementTarget === overtimeSettlement.minutes ? (
+                  <>
+                    Die Meldung ist übernommen: der Nachweis zeigt weiter alle{' '}
+                    <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
+                    geleistete Arbeitszeit, abgerechnet werden{' '}
+                    <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>.
+                  </>
+                ) : (
+                  'Noch nicht übernommen – aktuell würden alle geleisteten Stunden abgerechnet.'
+                )}
               </p>
             </div>
             <div className="employee-report-note-actions">
@@ -1776,6 +1781,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     () => (reportType === 'datev' ? buildDatevRows(adjustedEntries, startDate, endDate) : []),
     [reportType, adjustedEntries, startDate, endDate]
   )
+
+  /** Vermerk unter dem Nachweis: geleistet / abzurechnen / Überstundenkonto. */
+  const datevSettlementNote = buildSettlementNote(adjustedReport.summary)
 
   /** Der DATEV-Nachweis in der aktuell angezeigten Fassung – für Druck und PDF. */
   const currentDatevParams = (): DatevPrintParams => ({
@@ -1841,12 +1849,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   })
 
   /**
-   * Übernimmt die vom Mitarbeiter gemeldete Stundenzahl in die Zeilen.
+   * Übernimmt die vom Mitarbeiter gemeldete Stundenzahl in die Abrechnung.
    *
-   * Die Zeiten werden so gedeckelt bzw. aufgefüllt, dass die ausgewiesene
-   * Arbeitszeit die Meldung exakt trifft – nach unten wie nach oben. Verglichen
-   * wird nur die Arbeitszeit; Urlaub, Feiertag und Krankheit stehen fest und
-   * sind in der Meldung nicht enthalten.
+   * Die Tage bleiben unverändert – der Nachweis dokumentiert die geleistete
+   * Arbeitszeit. Die Meldung steht als Vermerk darunter und bestimmt den
+   * Bruttolohn. Sie betrifft nur die Arbeitszeit; Urlaub, Feiertag und
+   * Krankheit stehen fest und sind in der Meldung nicht enthalten.
    */
   const handleApplyReportedHours = () => {
     if (!overtimeSettlement) return
@@ -1857,12 +1865,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setPayoutInput('0:00')
     setAppliedPayoutMinutes(0)
     setAppliedSettlementTarget(ziel)
-    toast.success(`${minutesToHoursLabel(ziel)} Std in die Zeilen übernommen.`)
+    toast.success(`${minutesToHoursLabel(ziel)} Std zur Abrechnung übernommen – die Tage bleiben unverändert.`)
   }
 
   const handleResetReportedHours = () => {
     setAppliedSettlementTarget(null)
-    toast.info('Gemeldete Stunden verworfen – es gelten wieder die gestempelten Zeiten.')
+    toast.info('Meldung verworfen – es werden wieder alle geleisteten Stunden abgerechnet.')
   }
 
   // ---------- Sammellauf: Auswertung für alle Mitarbeiter ----------
@@ -3159,19 +3167,58 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   <h4>Abrechnung</h4>
                   <table className="settlement-summary-table">
                     <tbody>
-                      <tr>
-                        <td>Geleistete Arbeitsstunden</td>
-                        <td>
-                          {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std
-                          {!adjustedReport.summary.isFixedSalary &&
-                            ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
-                        </td>
-                        <td className="number-cell">
-                          {adjustedReport.summary.isFixedSalary
-                            ? '—'
-                            : formatCurrency(adjustedReport.summary.workAmount)}
-                        </td>
-                      </tr>
+                      {adjustedReport.summary.settledWorkMinutes === null ? (
+                        <tr>
+                          <td>Geleistete Arbeitsstunden</td>
+                          <td>
+                            {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std
+                            {!adjustedReport.summary.isFixedSalary &&
+                              ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
+                          </td>
+                          <td className="number-cell">
+                            {adjustedReport.summary.isFixedSalary
+                              ? '—'
+                              : formatCurrency(adjustedReport.summary.workAmount)}
+                          </td>
+                        </tr>
+                      ) : (
+                        <>
+                          <tr>
+                            <td>Geleistete Arbeitsstunden</td>
+                            <td>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</td>
+                            <td className="number-cell">—</td>
+                          </tr>
+                          <tr>
+                            <td>Davon abzurechnen</td>
+                            <td>
+                              {minutesToHoursLabel(adjustedReport.summary.settledWorkMinutes)} Std
+                              {!adjustedReport.summary.isFixedSalary &&
+                                ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
+                            </td>
+                            <td className="number-cell">
+                              {adjustedReport.summary.isFixedSalary
+                                ? '—'
+                                : formatCurrency(adjustedReport.summary.workAmount)}
+                            </td>
+                          </tr>
+                          {adjustedReport.summary.overtimeAccountDeltaMinutes !== 0 && (
+                            <tr>
+                              <td>
+                                {adjustedReport.summary.overtimeAccountDeltaMinutes > 0
+                                  ? 'Aufs Überstundenkonto'
+                                  : 'Vom Überstundenkonto ausgezahlt'}
+                              </td>
+                              <td>
+                                {minutesToHoursLabel(
+                                  Math.abs(adjustedReport.summary.overtimeAccountDeltaMinutes)
+                                )}{' '}
+                                Std
+                              </td>
+                              <td className="number-cell">—</td>
+                            </tr>
+                          )}
+                        </>
+                      )}
                       <tr>
                         <td>Urlaubsstunden</td>
                         <td>
@@ -3252,7 +3299,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         </td>
                       </tr>
                       <tr className="settlement-note">
-                        <td>Nicht abgerechnete Überstunden</td>
+                        <td>Stand Überstundenkonto</td>
                         <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
                         <td className="number-cell">—</td>
                       </tr>
@@ -3436,6 +3483,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </tfoot>
                 </table>
               </div>
+
+              {datevSettlementNote && (
+                <p className="datev-settlement-note">
+                  <strong>Abrechnung:</strong> {datevSettlementNote}
+                </p>
+              )}
 
               <p className="datev-legend no-print">
                 {DATEV_KEY_LEGEND.map((item) => `${item.key} = ${item.label}`).join(' · ')}

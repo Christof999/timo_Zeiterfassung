@@ -204,12 +204,38 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
   const amountOrDash = (value: number): string => (fixed ? '—' : formatCurrency(value))
   const timesRate = (label: string): string => (fixed ? label : `${label} × ${rate}`)
 
+  // Mit übernommener Meldung: geleistet bleibt stehen, bezahlt wird nur das
+  // Gemeldete, der Rest ist die Bewegung des Überstundenkontos.
+  const delta = summary.overtimeAccountDeltaMinutes
+  const workLines: SummaryLine[] =
+    summary.settledWorkMinutes === null
+      ? [
+          {
+            label: 'Geleistete Arbeitsstunden',
+            detail: timesRate(hours(summary.workMinutes)),
+            amount: amountOrDash(summary.workAmount)
+          }
+        ]
+      : [
+          { label: 'Geleistete Arbeitsstunden', detail: hours(summary.workMinutes), amount: '—' },
+          {
+            label: 'Davon abzurechnen',
+            detail: timesRate(hours(summary.settledWorkMinutes)),
+            amount: amountOrDash(summary.workAmount)
+          },
+          ...(delta !== 0
+            ? [
+                {
+                  label: delta > 0 ? 'Aufs Überstundenkonto' : 'Vom Überstundenkonto ausgezahlt',
+                  detail: hours(Math.abs(delta)),
+                  amount: '—'
+                }
+              ]
+            : [])
+        ]
+
   const lines: SummaryLine[] = [
-    {
-      label: 'Geleistete Arbeitsstunden',
-      detail: timesRate(hours(summary.workMinutes)),
-      amount: amountOrDash(summary.workAmount)
-    },
+    ...workLines,
     {
       label: 'Feiertagsstunden',
       detail: timesRate(hours(summary.holidayMinutes)),
@@ -259,7 +285,7 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
       isNote: true
     },
     {
-      label: 'Nicht abgerechnete Überstunden',
+      label: 'Stand Überstundenkonto',
       detail: hours(summary.openOvertimeMinutes),
       amount: '—',
       isNote: true
@@ -267,6 +293,27 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
   ]
 
   return lines
+}
+
+/**
+ * Vermerk unter dem Arbeitszeitnachweis: wie viele der geleisteten Stunden
+ * abgerechnet werden und was das Überstundenkonto bewegt. `null` ohne
+ * übernommene Meldung – dann wird schlicht alles Geleistete abgerechnet.
+ *
+ * Vorgabe der Steuerkanzlei: der Nachweis zeigt alle geleisteten Stunden, die
+ * Abrechnung steht als Vermerk darunter.
+ */
+export const buildSettlementNote = (summary?: ReportSettlementSummary | null): string | null => {
+  if (!summary || summary.settledWorkMinutes === null) return null
+  const hours = (minutes: number): string => `${minutesToDecimalHours(minutes)} Std`
+  const delta = summary.overtimeAccountDeltaMinutes
+  const teile = [
+    `Geleistete Arbeitsstunden: ${hours(summary.workMinutes)}`,
+    `davon abzurechnen: ${hours(summary.settledWorkMinutes)}`
+  ]
+  if (delta > 0) teile.push(`aufs Überstundenkonto: ${hours(delta)}`)
+  if (delta < 0) teile.push(`vom Überstundenkonto ausgezahlt: ${hours(-delta)}`)
+  return teile.join(' · ')
 }
 
 /**

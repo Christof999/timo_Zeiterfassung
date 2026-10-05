@@ -1,6 +1,6 @@
 import { escapeHtml, minutesToDecimalHours, type ReportSettlementSummary } from './reportUtils'
 import { DATEV_KEY_LEGEND, datevTotalMinutes, type DatevDayRow } from './datevReport'
-import { buildSettlementSummaryHtml, COMPANY_NAME } from './printHtml'
+import { buildSettlementNote, buildSettlementSummaryHtml, COMPANY_NAME } from './printHtml'
 
 /**
  * Druck-HTML im Aufbau der DATEV-Vorlage „Dokumentation der täglichen
@@ -48,6 +48,8 @@ const buildDatevBodyHtml = (params: DatevPrintParams): string => {
     (item) => `<div><span class="legend-key">${esc(item.key)}</span>${esc(item.label)}</div>`
   ).join('')
 
+  const vermerk = buildSettlementNote(params.summary)
+
   return `  <h1>Vorlage zur Dokumentation der täglichen Arbeitszeit</h1>
   <div class="kopf">
     <div>Firma:</div><div class="feld">${esc(company)}</div>
@@ -78,7 +80,7 @@ const buildDatevBodyHtml = (params: DatevPrintParams): string => {
       </tr>
     </tfoot>
   </table>
-
+${vermerk ? `  <p class="vermerk"><strong>Abrechnung:</strong> ${esc(vermerk)}</p>\n` : ''}
   <div class="abschluss">
     <div class="unterschriften">
       <div class="box">
@@ -160,6 +162,8 @@ const DATEV_PRINT_CSS = `
     thead { display: table-header-group; }
     tfoot { display: table-row-group; }
     tfoot td { font-weight: 700; }
+    /* Vermerk zur Abrechnung direkt unter der Summe – gehört zum Nachweis. */
+    .vermerk { margin: 8px 0 0; font-size: 11px; }
     .abschluss { page-break-inside: avoid; break-inside: avoid; }
     .unterschriften {
       display: flex;

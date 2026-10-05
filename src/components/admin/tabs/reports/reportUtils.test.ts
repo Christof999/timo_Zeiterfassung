@@ -21,7 +21,6 @@ import {
   employeeHourlyMargin,
   employeeLaborCostRate,
   employeeWageRate,
-  planSettlementTarget,
   parseMealAllowanceInput,
   DEFAULT_MEAL_ALLOWANCE_EUR,
   type AbsenceKind,
@@ -664,7 +663,7 @@ describe('parseMealAllowanceInput', () => {
 
 })
 
-describe('Gemeldete Stunden in die Zeilen übernehmen (Ende zu Ende)', () => {
+describe('Gemeldete Stunden übernehmen – die Tage bleiben, wie sie waren', () => {
   /** Mo–Fr ab 06.07.2026, jeweils 07:00–17:00 = 10:00 gestempelt, 50:00 gesamt. */
   const woche = (): ReportEntry[] =>
     [6, 7, 8, 9, 10].map((tag) => {
@@ -697,132 +696,53 @@ describe('Gemeldete Stunden in die Zeilen übernehmen (Ende zu Ende)', () => {
     })
 
   /** Genau das, was der „Übernehmen"-Knopf im Bericht macht. */
-  const uebernehmen = (entries: ReportEntry[], ziel: number) =>
-    buildAdjustedReportForTarget(entries, {}, ziel)
+  const uebernehmen = (entries: ReportEntry[], ziel: number, hourlyRate = 0) =>
+    buildAdjustedReportForTarget(entries, { hourlyRate }, ziel)
 
-  it('trifft ein Ziel unter der gestempelten Zeit', () => {
-    // Der Fall aus der Praxis: gemeldet wird WENIGER als bisher ausgewiesen.
-    const ziel = 40 * 60
-    expect(uebernehmen(woche(), ziel).summary.workMinutes).toBe(ziel)
+  it('lässt die Tage unverändert, auch wenn weniger gemeldet wird', () => {
+    // Vorgabe der Steuerkanzlei: der Nachweis zeigt die geleisteten Stunden.
+    // Früher wurden die Tage auf die Meldung heruntergekürzt.
+    const ohne = buildAdjustedReport(woche())
+    const mit = uebernehmen(woche(), 40 * 60)
+    expect(mit.entries.map((e) => e.effectiveWorkMinutes)).toEqual([600, 600, 600, 600, 600])
+    expect(mit.entries.map((e) => e.effectiveClockOut)).toEqual(
+      ohne.entries.map((e) => e.effectiveClockOut)
+    )
+    expect(mit.shownTotalMinutes).toBe(50 * 60)
+    expect(mit.summary.workMinutes).toBe(50 * 60)
   })
 
-  it('trifft auch krumme Ziele exakt', () => {
-    for (const ziel of [2401, 2400, 1234, 60, 0]) {
-      expect(uebernehmen(woche(), ziel).summary.workMinutes).toBe(ziel)
-    }
+  it('rechnet die gemeldeten Stunden ab und schreibt den Rest aufs Konto', () => {
+    const { summary } = uebernehmen(woche(), 40 * 60, 20)
+    expect(summary.settledWorkMinutes).toBe(40 * 60)
+    expect(summary.overtimeAccountDeltaMinutes).toBe(10 * 60)
+    // Bezahlt werden die 40 gemeldeten, nicht die 50 geleisteten Stunden.
+    expect(summary.workAmount).toBe(800)
+    expect(summary.grossWageMinutes).toBe(40 * 60)
+    expect(summary.grossWageAmount).toBe(800)
   })
 
-  it('lässt die volle gestempelte Zeit unverändert', () => {
-    const ziel = 50 * 60
-    const ergebnis = uebernehmen(woche(), ziel)
-    expect(ergebnis.summary.workMinutes).toBe(ziel)
-    expect(ergebnis.payoutUnallocatedMinutes).toBe(0)
+  it('zahlt Überstunden vom Konto aus, ohne Stunden in die Tage zu schreiben', () => {
+    // 50:00 geleistet, 52:00 gemeldet – die 2:00 kommen vom Konto.
+    const ergebnis = uebernehmen(woche(), 52 * 60, 20)
+    expect(ergebnis.entries.map((e) => e.effectiveWorkMinutes)).toEqual([600, 600, 600, 600, 600])
+    expect(ergebnis.payoutMinutes).toBe(0)
+    expect(ergebnis.summary.overtimeAccountDeltaMinutes).toBe(-2 * 60)
+    expect(ergebnis.summary.workAmount).toBe(1040)
   })
 
-  it('zahlt Überstunden über die gestempelte Zeit hinaus aus', () => {
-    // 50:00 gestempelt, 52:00 gemeldet – die 2:00 kommen vom Konto und werden
-    // auf Tage mit Luft bis zur 10-Std-Grenze verteilt. Hier ist jeder Tag
-    // bereits bei 10:00, also bleibt die Differenz unverteilbar.
-    const ergebnis = uebernehmen(woche(), 52 * 60)
-    expect(ergebnis.payoutUnallocatedMinutes).toBeGreaterThan(0)
+  it('nimmt auch 0 Std als Meldung ernst', () => {
+    const { summary } = uebernehmen(woche(), 0, 20)
+    expect(summary.settledWorkMinutes).toBe(0)
+    expect(summary.overtimeAccountDeltaMinutes).toBe(50 * 60)
+    expect(summary.workAmount).toBe(0)
   })
 
-  it('weist nach dem Kürzen nur Viertelstunden aus', () => {
-    // 50:00 gestempelt, 38:00 gemeldet: minutengenau wären es 7:36 je Tag
-    // („7,60 Std"). Im Raster stehen 7:30 und 7:45 im Nachweis.
-    const ergebnis = uebernehmen(woche(), 38 * 60)
-    expect(ergebnis.summary.workMinutes).toBe(38 * 60)
-    expect(ergebnis.entries.map((e) => e.effectiveWorkMinutes)).toEqual([465, 465, 450, 450, 450])
-  })
-
-  it('weist bei krummen Tagen nie mehr aus als geleistet', () => {
-    // Zwei Tage mit 8:07 (13 Min Pause). 16:10 gemeldet: der Rest über dem
-    // Rasterdeckel passt in keinen Tag als Viertelstunde – dann lieber
-    // minutengenau kürzen, als einem Tag mehr zu geben, als gestempelt wurde.
-    const krumm = woche()
-      .slice(0, 2)
-      .map((e) => ({ ...e, clockOut: '15:20', pauseMinutes: 13, workHours: '8:07' }))
-    const ergebnis = uebernehmen(krumm, 16 * 60 + 10)
-    expect(ergebnis.summary.workMinutes).toBe(16 * 60 + 10)
-    expect(ergebnis.payoutBeyondActualMinutes).toBe(0)
-    expect(Math.max(...ergebnis.entries.map((e) => e.effectiveWorkMinutes))).toBeLessThanOrEqual(487)
-  })
-})
-
-describe('planSettlementTarget – gemeldete Stunden treffen', () => {
-  const tage = [600, 600, 600, 600, 480] // 4 × 10:00 + 1 × 8:00 = 48:00
-
-  const summeMit = (deckel: number[], payout: number): number => {
-    const gedeckelt = tage.map((m, i) => Math.min(m, deckel[i]))
-    // Der Rest verteilt sich auf Tage mit Luft bis zur gestempelten Zeit.
-    let rest = payout
-    return gedeckelt.reduce((sum, m, i) => {
-      const luft = Math.max(0, tage[i] - m)
-      const zusatz = Math.min(luft, rest)
-      rest -= zusatz
-      return sum + m + zusatz
-    }, 0)
-  }
-
-  it('kürzt auf ein Ziel unter der gestempelten Zeit', () => {
-    const ziel = 40 * 60
-    const plan = planSettlementTarget(tage, ziel)
-    expect(summeMit(plan.dayCapMinutes, plan.payoutMinutes)).toBe(ziel)
-  })
-
-  it('trifft auch krumme Ziele exakt', () => {
-    // Genau der Fall aus der Praxis: gemeldet weniger als die Regelarbeitszeit
-    for (const ziel of [2401, 2400, 1234, 1, 0]) {
-      const plan = planSettlementTarget(tage, ziel)
-      expect(summeMit(plan.dayCapMinutes, plan.payoutMinutes)).toBe(ziel)
-    }
-  })
-
-  it('lässt die Zeiten unangetastet, wenn das Ziel der gestempelten Zeit entspricht', () => {
-    const ziel = tage.reduce((a, b) => a + b, 0)
-    const plan = planSettlementTarget(tage, ziel)
-    expect(plan.payoutMinutes).toBe(0)
-    expect(summeMit(plan.dayCapMinutes, plan.payoutMinutes)).toBe(ziel)
-  })
-
-  it('fordert für ein Ziel über der gestempelten Zeit eine Auszahlung an', () => {
-    // Überstunden vom Konto: mehr abrechnen als gestempelt
-    const gesamt = tage.reduce((a, b) => a + b, 0)
-    const plan = planSettlementTarget(tage, gesamt + 5 * 60)
-    expect(plan.payoutMinutes).toBe(5 * 60)
-  })
-
-  it('legt den Tagesdeckel aufs Viertelstunden-Raster', () => {
-    // Der Fall aus der Praxis (September, 112:00 geleistet, 100:00 gemeldet):
-    // minutengenau wäre der Deckel 463 Min – im Nachweis „7,72 Std" an elf
-    // Tagen. Im Raster sind es zehn Tage mit 7:45 und einer mit 7:30, die drei
-    // kurzen Tage bleiben, wie sie sind.
-    const september = [315, 510, 555, 525, 540, 345, 555, 510, 510, 540, 240, 525, 510, 540]
-    expect(september.reduce((a, b) => a + b, 0)).toBe(112 * 60)
-    expect(planSettlementTarget(september, 100 * 60, 1).dailyCapMinutes).toBe(463)
-
-    const plan = planSettlementTarget(september, 100 * 60)
-    expect(plan.dailyCapMinutes).toBe(450)
-    expect(plan.payoutMinutes).toBe(0)
-    const ausgewiesen = september.map((m, i) => Math.min(m, plan.dayCapMinutes[i]))
-    expect(ausgewiesen).toEqual([315, 465, 465, 465, 465, 345, 465, 465, 465, 465, 240, 465, 465, 450])
-    expect(ausgewiesen.reduce((a, b) => a + b, 0)).toBe(100 * 60)
-  })
-
-  it('lässt höchstens den Rest krumm', () => {
-    for (const ziel of [2401, 1234, 2777]) {
-      const plan = planSettlementTarget(tage, ziel)
-      expect(plan.dayCapMinutes.every((deckel) => deckel % 15 === 0)).toBe(true)
-      expect(plan.payoutMinutes).toBeLessThan(15)
-      expect(summeMit(plan.dayCapMinutes, plan.payoutMinutes)).toBe(ziel)
-    }
-  })
-
-  it('kommt mit einem leeren Zeitraum klar', () => {
-    // Ohne Tage ist der Deckel bedeutungslos; entscheidend ist, dass die
-    // gemeldeten Stunden vollständig als Auszahlung angefordert werden.
-    expect(planSettlementTarget([], 0).payoutMinutes).toBe(0)
-    expect(planSettlementTarget([], 120).payoutMinutes).toBe(120)
+  it('rechnet ohne Meldung alle geleisteten Stunden ab', () => {
+    const { summary } = buildAdjustedReport(woche(), { hourlyRate: 20 })
+    expect(summary.settledWorkMinutes).toBeNull()
+    expect(summary.overtimeAccountDeltaMinutes).toBe(0)
+    expect(summary.workAmount).toBe(1000)
   })
 })
 

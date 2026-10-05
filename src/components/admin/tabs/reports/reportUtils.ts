@@ -5,8 +5,6 @@ import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
 import {
   allocateOvertimePayout,
   applyWorkTimeRules,
-  MAX_DAILY_WORK_MINUTES,
-  PAYOUT_STEP_MINUTES,
   type WorkTimeAdjustment,
   type WorkTimeDaySummary,
   type WorkTimeRowInput
@@ -507,6 +505,17 @@ export const parseMealAllowanceInput = (raw: string): number => {
 export interface ReportSettlementSummary {
   /** geleistete Arbeitsstunden ohne Urlaub/Feiertag/Krankheit */
   workMinutes: number
+  /**
+   * Vom Mitarbeiter gemeldete, abzurechnende Arbeitsstunden. `null` ohne
+   * übernommene Meldung – dann werden alle geleisteten Stunden abgerechnet.
+   */
+  settledWorkMinutes: number | null
+  /**
+   * Geleistet minus abgerechnet: positiv = geht aufs Überstundenkonto,
+   * negativ = wird vom Konto ausgezahlt. 0 ohne Meldung.
+   */
+  overtimeAccountDeltaMinutes: number
+  /** Betrag der ABGERECHNETEN Arbeitsstunden (ohne Meldung = der geleisteten) */
   workAmount: number
   /** nicht abgerechnete, also im Konto verbleibende Überstunden */
   openOvertimeMinutes: number
@@ -545,67 +554,6 @@ export interface ReportSettlementSummary {
   isFixedSalary: boolean
 }
 
-/**
- * Plant, wie eine gemeldete Gesamtstundenzahl auf die Tage verteilt wird.
- *
- * Gesucht ist der höchste einheitliche Tagesdeckel, mit dem die Summe das Ziel
- * noch nicht überschreitet; der verbleibende Rest wird anschließend über die
- * vorhandene Überstunden-Verteilung ergänzt. Damit trifft die Ausweisung das
- * Ziel exakt – und zwar in beide Richtungen:
- *
- * - Ziel unter der gestempelten Zeit → die längsten Tage werden zuerst gekürzt
- * - Ziel über der gestempelten Zeit → die Differenz wird als ausbezahlte
- *   Überstunden auf die Tage verteilt (bis zur 10-Std-Grenze)
- *
- * Der Deckel liegt auf dem Viertelstunden-Raster: ein minutengenauer Deckel
- * träfe das Ziel zwar ebenso, stünde aber als „7,72 Std" an jedem langen Tag
- * im Nachweis. Was über dem Rasterdeckel noch fehlt, wird in Viertelstunden
- * der Reihe nach auf die langen Tage gelegt (`dayCapMinutes`) – die Tage
- * unterscheiden sich so um höchstens eine Viertelstunde, und nur der letzte
- * Rest unter einer Viertelstunde bleibt als Auszahlung für einen einzelnen Tag.
- *
- * @param dayMinutes geleistete Minuten je Tag
- * @param targetMinutes gemeldete Gesamtminuten
- * @param stepMinutes Raster des Tagesdeckels (1 = minutengenau)
- */
-export const planSettlementTarget = (
-  dayMinutes: number[],
-  targetMinutes: number,
-  stepMinutes: number = PAYOUT_STEP_MINUTES
-): {
-  /** einheitlicher Grunddeckel */
-  dailyCapMinutes: number
-  /** Deckel je Tag, in der Reihenfolge von `dayMinutes` */
-  dayCapMinutes: number[]
-  payoutMinutes: number
-} => {
-  const raster = Math.max(1, Math.round(stepMinutes))
-  const ziel = Math.max(0, Math.round(targetMinutes))
-  const summeBei = (deckel: number): number =>
-    dayMinutes.reduce((sum, minutes) => sum + Math.min(minutes, deckel), 0)
-
-  // Binäre Suche über den Tagesdeckel. Die Summe wächst monoton mit dem
-  // Deckel, deshalb ist der größte Deckel mit Summe ≤ Ziel eindeutig.
-  // Gesucht wird in Rasterschritten; der Deckel ist dann `unten * raster`.
-  let unten = 0
-  let oben = Math.floor(MAX_DAILY_WORK_MINUTES / raster)
-  while (unten < oben) {
-    const mitte = Math.floor((unten + oben + 1) / 2)
-    if (summeBei(mitte * raster) <= ziel) unten = mitte
-    else oben = mitte - 1
-  }
-  const deckel = unten * raster
-
-  let rest = Math.max(0, ziel - summeBei(deckel))
-  const dayCapMinutes = dayMinutes.map((minutes) => {
-    if (raster === 1 || rest < raster || minutes - deckel < raster) return deckel
-    rest -= raster
-    return deckel + raster
-  })
-
-  return { dailyCapMinutes: deckel, dayCapMinutes, payoutMinutes: rest }
-}
-
 export interface BuildAdjustedReportOptions {
   regularDayMinutes?: number | ((dateKey: string) => number) | null
   requestedPayoutMinutes?: number
@@ -619,6 +567,12 @@ export interface BuildAdjustedReportOptions {
   fixedMonthlySalary?: number
   /** Überstundenkonto des Mitarbeiters (für „nicht abgerechnete Überstunden") */
   overtimeBalanceMinutes?: number | null
+  /**
+   * Übernommene Meldung des Mitarbeiters: so viele Arbeitsstunden werden
+   * abgerechnet. Die Zeilen bleiben davon unberührt (siehe
+   * `buildAdjustedReportForTarget`).
+   */
+  settledWorkMinutes?: number | null
 }
 
 export interface AdjustedReport {
@@ -669,7 +623,8 @@ export const buildAdjustedReport = (
     mealAllowanceRate = DEFAULT_MEAL_ALLOWANCE_EUR,
     isApprentice = false,
     fixedMonthlySalary = 0,
-    overtimeBalanceMinutes = null
+    overtimeBalanceMinutes = null,
+    settledWorkMinutes = null
   } = options
 
   // Beim Fixlohn gibt es keinen Stundensatz – die Zeilen weisen nur Zeiten aus.
@@ -763,7 +718,14 @@ export const buildAdjustedReport = (
   const round2 = (value: number): number => Math.round(value * 100) / 100
   // Beim Fixlohn bleiben die Zeilenbeträge leer: die Zeiten werden ausgewiesen,
   // vergütet wird aber pauschal.
-  const workAmount = useFixedSalary ? 0 : amountFor(workMinutes)
+  // Bezahlt wird, was der Mitarbeiter zur Abrechnung gemeldet hat – ohne
+  // Meldung alles Geleistete. Die Differenz bewegt das Überstundenkonto.
+  const settledMinutes =
+    typeof settledWorkMinutes === 'number' && Number.isFinite(settledWorkMinutes)
+      ? Math.max(0, Math.round(settledWorkMinutes))
+      : null
+  const paidWorkMinutes = settledMinutes ?? workMinutes
+  const workAmount = useFixedSalary ? 0 : amountFor(paidWorkMinutes)
   const vacationAmount = useFixedSalary ? 0 : amountFor(vacationMinutes)
   const holidayAmount = useFixedSalary ? 0 : amountFor(holidayMinutes)
   const sickAmount = useFixedSalary ? 0 : amountFor(sickMinutes)
@@ -776,7 +738,7 @@ export const buildAdjustedReport = (
   // abgerechnet (Wunsch der Steuerkanzlei). Er steht deshalb nur noch mit der
   // Anzahl der Tage auf dem Beleg und ist im Bruttolohn NICHT enthalten – sonst
   // würde er doppelt vergütet.
-  const grossWageMinutes = workMinutes + holidayMinutes + sickMinutes + schoolMinutes
+  const grossWageMinutes = paidWorkMinutes + holidayMinutes + sickMinutes + schoolMinutes
   const grossWageAmount = useFixedSalary
     ? round2(Math.max(0, fixedMonthlySalary))
     : round2(workAmount + holidayAmount + sickAmount + schoolAmount)
@@ -799,6 +761,8 @@ export const buildAdjustedReport = (
     mealAllowanceDays,
     summary: {
       workMinutes,
+      settledWorkMinutes: settledMinutes,
+      overtimeAccountDeltaMinutes: settledMinutes === null ? 0 : workMinutes - settledMinutes,
       workAmount,
       openOvertimeMinutes: Math.max(0, openOvertimeMinutes),
       mealAllowanceDays,
@@ -826,39 +790,27 @@ export const buildAdjustedReport = (
 }
 
 /**
- * Auswertung, die eine gemeldete Zielsumme exakt trifft.
+ * Auswertung mit übernommener Meldung des Mitarbeiters.
  *
- * Erst ungedeckelt rechnen, um die tatsächlichen Tagesminuten zu kennen, dann
- * Tagesdeckel und Auszahlung so wählen, dass die ausgewiesene Arbeitszeit auf
- * die Meldung des Mitarbeiters kommt. Identisch genutzt in der Einzelansicht
- * („Übernehmen") und im Sammellauf über alle Mitarbeiter.
+ * Die Tage bleiben exakt so, wie sie geleistet wurden – der Nachweis
+ * dokumentiert die tatsächliche Arbeitszeit (Vorgabe der Steuerkanzlei).
+ * Die Meldung wirkt nur auf die Abrechnung: bezahlt werden die gemeldeten
+ * Stunden, die Differenz zu den geleisteten steht als Bewegung des
+ * Überstundenkontos im Summenblock und als Vermerk unter dem Nachweis.
+ *
+ * Früher wurden die Tage so gekürzt bzw. aufgefüllt, dass ihre Summe die
+ * Meldung traf. Damit wies der Nachweis andere Zeiten aus als gearbeitet.
+ *
+ * Identisch genutzt in der Einzelansicht („Übernehmen") und im Sammellauf.
  */
 export const buildAdjustedReportForTarget = (
   entries: ReportEntry[],
   options: BuildAdjustedReportOptions,
   targetMinutes: number
-): AdjustedReport => {
-  const ungedeckelt = buildAdjustedReport(entries, options)
-  const tagesMinuten = ungedeckelt.days.map((day) => day.legalWorkMinutes)
-  const mitRaster = (stepMinutes: number): AdjustedReport => {
-    const plan = planSettlementTarget(tagesMinuten, targetMinutes, stepMinutes)
-    const deckelJeTag = new Map(
-      ungedeckelt.days.map((day, index) => [day.dateKey, plan.dayCapMinutes[index]])
-    )
-    return buildAdjustedReport(entries, {
-      ...options,
-      regularDayMinutes: (dateKey: string) => deckelJeTag.get(dateKey) ?? plan.dailyCapMinutes,
-      requestedPayoutMinutes: plan.payoutMinutes
-    })
-  }
-
-  const imRaster = mitRaster(PAYOUT_STEP_MINUTES)
-  // Liegen Tage selbst nicht auf dem Raster (krumme Pause, Fahrtzeit-
-  // Gutschrift), lässt sich der Rest über dem Rasterdeckel nicht immer
-  // innerhalb der gestempelten Zeit unterbringen. Dann stünde an einem Tag
-  // mehr als geleistet, obwohl gar keine Überstunden ausgezahlt werden – in
-  // dem Fall lieber minutengenau deckeln.
-  const geleistet = tagesMinuten.reduce((sum, minutes) => sum + minutes, 0)
-  if (targetMinutes <= geleistet && imRaster.payoutBeyondActualMinutes > 0) return mitRaster(1)
-  return imRaster
-}
+): AdjustedReport =>
+  buildAdjustedReport(entries, {
+    ...options,
+    regularDayMinutes: null,
+    requestedPayoutMinutes: 0,
+    settledWorkMinutes: targetMinutes
+  })
