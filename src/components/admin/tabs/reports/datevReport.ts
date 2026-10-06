@@ -16,6 +16,30 @@ import { formatDateForInputLocal } from '../../../../utils/dateUtils'
  * Stunden kommen, sagt das Kürzel in der "*"-Spalte.
  */
 
+/**
+ * Raster, auf das krumme Dauern im Nachweis abgerundet werden:
+ * 6 Minuten = 0,10 Dezimalstunden.
+ */
+export const DATEV_DURATION_STEP_MINUTES = 6
+
+/** Viertelstunden sind in Dezimalstunden bereits glatt (0,25 / 0,50 / 0,75). */
+const QUARTER_HOUR_MINUTES = 15
+
+/**
+ * Tagesdauer für den Nachweis glattziehen.
+ *
+ * Die Lohnbuchhaltung liest Dezimalstunden. Stempelzeiten liegen auf
+ * Viertelstunden, die Fahrtzeit-Gutschrift von 10 Minuten macht daraus aber
+ * 8:10 = „8,17" oder 7:25 = „7,42". Solche Werte werden auf die volle
+ * Zehntelstunde ABGERUNDET – 8,10 und 7,40 (Wunsch des Kunden, nach einem
+ * ersten Versuch mit 0,05er-Schritten). Viertelstunden bleiben, wie sie sind:
+ * 8,25 soll nicht zu 8,20 werden.
+ */
+export const roundDatevDuration = (minutes: number): number =>
+  minutes % QUARTER_HOUR_MINUTES === 0
+    ? minutes
+    : Math.floor(minutes / DATEV_DURATION_STEP_MINUTES) * DATEV_DURATION_STEP_MINUTES
+
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
 export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S'
 
@@ -39,8 +63,12 @@ export interface DatevDayRow {
   begin: string
   /** späteste Gehen-Zeit des Tages */
   end: string
+  /** Pause, für den Nachweis glattgezogen */
   pauseMinutes: number
+  /** Dauer, für den Nachweis glattgezogen (siehe roundDatevDuration) */
   workMinutes: number
+  /** Dauer minutengenau – daraus entsteht die Summe */
+  exactWorkMinutes: number
   key: DatevKey
   remark: string
 }
@@ -137,13 +165,23 @@ export const buildDatevRows = (
       dateKey,
       begin: alsUhrzeit(fruehester),
       end: alsUhrzeit(spaetester),
-      pauseMinutes,
-      workMinutes,
+      // Gerundet wird hier und nicht erst bei der Ausgabe: Ansicht, Ausdruck
+      // und PDF zeigen dann garantiert dieselben Tageswerte.
+      pauseMinutes: roundDatevDuration(pauseMinutes),
+      workMinutes: roundDatevDuration(workMinutes),
+      exactWorkMinutes: workMinutes,
       key,
       remark: bemerkungen.join(', ')
     }
   })
 }
 
+/**
+ * Summe des Nachweises – aus den minutengenauen Tageswerten.
+ *
+ * Bewusst nicht aus den abgerundeten: über einen Monat fehlte sonst bis zu
+ * einer halben Stunde, und die Summe muss zur Abrechnung darunter passen, die
+ * mit den tatsächlichen Stunden rechnet.
+ */
 export const datevTotalMinutes = (rows: DatevDayRow[]): number =>
-  rows.reduce((sum, row) => sum + row.workMinutes, 0)
+  rows.reduce((sum, row) => sum + row.exactWorkMinutes, 0)
