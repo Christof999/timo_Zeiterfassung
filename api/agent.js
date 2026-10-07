@@ -16,7 +16,13 @@ const requiredEnv = [
   'GEMINI_API_KEY'
 ]
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+const GEMINI_MODELS = [
+  ...new Set(
+    [process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-2.0-flash'].filter(
+      (model) => model && String(model).startsWith('gemini')
+    )
+  )
+]
 
 function assertEnv() {
   const missing = requiredEnv.filter((name) => !process.env[name])
@@ -52,18 +58,21 @@ async function authorizeRequest(req) {
 }
 
 async function callGemini(payload) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  const data = await response.json().catch(() => null)
-  if (!response.ok) {
+  let lastError = new Error('Gemini hat nicht geantwortet')
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const data = await response.json().catch(() => null)
+    if (response.ok) return data
     const message = data?.error?.message || `Gemini HTTP ${response.status}`
-    throw new Error(message)
+    lastError = new Error(message)
+    if (response.status !== 404) break
   }
-  return data
+  throw lastError
 }
 
 function firstCandidateParts(data) {

@@ -70,6 +70,13 @@
   font-size: 11px;
 }
 
+.moergel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.moergel-icon,
 .moergel-close {
   background: transparent;
   border: none;
@@ -78,6 +85,57 @@
   line-height: 1;
   cursor: pointer;
   padding: 0 4px;
+}
+
+.moergel-list {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--light-color);
+}
+
+.moergel-list-empty {
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.moergel-list-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.moergel-list-item {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text-color);
+}
+
+.moergel-list-item strong {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moergel-list-item small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.moergel-list-delete {
+  background: transparent;
+  border: none;
+  color: var(--danger-color);
+  font-size: 18px;
+  padding: 8px 12px;
+  cursor: pointer;
 }
 
 .moergel-messages {
