@@ -1,5 +1,3 @@
-import { formatDateForInputLocal } from './dateUtils'
-
 /**
  * Anfahrten auf eine Baustelle – Grundlage der Kfz-Pauschale.
  *
@@ -7,9 +5,9 @@ import { formatDateForInputLocal } from './dateUtils'
  * so stimmt die Zahl auch für Baustellen, die schon laufen, und nach jeder
  * Korrektur oder Umbuchung durch den Admin.
  *
- * Bewusst ohne React-/Firestore-Abhängigkeiten. Dieselbe Datei liegt als Kopie
- * im Rechnungsprogramm (src/utils/siteTrips.ts) – beide Programme müssen auf
- * dieselbe Zahl kommen. Änderungen hier dort nachziehen.
+ * Bewusst ohne jede Abhängigkeit, auch nicht auf andere Hilfsdateien: dieselbe
+ * Datei liegt unverändert im Rechnungsprogramm (src/utils/siteTrips.ts). Beide
+ * Programme müssen auf dieselbe Zahl kommen – Änderungen hier dort nachziehen.
  */
 
 /** Stempeln zwei Mitarbeiter so dicht hintereinander ein, sind sie zusammen gefahren. */
@@ -32,6 +30,10 @@ export interface SiteTrip {
   /** Wer mitgefahren ist */
   employeeIds: string[]
 }
+
+/** Kalendertag in Ortszeit als "YYYY-MM-DD" (nicht UTC – sonst kippt 00:30 Uhr in den Vortag). */
+const localDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 /** Wo wurde gestempelt? Kleinaufträge haben kein Projekt, nur einen Kunden. */
 const siteOf = (entry: SiteTripEntry): string =>
@@ -77,7 +79,7 @@ export const countSiteTrips = (
     let vorherTag = ''
     let vorherOrt = ''
     for (const entry of liste) {
-      const dateKey = formatDateForInputLocal(entry.clockInTime)
+      const dateKey = localDateKey(entry.clockInTime)
       const ort = siteOf(entry)
       const neuerTag = dateKey !== vorherTag
       if (ort === ziel && (neuerTag || vorherOrt !== ziel)) {
