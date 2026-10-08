@@ -45,6 +45,9 @@ import {
 } from './reports/reportUtils'
 import { parseHoursMinutesInput } from './reports/workTimeRules'
 import { buildDatevRows, DATEV_KEY_LEGEND, datevTotalMinutes } from './reports/datevReport'
+import { countSiteTrips, siteTripFlatRateTotal, type SiteTrip } from '../../../utils/siteTrips'
+import { getSiteTripSettings, saveSiteTripFlatRate } from '../../../services/siteTripSettingsService'
+import { isOverheadProject } from '../../../constants/overheadProjects'
 import {
   buildDatevBatchPrintHtml,
   buildDatevPrintHtml,
@@ -207,6 +210,12 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
   const [projectPhotos, setProjectPhotos] = useState<FileUpload[]>([])
   const [projectDocuments, setProjectDocuments] = useState<FileUpload[]>([])
   const [projectRawEntries, setProjectRawEntries] = useState<TimeEntry[]>([])
+  /** Anfahrten auf die Baustelle – Grundlage der Kfz-Pauschale. */
+  const [projectSiteTrips, setProjectSiteTrips] = useState<SiteTrip[]>([])
+  /** Kfz-Pauschale je Anfahrt (EUR), ein Betrag für alle Baustellen. */
+  const [siteTripRate, setSiteTripRate] = useState(0)
+  const [siteTripRateInput, setSiteTripRateInput] = useState('')
+  const [isSavingSiteTripRate, setIsSavingSiteTripRate] = useState(false)
   const [projectMaterialCredits, setProjectMaterialCredits] = useState<MaterialCredit[]>([])
   // Materialkatalog (für Einkaufspreis/Marge in der Nachkalkulation)
   const [materialTypes, setMaterialTypes] = useState<MaterialType[]>([])
@@ -240,6 +249,14 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     setEndDate(formatDateForInputLocal(lastDay))
     getReportMailConfig()
       .then(config => setMailRecipient(config.recipient))
+      .catch(() => {})
+    getSiteTripSettings()
+      .then(settings => {
+        setSiteTripRate(settings.flatRateEur)
+        setSiteTripRateInput(
+          settings.flatRateEur > 0 ? settings.flatRateEur.toFixed(2).replace('.', ',') : ''
+        )
+      })
       .catch(() => {})
   }, [])
 
@@ -1385,6 +1402,39 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
 
       setProjectRawEntries(timeEntries)
 
+      // Anfahrten für die Kfz-Pauschale. Gemeinkosten-Projekte (Lager,
+      // Nachbesserung) werden nicht abgerechnet und bekommen keine.
+      if (project && isOverheadProject(project)) {
+        setProjectSiteTrips([])
+      } else {
+        const alsAnfahrt = (entry: TimeEntry) => ({
+          employeeId: entry.employeeId,
+          projectId: entry.projectId,
+          customerId: entry.customerId,
+          clockInTime: convertToDate(entry.clockInTime) as Date
+        })
+        const zaehlbar = (entry: TimeEntry) =>
+          !entry.isVacationDay && !!convertToDate(entry.clockInTime)
+        let quelle = timeEntries
+        try {
+          // Alle Stempelsätze der beteiligten Mitarbeiter, nicht nur die des
+          // Projekts: nur so ist zu sehen, ob jemand zwischendurch auf einer
+          // anderen Baustelle war (dann zählt die Rückkehr als neue Anfahrt).
+          const employeeIds = [...new Set(timeEntries.map(e => e.employeeId).filter(Boolean))]
+          const jeMitarbeiter = await Promise.all(
+            employeeIds.map(id => DataService.getTimeEntriesByEmployeeId(id))
+          )
+          quelle = jeMitarbeiter.flat()
+        } catch (error) {
+          console.warn('Anfahrten: Stempelsätze der Mitarbeiter nicht ladbar, zähle nur aus dem Projekt:', error)
+        }
+        let trips = countSiteTrips(selectedProjectId, quelle.filter(zaehlbar).map(alsAnfahrt))
+        if (rangeStart && rangeEnd) {
+          trips = trips.filter(trip => trip.startedAt >= rangeStart && trip.startedAt <= rangeEnd)
+        }
+        setProjectSiteTrips(trips)
+      }
+
       // Vom Admin nachgetragenes Material / Gutschriften laden
       try {
         const credits = await DataService.getMaterialCreditsByProject(selectedProjectId)
@@ -1536,7 +1586,33 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       0
     )
 
-  const getProjectTotalCost = () => getEmployeeTotalCost() + getMaterialTotalCost()
+  /** Kfz-Pauschale: Anfahrten × fester Betrag. */
+  const getSiteTripTotalCost = () => siteTripFlatRateTotal(projectSiteTrips.length, siteTripRate)
+
+  const getProjectTotalCost = () =>
+    getEmployeeTotalCost() + getMaterialTotalCost() + getSiteTripTotalCost()
+
+  const handleSaveSiteTripRate = async () => {
+    const betrag = siteTripRateInput.trim() === '' ? 0 : Number(siteTripRateInput.replace(',', '.'))
+    if (!Number.isFinite(betrag) || betrag < 0) {
+      toast.error('Bitte die Pauschale als Betrag eingeben, z. B. 25 oder 12,50.')
+      return
+    }
+    setIsSavingSiteTripRate(true)
+    try {
+      await saveSiteTripFlatRate(betrag)
+      setSiteTripRate(betrag)
+      toast.success(
+        betrag > 0
+          ? `Kfz-Pauschale gespeichert: ${formatCurrency(betrag)} je Anfahrt.`
+          : 'Kfz-Pauschale entfernt.'
+      )
+    } catch (error: any) {
+      toast.error(error?.message || 'Pauschale konnte nicht gespeichert werden.')
+    } finally {
+      setIsSavingSiteTripRate(false)
+    }
+  }
 
   const getImageSrc = (file: FileUpload): string => getFileImageSrc(file)
 
@@ -3786,6 +3862,90 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                   </>
                 )}
               </div>
+
+              {/* Anfahrten (Kfz-Pauschale) */}
+              {!isOverheadProject(selectedProject) && (
+                <div className="cost-section">
+                  <h4>Anfahrten (Kfz-Pauschale)</h4>
+                  <table className="cost-table">
+                    <thead>
+                      <tr>
+                        <th>Position</th>
+                        <th className="number-cell">Anfahrten</th>
+                        <th className="number-cell">Pauschale</th>
+                        <th className="number-cell">Kosten</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Baustelle angefahren</td>
+                        <td className="number-cell">{projectSiteTrips.length}</td>
+                        <td className="number-cell">
+                          {siteTripRate > 0 ? formatCurrency(siteTripRate) : '—'}
+                        </td>
+                        <td className="number-cell">
+                          {siteTripRate > 0 ? formatCurrency(getSiteTripTotalCost()) : '—'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="material-margin-note">
+                    Die Baustelle wurde {projectSiteTrips.length} mal angefahren. Stempeln
+                    Mitarbeiter innerhalb von 10 Minuten ein, zählt das als eine gemeinsame Fahrt.
+                    Wer am selben Tag nur aus- und wieder einstempelt, zählt nicht doppelt – erst
+                    nach einem Wechsel auf eine andere Baustelle.
+                  </p>
+                  <div className="site-trip-rate no-print">
+                    <label htmlFor="site-trip-rate">Kfz-Pauschale je Anfahrt (€, gilt für alle Baustellen):</label>
+                    <input
+                      id="site-trip-rate"
+                      type="text"
+                      inputMode="decimal"
+                      className="inline-edit"
+                      value={siteTripRateInput}
+                      onChange={e => setSiteTripRateInput(e.target.value)}
+                      placeholder="z. B. 25,00"
+                      disabled={isSavingSiteTripRate}
+                    />
+                    <button
+                      type="button"
+                      className="btn secondary-btn"
+                      onClick={() => void handleSaveSiteTripRate()}
+                      disabled={isSavingSiteTripRate}
+                    >
+                      {isSavingSiteTripRate ? 'Speichere…' : 'Speichern'}
+                    </button>
+                  </div>
+                  {projectSiteTrips.length > 0 && (
+                    <details className="site-trip-details no-print">
+                      <summary>Anfahrten einzeln anzeigen</summary>
+                      <table className="cost-table">
+                        <thead>
+                          <tr>
+                            <th>Tag</th>
+                            <th>Einstempeln</th>
+                            <th>Mitarbeiter</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {projectSiteTrips.map(trip => (
+                            <tr key={trip.startedAt.getTime() + trip.employeeIds.join(',')}>
+                              <td>{trip.startedAt.toLocaleDateString('de-DE')}</td>
+                              <td>
+                                {trip.startedAt.toLocaleTimeString('de-DE', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                              <td>{trip.employeeIds.map(getEmployeeDisplayName).join(', ')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  )}
+                </div>
+              )}
 
               {/* Gesamtsumme */}
               <div className="total-cost-section">

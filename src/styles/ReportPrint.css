@@ -2121,6 +2121,31 @@
   font-weight: 600;
 }
 
+/* Kfz-Pauschale: Eingabe des Betrags und Einzelliste der Anfahrten */
+.site-trip-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.site-trip-rate input {
+  width: 110px;
+}
+
+.site-trip-details {
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.site-trip-details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
 .material-margin-note {
   margin: var(--spacing-sm) 0 0;
   font-size: 0.8rem;
