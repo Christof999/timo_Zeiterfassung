@@ -402,7 +402,7 @@ const AdminDashboard: React.FC = () => {
       </main>
 
       {adminRole === 'full' && (
-        <MoergelChat admin={{ id: currentAdmin.id, name: currentAdmin.name }} />
+        <MoergelChat admin={{ id: currentAdmin.id, username: currentAdmin.username, name: currentAdmin.name }} />
       )}
     </div>
   )
