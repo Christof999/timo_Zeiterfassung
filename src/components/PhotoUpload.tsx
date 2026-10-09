@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useId, useState, useRef } from 'react'
 import '../styles/PhotoUpload.css'
 
 export interface PhotoUploadItem {
@@ -34,67 +34,85 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
   captureMode = 'photo'
 }) => {
   const isDocumentMode = captureMode === 'document'
+  const inputId = useId()
   const [slots, setSlots] = useState<PhotoUploadSlot[]>([])
+  const [selectionError, setSelectionError] = useState('')
+  const slotsRef = useRef<PhotoUploadSlot[]>([])
+  const previewUrls = useRef(new Set<string>())
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  const readAsDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (event) => resolve((event.target?.result as string) || '')
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
+  useEffect(() => {
+    const urls = previewUrls.current
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url))
+      urls.clear()
+    }
+  }, [])
 
   const emitItems = (nextSlots: PhotoUploadSlot[]) => {
+    slotsRef.current = nextSlots
+    setSlots(nextSlots)
+    // Den Elternzustand im Event aktualisieren, niemals innerhalb eines State-Updaters.
     onItemsChange(nextSlots.map(({ file, comment }) => ({ file, comment })))
   }
 
-  const handleFileSelect = async (files: FileList | null) => {
+  const handleFileSelect = (files: FileList | null) => {
     if (!files) return
 
-    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
-    const availableSlots = Math.max(0, maxPhotos - slots.length)
+    setSelectionError('')
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type.startsWith('image/') ||
+      (!file.type && /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(file.name))
+    )
+    const availableSlots = Math.max(0, maxPhotos - slotsRef.current.length)
     const filesToAdd = imageFiles.slice(0, availableSlots)
 
     if (filesToAdd.length === 0) {
+      if (files.length > 0) {
+        setSelectionError(availableSlots === 0
+          ? `Es sind maximal ${maxPhotos} Bilder möglich.`
+          : 'Die ausgewählte Datei wurde nicht als Bild erkannt. Bitte ein JPG- oder PNG-Foto auswählen.')
+      }
       return
     }
 
+    const newSlots: PhotoUploadSlot[] = []
     try {
-      const newSlots: PhotoUploadSlot[] = await Promise.all(
-        filesToAdd.map(async (file) => ({
+      for (const file of filesToAdd) {
+        // Keine Base64-Kopie großer Kamerafotos im React-Zustand halten.
+        const preview = URL.createObjectURL(file)
+        previewUrls.current.add(preview)
+        newSlots.push({
           id: newSlotId(),
           file,
           comment: '',
-          preview: await readAsDataUrl(file)
-        }))
-      )
-      setSlots((prev) => {
-        const next = [...prev, ...newSlots]
-        emitItems(next)
-        return next
-      })
+          preview
+        })
+      }
     } catch (error) {
+      for (const slot of newSlots) {
+        URL.revokeObjectURL(slot.preview)
+        previewUrls.current.delete(slot.preview)
+      }
       console.error('Fehler beim Lesen der Bilder:', error)
+      setSelectionError('Das Bild konnte nicht geöffnet werden. Bitte erneut auswählen.')
+      return
     }
+    emitItems([...slotsRef.current, ...newSlots])
   }
 
   const removeSlot = (id: string) => {
-    setSlots((prev) => {
-      const next = prev.filter((s) => s.id !== id)
-      emitItems(next)
-      return next
-    })
+    const slot = slotsRef.current.find((s) => s.id === id)
+    if (slot) {
+      URL.revokeObjectURL(slot.preview)
+      previewUrls.current.delete(slot.preview)
+    }
+    emitItems(slotsRef.current.filter((s) => s.id !== id))
   }
 
   const updateComment = (id: string, comment: string) => {
-    setSlots((prev) => {
-      const next = prev.map((s) => (s.id === id ? { ...s, comment } : s))
-      emitItems(next)
-      return next
-    })
+    emitItems(slotsRef.current.map((s) => (s.id === id ? { ...s, comment } : s)))
   }
 
   return (
@@ -104,28 +122,36 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
         <input
           ref={cameraInputRef}
           type="file"
-          id={`camera-${label}`}
+          id={`camera-${inputId}`}
           accept="image/*"
           capture="environment"
           className="file-input"
-          onChange={(e) => handleFileSelect(e.target.files)}
+          onChange={(e) => {
+            handleFileSelect(e.currentTarget.files)
+            e.currentTarget.value = ''
+          }}
         />
-        <label htmlFor={`camera-${label}`} className="file-label file-label-primary">
+        <label htmlFor={`camera-${inputId}`} className="file-label file-label-primary">
           {isDocumentMode ? 'Dokument scannen (Kamera)' : 'Kamera öffnen'}
         </label>
 
         <input
           ref={galleryInputRef}
           type="file"
-          id={`gallery-${label}`}
+          id={`gallery-${inputId}`}
           accept="image/*"
           multiple
           className="file-input"
-          onChange={(e) => handleFileSelect(e.target.files)}
+          onChange={(e) => {
+            handleFileSelect(e.currentTarget.files)
+            e.currentTarget.value = ''
+          }}
         />
-        <label htmlFor={`gallery-${label}`} className="file-label">
+        <label htmlFor={`gallery-${inputId}`} className="file-label">
           {isDocumentMode ? 'Aus Dateien wählen' : 'Galerie öffnen'}
         </label>
+
+        {selectionError && <p role="alert">{selectionError}</p>}
 
         {isDocumentMode && (
           <p className="photo-upload-scan-hint">
@@ -140,7 +166,12 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
               <div key={slot.id} className="photo-upload-slot">
                 <div className="photo-upload-slot-thumb-wrap">
                   <div className="photo-upload-slot-thumb">
-                    <img src={slot.preview} alt={slot.file.name} />
+                    <img
+                      src={slot.preview}
+                      alt={slot.file.name}
+                      decoding="async"
+                      onError={() => setSelectionError('Die Bildvorschau konnte nicht geöffnet werden. Bitte ein JPG- oder PNG-Foto verwenden.')}
+                    />
                     <button
                       type="button"
                       className="remove-preview"

@@ -30,6 +30,15 @@
   }
 }
 
+/* Touch-Geräte: keine großflächige Blur-Compositing-Ebene beim Öffnen der
+   Kamera/Galerie. Die abgedunkelte Fläche trennt den Dialog weiterhin ab. */
+@media (any-pointer: coarse) {
+  .modal-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 .modal-content {
   background: var(--card-background);
   border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
