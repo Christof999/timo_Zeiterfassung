@@ -9,6 +9,7 @@ import SplashScreen from './components/SplashScreen'
 import OnboardingScreen from './components/OnboardingScreen'
 import ToastContainer from './components/ToastContainer'
 import OfflineUploadIndicator from './components/OfflineUploadIndicator'
+import PhotoUploadDiagnostic from './components/PhotoUploadDiagnostic'
 import { offlineUploadQueue } from './services/offlineUploadQueue'
 import { ONBOARDING_STORAGE_KEY } from './constants/onboarding'
 import './styles/App.css'
@@ -20,6 +21,7 @@ const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const InspectionEditor = lazy(() => import('./components/besichtigung/InspectionEditor'))
 
 function App() {
+  const isPhotoDiagnostic = window.location.pathname === '/foto-test'
   const [isLoading, setIsLoading] = useState(true)
   const [showSplash, setShowSplash] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -31,6 +33,7 @@ function App() {
   })
 
   useEffect(() => {
+    if (isPhotoDiagnostic) return
     // Initialize Firebase - DataService initializes itself
     // Just ensure auth is ready
     void DataService.authReady
@@ -46,7 +49,11 @@ function App() {
     }, 2500)
 
     return () => clearTimeout(splashTimer)
-  }, [])
+  }, [isPhotoDiagnostic])
+
+  if (isPhotoDiagnostic) {
+    return <PhotoUploadDiagnostic />
+  }
 
   if (showSplash) {
     return <SplashScreen />

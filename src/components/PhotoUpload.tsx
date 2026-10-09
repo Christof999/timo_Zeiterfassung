@@ -24,6 +24,8 @@ interface PhotoUploadProps {
   commentFieldLabel?: string
   /** document = höhere Qualität, Scan-Hinweise (Lieferscheine/Rechnungen) */
   captureMode?: 'photo' | 'document'
+  /** Für den Fototest: Auswahl und Browser-Bilddekodierung getrennt prüfen. */
+  showPreviews?: boolean
 }
 
 const PhotoUpload: React.FC<PhotoUploadProps> = ({
@@ -31,7 +33,8 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
   onItemsChange,
   maxPhotos = 10,
   commentFieldLabel = 'Kommentar zu diesem Bild (optional)',
-  captureMode = 'photo'
+  captureMode = 'photo',
+  showPreviews = true
 }) => {
   const isDocumentMode = captureMode === 'document'
   const inputId = useId()
@@ -166,12 +169,12 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
               <div key={slot.id} className="photo-upload-slot">
                 <div className="photo-upload-slot-thumb-wrap">
                   <div className="photo-upload-slot-thumb">
-                    <img
+                    {showPreviews ? <img
                       src={slot.preview}
                       alt={slot.file.name}
                       decoding="async"
                       onError={() => setSelectionError('Die Bildvorschau konnte nicht geöffnet werden. Bitte ein JPG- oder PNG-Foto verwenden.')}
-                    />
+                    /> : <span className="photo-upload-preview-placeholder">Foto ausgewählt</span>}
                     <button
                       type="button"
                       className="remove-preview"
