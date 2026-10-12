@@ -46,6 +46,8 @@ export interface ReportEntry {
   holidayName?: string | null
   /** gesetzt bei Urlaub, Feiertag und Krankheit — Basis für die Beleg-Summen */
   absenceKind?: AbsenceKind
+  /** Bei absenceKind 'school': Berufsschule oder Handwerkskammer. */
+  schoolKind?: LeaveRequest['schoolKind']
 }
 
 export interface EmployeeSummary {

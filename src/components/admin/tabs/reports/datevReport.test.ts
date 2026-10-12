@@ -98,6 +98,23 @@ describe('buildDatevRows', () => {
     expect(rows.map((r) => r.remark)).toEqual(['Urlaub', 'Krank', 'Feiertag'])
   })
 
+  it('unterscheidet Berufsschule und Handwerkskammer', () => {
+    const rows = buildDatevRows(
+      [
+        zeile(1, { absenceKind: 'school', schoolKind: 'school', effectiveWorkMinutes: 8 * 60 }),
+        zeile(2, { absenceKind: 'school', schoolKind: 'chamber', effectiveWorkMinutes: 8 * 60 }),
+        // Vom Admin gemeldet, ohne Angabe: gilt als Berufsschule.
+        zeile(3, { absenceKind: 'school', effectiveWorkMinutes: 6 * 60 })
+      ],
+      '2026-07-01',
+      '2026-07-03'
+    )
+    expect(rows.map((r) => r.key)).toEqual(['S', 'HK', 'S'])
+    expect(rows.map((r) => r.remark)).toEqual(['Berufsschule', 'Handwerkskammer', 'Berufsschule'])
+    // Beide decken den ganzen Tag mit der Regelarbeitszeit ab.
+    expect(rows.map((r) => r.workMinutes)).toEqual([8 * 60, 8 * 60, 6 * 60])
+  })
+
   it('weist bei Urlaub die Regelstunden aus, ohne Kommen- und Gehen-Zeit', () => {
     const rows = buildDatevRows(
       [zeile(1, { absenceKind: 'vacation', effectiveWorkMinutes: 8 * 60 })],

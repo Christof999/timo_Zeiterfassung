@@ -18,6 +18,8 @@ function employeeLabel(e: Employee): string {
 
 interface SchoolDayModalProps {
   employee: Employee
+  /** Berufsschule oder Handwerkskammer – je ein eigener Knopf in der Zeiterfassung. */
+  kind: SchoolDayKind
   onClose: () => void
   onSuccess?: () => void
 }
@@ -25,13 +27,12 @@ interface SchoolDayModalProps {
 /**
  * Ausbildungstag buchen – nur für Azubis.
  *
- * Der Tag wird als bezahlte Abwesenheit gebucht (kein Urlaubstag) und trägt
- * je nach Auswahl „Berufsschule“ oder „Handwerkskammer“ als Grund.
+ * Der Tag wird als ganzer, bezahlter Abwesenheitstag gebucht (kein Urlaubstag)
+ * und trägt je nach Knopf „Berufsschule“ oder „Handwerkskammer“ als Grund.
  */
-const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, onClose, onSuccess }) => {
+const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, kind, onClose, onSuccess }) => {
   const today = useMemo(() => toDateInputValue(new Date()), [])
   const [date, setDate] = useState(today)
-  const [kind, setKind] = useState<SchoolDayKind | ''>('')
   const [isSaving, setIsSaving] = useState(false)
 
   const holidayName = useMemo(() => {
@@ -51,10 +52,6 @@ const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, onClose, onSu
 
     if (!employee.id) {
       toast.error('Mitarbeiter konnte nicht ermittelt werden.')
-      return
-    }
-    if (!kind) {
-      toast.error('Bitte Berufsschule oder Handwerkskammer auswählen.')
       return
     }
 
@@ -86,7 +83,7 @@ const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, onClose, onSu
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Schule / Handwerkskammer</h2>
+          <h2>{SCHOOL_DAY_LABELS[kind]}</h2>
           <button type="button" className="close-modal-btn" onClick={onClose}>
             ×
           </button>
@@ -95,8 +92,8 @@ const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, onClose, onSu
         <div className="modal-body">
           <form onSubmit={handleSubmit}>
             <p className="sick-leave-hint">
-              Ausbildungstag buchen. Der Tag gilt als bezahlte Abwesenheit und wird nicht vom
-              Urlaub abgezogen.
+              Der ganze Tag wird als {SCHOOL_DAY_LABELS[kind]} gebucht. Er gilt als bezahlte
+              Abwesenheit und wird nicht vom Urlaub abgezogen.
             </p>
 
             <div className="form-group">
@@ -120,29 +117,11 @@ const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, onClose, onSu
               )}
             </div>
 
-            <div className="form-group">
-              <label>Grund</label>
-              <div className="school-day-choices">
-                {(Object.keys(SCHOOL_DAY_LABELS) as SchoolDayKind[]).map((option) => (
-                  <label key={option} className="school-day-choice">
-                    <input
-                      type="radio"
-                      name="schoolKind"
-                      value={option}
-                      checked={kind === option}
-                      onChange={() => setKind(option)}
-                    />
-                    <span>{SCHOOL_DAY_LABELS[option]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <div className="modal-actions">
               <button type="button" className="btn secondary-btn" onClick={onClose} disabled={isSaving}>
                 Abbrechen
               </button>
-              <button type="submit" className="btn primary-btn" disabled={isSaving || !kind}>
+              <button type="submit" className="btn primary-btn" disabled={isSaving}>
                 {isSaving ? 'Speichert…' : 'Tag buchen'}
               </button>
             </div>

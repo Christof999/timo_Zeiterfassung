@@ -1,5 +1,6 @@
 import { enumerateDays, minutesToHoursLabel, type AdjustedReportEntry } from './reportUtils'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
+import { SCHOOL_DAY_LABELS } from '../../../../types'
 
 /**
  * Aufbereitung für den DATEV-Nachweis „Vorlage zur Dokumentation der täglichen
@@ -41,7 +42,7 @@ export const roundDatevDuration = (minutes: number): number =>
     : Math.floor(minutes / DATEV_DURATION_STEP_MINUTES) * DATEV_DURATION_STEP_MINUTES
 
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
-export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S'
+export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S' | 'HK'
 
 export const DATEV_KEY_LEGEND: Array<{ key: Exclude<DatevKey, ''>; label: string }> = [
   { key: 'K', label: 'Krank' },
@@ -52,7 +53,8 @@ export const DATEV_KEY_LEGEND: Array<{ key: Exclude<DatevKey, ''>; label: string
   { key: 'SU', label: 'Stundenweise Urlaub' },
   // Nicht Teil der DATEV-Vorlage, aber von der Lohnbuchhaltung ausdrücklich
   // gewünscht: bei Azubis soll erkennbar sein, warum nicht gearbeitet wurde.
-  { key: 'S', label: 'Berufsschule' }
+  { key: 'S', label: 'Berufsschule' },
+  { key: 'HK', label: 'Handwerkskammer' }
 ]
 
 export interface DatevDayRow {
@@ -137,8 +139,11 @@ export const buildDatevRows = (
         // in die Summe. Das Kürzel in der "*"-Spalte sagt weiterhin, warum an
         // dem Tag nicht gestempelt wurde. Beginn und Ende bleiben leer – es
         // gibt keine Kommen-/Gehen-Zeit.
-        key = KEY_BY_ABSENCE[entry.absenceKind] || key
-        const label = REMARK_BY_ABSENCE[entry.absenceKind]
+        // Ein Ausbildungstag bei der Handwerkskammer bekommt ein eigenes Kürzel,
+        // damit er sich von der Berufsschule unterscheiden lässt.
+        const istKammer = entry.absenceKind === 'school' && entry.schoolKind === 'chamber'
+        key = (istKammer ? 'HK' : KEY_BY_ABSENCE[entry.absenceKind]) || key
+        const label = istKammer ? SCHOOL_DAY_LABELS.chamber : REMARK_BY_ABSENCE[entry.absenceKind]
         if (label && !bemerkungen.includes(label)) bemerkungen.push(label)
         absenceMinutes = Math.max(absenceMinutes, entry.effectiveWorkMinutes)
         continue

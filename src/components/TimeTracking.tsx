@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataService } from '../services/dataService'
-import type { Employee, Project, TimeEntry, TimeEntryMaterialUsage } from '../types'
+import type { Employee, Project, SchoolDayKind, TimeEntry, TimeEntryMaterialUsage } from '../types'
+import { SCHOOL_DAY_LABELS } from '../types'
 import type { OvertimeDayFillPlan } from '../services/dataService'
 import ClockInForm, { type ClockInTarget } from './ClockInForm'
 import ClockOutForm from './ClockOutForm'
@@ -69,7 +70,8 @@ const TimeTracking: React.FC = () => {
   const [showManualEntryModal, setShowManualEntryModal] = useState(false)
   const [showRetroDocListModal, setShowRetroDocListModal] = useState(false)
   const [showSickLeaveModal, setShowSickLeaveModal] = useState(false)
-  const [showSchoolDayModal, setShowSchoolDayModal] = useState(false)
+  /** Welcher Ausbildungstag gerade gebucht wird (null = Dialog zu). */
+  const [schoolDayKind, setSchoolDayKind] = useState<SchoolDayKind | null>(null)
   const [activitiesRefreshKey, setActivitiesRefreshKey] = useState(0)
   /** Was sich heute aus dem Überstundenkonto auffüllen lässt (null = nichts). */
   const [dayFillPlan, setDayFillPlan] = useState<OvertimeDayFillPlan | null>(null)
@@ -533,7 +535,7 @@ const TimeTracking: React.FC = () => {
           </div>
         )}
 
-        {/* Abwesenheiten: Krankmeldung für alle, Ausbildungstag nur für Azubis */}
+        {/* Abwesenheiten: Krankmeldung für alle, Berufsschule und Handwerkskammer nur für Azubis */}
         <div className="absence-actions">
           <button
             type="button"
@@ -542,15 +544,17 @@ const TimeTracking: React.FC = () => {
           >
             Krank
           </button>
-          {currentUser.isApprentice === true && (
-            <button
-              type="button"
-              className="btn secondary-btn absence-actions-btn"
-              onClick={() => setShowSchoolDayModal(true)}
-            >
-              Schule / Handwerkskammer
-            </button>
-          )}
+          {currentUser.isApprentice === true &&
+            (Object.keys(SCHOOL_DAY_LABELS) as SchoolDayKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                className="btn secondary-btn absence-actions-btn"
+                onClick={() => setSchoolDayKind(kind)}
+              >
+                {SCHOOL_DAY_LABELS[kind]}
+              </button>
+            ))}
         </div>
 
         {!currentTimeEntry ? (
@@ -603,10 +607,11 @@ const TimeTracking: React.FC = () => {
           />
         )}
 
-        {showSchoolDayModal && currentUser && (
+        {schoolDayKind && currentUser && (
           <SchoolDayModal
             employee={currentUser}
-            onClose={() => setShowSchoolDayModal(false)}
+            kind={schoolDayKind}
+            onClose={() => setSchoolDayKind(null)}
             onSuccess={() => setActivitiesRefreshKey((k) => k + 1)}
           />
         )}

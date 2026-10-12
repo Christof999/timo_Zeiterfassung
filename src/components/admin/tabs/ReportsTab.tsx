@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, OvertimeSettlement, MaterialCredit, MaterialType } from '../../../types'
+import { SCHOOL_DAY_LABELS } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -548,13 +549,18 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       new Set([...blockedDates, ...vacationDates, ...sickDates])
     ).map(({ date, request }) => {
       const reason = (request.reason || '').trim()
-      return buildAbsenceRow(
-        date,
-        'school',
-        `school-${request.id || ''}`,
-        'Berufsschule',
-        reason ? `Berufsschule: ${reason}` : 'Berufsschule'
-      )
+      // Ohne Angabe (Meldung durch den Admin) gilt der Tag als Berufsschule.
+      const label = SCHOOL_DAY_LABELS[request.schoolKind || 'school']
+      return {
+        ...buildAbsenceRow(
+          date,
+          'school',
+          `school-${request.id || ''}`,
+          label,
+          reason && reason !== label ? `${label}: ${reason}` : label
+        ),
+        schoolKind: request.schoolKind
+      }
     })
 
     return [

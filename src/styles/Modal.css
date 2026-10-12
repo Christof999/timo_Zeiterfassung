@@ -1344,28 +1344,6 @@
   color: var(--danger-color, #b91c1c);
 }
 
-.school-day-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm, 0.5rem);
-}
-
-.school-day-choice {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  border: 1px solid var(--border-color, #e2e8f0);
-  border-radius: 10px;
-  cursor: pointer;
-  flex: 1 1 10rem;
-}
-
-.school-day-choice:has(input:checked) {
-  border-color: var(--primary-color, #2563eb);
-  background: rgba(37, 99, 235, 0.08);
-}
-
 /* ===== Abwesenheitshistorie am Mitarbeiter (Admin) ===== */
 .absence-history-empty {
   color: var(--text-secondary, #64748b);
