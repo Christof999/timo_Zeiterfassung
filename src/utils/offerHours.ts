@@ -3,8 +3,7 @@ import { getReturnTravelCreditMs } from './returnTravel'
 import { roundedSpanMs } from './timeRounding'
 
 /**
- * Einheiten, die der HERO-Import als Lohn/Arbeitszeit erkennt
- * (lib/hero/syncProjects.js, LABOR_UNIT_RE). Nur diese Mengen sind Stunden
+ * Einheiten, die als Lohn/Arbeitszeit gelten. Nur diese Mengen sind Stunden
  * und dürfen gegen die gestempelte Projektzeit laufen.
  */
 const LABOR_HOUR_UNIT_RE = /^(std|std\.|stunde|stunden|h|hour|akh|aw)$/i

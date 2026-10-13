@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
-import { heroService } from '../../services/heroService'
 import type {
   Project,
   FileUpload,
@@ -62,7 +61,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
   const [offerPositions, setOfferPositions] = useState<OfferPosition[]>(project.offerPositions || [])
   const [offerMeta, setOfferMeta] = useState<Project['offerMeta'] | null>(project.offerMeta || null)
-  const [isImportingOffer, setIsImportingOffer] = useState(false)
   // Editor für die Materialliste (Soll-Positionen): null = geschlossen, -1 = neue Position, sonst Index.
   const [editingPosIndex, setEditingPosIndex] = useState<number | null>(null)
   const [posDraft, setPosDraft] = useState<{
@@ -471,28 +469,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     }
   }
 
-  const handleImportOffer = async () => {
-    if (!project.heroProjectId) return
-    setIsImportingOffer(true)
-    try {
-      const res = await heroService.syncProjectOffer(project.heroProjectId)
-      if (res.offerResult && res.offerResult.found === false) {
-        toast.error(res.offerResult.message || 'Kein Angebot für dieses Projekt gefunden.')
-        return
-      }
-      const refreshed = await DataService.getProjectById(project.id!)
-      setOfferPositions(refreshed?.offerPositions || [])
-      setOfferMeta(refreshed?.offerMeta || null)
-      toast.success(
-        `Angebot übernommen: ${res.offerResult?.materialCount ?? 0} Material-, ${res.offerResult?.laborCount ?? 0} Lohnposition(en).`
-      )
-    } catch (e: any) {
-      toast.error('Angebots-Import fehlgeschlagen: ' + (e?.message || 'Unbekannter Fehler'))
-    } finally {
-      setIsImportingOffer(false)
-    }
-  }
-
   // --- Materialliste (Soll-Positionen) bearbeiten -------------------------
   const resetPosDraft = () =>
     setPosDraft({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
@@ -876,20 +852,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           <div className="project-offer-section">
             <div className="project-offer-head">
               <strong>Materialliste (Soll):</strong>
-              {project.heroProjectId && (
-                <button
-                  type="button"
-                  className="btn secondary-btn btn-sm"
-                  onClick={handleImportOffer}
-                  disabled={isImportingOffer}
-                >
-                  {isImportingOffer
-                    ? 'Lade\u2026'
-                    : offerMeta
-                      ? 'Angebot aktualisieren'
-                      : 'Angebot von HERO laden'}
-                </button>
-              )}
             </div>
 
             {offerMeta && (offerMeta.nr || offerMeta.date) && (
@@ -950,9 +912,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               </div>
             ) : (
               <p className="project-offer-empty">
-                {project.heroProjectId
-                  ? 'Noch kein Material hinterlegt. \u201EAngebot von HERO laden\u201C oder eine Position manuell hinzuf\u00FCgen.'
-                  : 'Noch kein Material hinterlegt. Position manuell hinzuf\u00FCgen.'}
+                Noch kein Material hinterlegt. Position manuell hinzufügen.
               </p>
             )}
 

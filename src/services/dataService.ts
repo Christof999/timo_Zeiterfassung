@@ -34,7 +34,6 @@ import * as settlements from './data/settlements'
 import * as overtimeSettlements from './data/overtimeSettlements'
 import * as overtimeBroadcast from './data/overtimeBroadcast'
 import * as overtimeDayFill from './data/overtimeDayFill'
-import * as hero from './data/hero'
 import * as dashboard from './data/dashboard'
 import type {
   Employee,
@@ -51,8 +50,6 @@ import type {
   MaterialCredit,
   TimeReportSettlement,
   OvertimeSettlement,
-  HeroIntegrationConfig,
-  HeroSyncLogEntry,
   DashboardWidgetInstance
 } from '../types'
 import { formatDateForInputLocal } from '../utils/dateUtils'
@@ -608,9 +605,7 @@ class DataServiceClass {
         manualTimeEntryCreatedAt: serverTimestamp(),
         ...(vacationRequestsToCancel.length > 0
           ? { autoCancelledVacationRequestIds: vacationRequestsToCancel.map((request) => request.id).filter(Boolean) }
-          : {}),
-        heroSyncStatus: 'pending',
-        heroSyncError: null
+          : {})
       }
 
       const payload = Object.fromEntries(
@@ -747,8 +742,6 @@ class DataServiceClass {
         if (materialCreditUsages !== undefined) {
           updateData.materialCreditUsages = materialCreditUsages
         }
-
-        updateData.heroSyncStatus = 'pending'
 
         transaction.update(timeEntryRef, updateData)
 
@@ -1271,7 +1264,6 @@ class DataServiceClass {
         // damit es dem korrekten (verlassenen) Projekt zugeordnet bleibt.
         if (materialUsages && materialUsages.length > 0) {
           clockOutUpdate.materialUsages = materialUsages
-          clockOutUpdate.heroSyncStatus = 'pending'
         }
         transaction.update(currentRef, clockOutUpdate)
 
@@ -2219,20 +2211,8 @@ class DataServiceClass {
     return customers.getActiveCustomers()
   }
 
-  getCustomerById(id: string): Promise<Customer | null> {
-    return customers.getCustomerById(id)
-  }
-
-  createCustomer(customerData: Partial<Customer>): Promise<string> {
-    return customers.createCustomer(customerData)
-  }
-
-  updateCustomer(id: string, customerData: Partial<Customer>): Promise<void> {
-    return customers.updateCustomer(id, customerData)
-  }
-
-  deleteCustomer(id: string): Promise<void> {
-    return customers.deleteCustomer(id)
+  getLegacyCustomers(): Promise<Customer[]> {
+    return customers.getLegacyCustomers()
   }
 
   // ==================== FAHRZEUGE (data/vehicles.ts) ====================
@@ -3100,15 +3080,6 @@ class DataServiceClass {
       console.error('Fehler beim Abrufen der Datei-Uploads:', error)
       return []
     }
-  }
-
-  // ==================== HERO (data/hero.ts) ====================
-  getHeroIntegrationConfig(): Promise<HeroIntegrationConfig | null> {
-    return hero.getHeroIntegrationConfig()
-  }
-
-  getHeroSyncLogs(limit = 10): Promise<HeroSyncLogEntry[]> {
-    return hero.getHeroSyncLogs(limit)
   }
 }
 

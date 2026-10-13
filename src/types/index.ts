@@ -1,28 +1,3 @@
-/** Status der Rückübertragung erfasster Zeiten an HERO (Export folgt in späterer Phase). */
-export type HeroSyncStatus = 'pending' | 'synced' | 'failed' | 'skipped'
-
-export interface HeroIntegrationConfig {
-  lastProjectSyncAt?: Date | any
-  lastProjectSyncError?: string | null
-  lastProjectSyncStats?: {
-    created: number
-    updated: number
-    archived: number
-    skipped: number
-    total: number
-  }
-}
-
-export interface HeroSyncLogEntry {
-  id?: string
-  type: 'projects' | 'customers' | 'materials' | 'health' | 'times'
-  success: boolean
-  message?: string
-  stats?: Record<string, number>
-  error?: string
-  createdAt?: Date | any
-}
-
 export interface Employee {
   id?: string
   username: string
@@ -46,7 +21,7 @@ export interface Employee {
   position?: string
   isAdmin?: boolean
   status?: 'active' | 'inactive'
-  /** HERO-Kontakt-ID für späteren Zeit-Export */
+  /** Personalnummer für den DATEV-Nachweis (Feldname stammt aus der früheren HERO-Anbindung) */
   heroEmployeeId?: string
   heroContactNr?: string
   vacationDays?: {
@@ -156,22 +131,26 @@ export interface OfferPosition {
   source?: 'hero' | 'manual'
 }
 
-/** Kunde – manuell angelegt oder aus HERO synchronisiert */
+/** Kunde aus dem Kundenstamm des Rechnungsprogramms */
 export interface Customer {
   id: string
   /** Anzeigename (Firma oder Vor-/Nachname) */
   name: string
+  /** Kundennummer aus dem Rechnungsprogramm (z. B. K-001) */
+  customerNumber?: string
   companyName?: string
   firstName?: string
   lastName?: string
   email?: string
   phone?: string
   address?: string
+  /** Baustellenadresse aus dem Rechnungsprogramm; ohne eigene Angabe die Kundenadresse */
+  siteAddress?: string
   notes?: string
   isActive?: boolean
-  /** 'hero' = aus HERO importiert, sonst manuell angelegt */
-  source?: 'hero' | 'manual'
-  /** HERO customer.id (für Sync/Abgleich) */
+  /** 'rechnung' = Kundenstamm des Rechnungsprogramms; 'hero'/'manual' nur noch bei früheren Kunden */
+  source?: 'rechnung' | 'hero' | 'manual'
+  /** HERO customer.id früherer Kunden (nur noch für die Diagnose) */
   heroCustomerId?: string
   heroLastSyncedAt?: Date | any
   createdAt?: Date | any
@@ -303,11 +282,6 @@ export interface TimeEntry {
   /** Herkunft, wenn ein Kleinauftrag nachträglich auf ein Projekt umgebucht wurde */
   movedFromCustomerId?: string | null
   movedFromCustomerName?: string | null
-  /** Warteschlange für HERO-Zeit-Export (noch nicht implementiert) */
-  heroSyncStatus?: HeroSyncStatus
-  heroSyncedAt?: Date | any
-  heroSyncError?: string
-  heroExternalRef?: string
 }
 
 export interface Vehicle {

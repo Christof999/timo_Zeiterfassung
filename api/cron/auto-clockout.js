@@ -255,8 +255,7 @@ module.exports = async function handler(req, res) {
         autoClockOutAt: Timestamp.fromDate(now),
         notes: entry.notes
           ? `${entry.notes}\n[Automatisch um 18:00 ausgestempelt]`
-          : 'Automatisch um 18:00 ausgestempelt',
-        heroSyncStatus: 'pending'
+          : 'Automatisch um 18:00 ausgestempelt'
       }
       await entryRef.update(updateData)
 

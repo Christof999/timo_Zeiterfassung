@@ -1,95 +1,38 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { DataService } from '../../../services/dataService'
-import { heroService } from '../../../services/heroService'
 import type { Customer } from '../../../types'
 import { toast } from '../../ToastContainer'
-import CustomerModal from '../CustomerModal'
+import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
 
+/**
+ * Kundenstamm – nur zur Ansicht. Angelegt und gepflegt werden Kunden im
+ * Rechnungsprogramm; die Zeiterfassung liest dieselbe Liste.
+ */
 const CustomersTab: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    loadCustomers()
+    DataService.getAllCustomers()
+      .then(setCustomers)
+      .catch((error) => {
+        console.error('Fehler beim Laden der Kunden:', error)
+        toast.error('Kunden konnten nicht aus dem Rechnungsprogramm geladen werden')
+      })
+      .finally(() => setIsLoading(false))
   }, [])
 
-  const loadCustomers = async () => {
-    try {
-      const allCustomers = await DataService.getAllCustomers()
-      setCustomers(allCustomers)
-    } catch (error) {
-      console.error('Fehler beim Laden der Kunden:', error)
-      toast.error('Fehler beim Laden der Kunden')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleAdd = () => {
-    setEditingCustomer(null)
-    setShowModal(true)
-  }
-
-  const handleEdit = (customer: Customer) => {
-    setEditingCustomer(customer)
-    setShowModal(true)
-  }
-
-  const handleSave = () => {
-    setShowModal(false)
-    setEditingCustomer(null)
-    loadCustomers()
-  }
-
-  const handleDelete = async (customer: Customer) => {
-    if (!customer.id) return
-    // Bei HERO-Kunden klarstellen, dass sie auch beim nächsten Sync wegbleiben
-    const question =
-      customer.source === 'hero'
-        ? `Kunde "${customer.name}" wirklich löschen?\n\n` +
-          'Der Kunde stammt aus HERO und wird auch beim nächsten Sync nicht wieder angelegt.'
-        : `Kunde "${customer.name}" wirklich löschen?`
-    if (!confirm(question)) {
-      return
-    }
-
-    setDeletingCustomerId(customer.id)
-    try {
-      await DataService.deleteCustomer(customer.id)
-      toast.success('Kunde gelöscht')
-      await loadCustomers()
-    } catch (error: any) {
-      toast.error('Fehler beim Löschen: ' + (error?.message || 'Unbekannter Fehler'))
-    } finally {
-      setDeletingCustomerId(null)
-    }
-  }
-
-  const handleHeroSync = async () => {
-    setIsSyncing(true)
-    try {
-      const result = await heroService.syncCustomers()
-      const stats = result.stats
-      const skippedDeleted = stats?.skippedDeleted
-        ? ` ${stats.skippedDeleted} gelöschte übersprungen.`
-        : ''
-      toast.success(
-        stats
-          ? `Kunden-Sync: ${stats.created} neu, ${stats.updated} aktualisiert.${skippedDeleted}`
-          : 'Kunden aus HERO synchronisiert.'
-      )
-      await loadCustomers()
-    } catch (error: any) {
-      toast.error('HERO-Kunden-Sync fehlgeschlagen: ' + (error?.message || 'Unbekannter Fehler'))
-    } finally {
-      setIsSyncing(false)
-    }
-  }
+  const filteredCustomers = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return customers
+    return customers.filter((c) =>
+      [c.name, c.customerNumber, c.email, c.phone, c.address, c.siteAddress]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    )
+  }, [customers, searchTerm])
 
   if (isLoading) {
     return <div className="loading">Lade Kunden...</div>
@@ -98,84 +41,59 @@ const CustomersTab: React.FC = () => {
   return (
     <div className="customers-tab">
       <div className="tab-header">
-        <h3>Kunden</h3>
-        <div className="tab-header-actions">
-          <button onClick={handleHeroSync} className="btn secondary-btn" disabled={isSyncing}>
-            {isSyncing ? 'Synchronisiere…' : 'Aus HERO synchronisieren'}
-          </button>
-          <button onClick={handleAdd} className="btn primary-btn">
-            Kunde hinzufügen
-          </button>
+        <div>
+          <h3>Kunden</h3>
+          <p className="no-data" style={{ marginTop: 4, marginBottom: 0 }}>
+            Die Kunden kommen aus dem Rechnungsprogramm und werden dort angelegt und geändert.
+          </p>
         </div>
       </div>
 
+      <ListSearch
+        value={searchTerm}
+        onChange={setSearchTerm}
+        placeholder="Kunde suchen (Name, Nummer, Adresse)"
+      />
+
       {customers.length === 0 ? (
         <p className="no-data">Keine Kunden vorhanden</p>
+      ) : filteredCustomers.length === 0 ? (
+        <p className="no-data">Kein Kunde passt zur Suche</p>
       ) : (
         <div className="data-table-container">
           <table className="data-table">
             <thead>
               <tr>
+                <th>Nr.</th>
                 <th>Name</th>
                 <th>Kontakt</th>
                 <th>Adresse</th>
-                <th>Quelle</th>
+                <th>Baustelle</th>
                 <th>Status</th>
-                <th>Aktionen</th>
               </tr>
             </thead>
             <tbody>
-              {customers.map((customer) => (
+              {filteredCustomers.map((customer) => (
                 <tr key={customer.id}>
+                  <td data-label="Nr.">{customer.customerNumber || '-'}</td>
                   <td data-label="Name">{customer.name}</td>
-                  <td data-label="Kontakt">
-                    {customer.email || customer.phone || '-'}
-                  </td>
+                  <td data-label="Kontakt">{customer.email || customer.phone || '-'}</td>
                   <td data-label="Adresse">{customer.address || '-'}</td>
-                  <td data-label="Quelle">
-                    <span className={`status-badge ${customer.source === 'hero' ? 'active' : 'inactive'}`}>
-                      {customer.source === 'hero' ? 'HERO' : 'Manuell'}
-                    </span>
+                  <td data-label="Baustelle">
+                    {customer.siteAddress && customer.siteAddress !== customer.address
+                      ? customer.siteAddress
+                      : '-'}
                   </td>
                   <td data-label="Status">
                     <span className={`status-badge ${customer.isActive !== false ? 'active' : 'inactive'}`}>
                       {customer.isActive !== false ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="action-buttons" data-label="">
-                    <button
-                      onClick={() => handleEdit(customer)}
-                      className="action-btn edit-btn"
-                      aria-label="Bearbeiten"
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      onClick={() => handleDelete(customer)}
-                      className="action-btn delete-btn"
-                      aria-label="Löschen"
-                      disabled={deletingCustomerId === customer.id}
-                      title="Kunde löschen"
-                    >
-                      {deletingCustomerId === customer.id ? 'Löscht...' : 'Löschen'}
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
-
-      {showModal && (
-        <CustomerModal
-          customer={editingCustomer}
-          onClose={() => {
-            setShowModal(false)
-            setEditingCustomer(null)
-          }}
-          onSave={handleSave}
-        />
       )}
     </div>
   )

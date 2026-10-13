@@ -53,7 +53,6 @@ describe('Sichtbare Bereiche', () => {
       'costing',
       'customers',
       'material',
-      'hero',
       'diagnostics'
     ]) {
       expect(isTabAllowedForRole('payroll', tab)).toBe(false)

@@ -60,6 +60,22 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
     }
   }, [project])
 
+  /** Bisher verknüpfter Kunde, den es im Kundenstamm des Rechnungsprogramms nicht gibt. */
+  const legacyCustomerId =
+    project?.customerId && !customers.some((c) => c.id === project.customerId)
+      ? project.customerId
+      : ''
+
+  const handleCustomerChange = (customerId: string) => {
+    const customer = customers.find((c) => c.id === customerId)
+    setFormData((current) => ({
+      ...current,
+      customerId,
+      // Die Baustelle des Kunden als Vorschlag – eine eigene Eingabe bleibt stehen.
+      address: current.address || customer?.siteAddress || customer?.address || ''
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -84,6 +100,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
       if (formData.customerId && selectedCustomer) {
         projectData.customerId = formData.customerId
         projectData.customerName = selectedCustomer.name
+      } else if (formData.customerId && formData.customerId === project?.customerId) {
+        // Bisherige Verknüpfung, die in der Auswahl fehlt (früherer HERO-Kunde
+        // oder Kundenstamm gerade nicht erreichbar): unverändert lassen.
       } else if (project?.id) {
         projectData.customerId = deleteField()
         projectData.customerName = deleteField()
@@ -152,9 +171,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose, onSave })
             <label>Verknüpfter Kunde:</label>
             <select
               value={formData.customerId}
-              onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+              onChange={(e) => handleCustomerChange(e.target.value)}
             >
               <option value="">— Kein Kunde verknüpft —</option>
+              {legacyCustomerId && (
+                <option value={legacyCustomerId}>
+                  {project?.customerName || 'Unbekannter Kunde'} (nicht im Kundenstamm)
+                </option>
+              )}
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}

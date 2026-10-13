@@ -11,7 +11,6 @@ import CustomersTab from './tabs/CustomersTab'
 import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
-import HeroIntegrationTab from './tabs/HeroIntegrationTab'
 // TEMPORÄR: Diagnose-Seite (Projekt-/Buchungszuordnung). Zum Entfernen diesen
 // Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
 import DiagnosticsTab from './tabs/DiagnosticsTab'
@@ -19,7 +18,6 @@ import InspectionsTab from '../besichtigung/InspectionsTab'
 import { allowedAdminTabs, isTabAllowedForRole, resolveAdminRole } from '../../utils/adminRole'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
-import { HERO_INTEGRATION_UI_ENABLED } from '../../constants/heroIntegration'
 import { runUploadSelfHealing } from '../../services/data/maintenance'
 import '../../styles/AdminDashboard.css'
 
@@ -34,7 +32,6 @@ type TabType =
   | 'inspections'
   | 'material'
   | 'costing'
-  | 'hero'
   | 'reports'
   | 'vacation'
   | 'diagnostics'
@@ -217,9 +214,6 @@ const AdminDashboard: React.FC = () => {
     { id: 'inspections' as TabType, label: 'Besichtigungen' },
     { id: 'material' as TabType, label: 'Material' },
     { id: 'costing' as TabType, label: 'Nachkalkulation' },
-    ...(HERO_INTEGRATION_UI_ENABLED
-      ? [{ id: 'hero' as TabType, label: 'HERO' }]
-      : []),
     { id: 'vacation' as TabType, label: 'Urlaub' },
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
     { id: 'reportsDatev' as TabType, label: 'Zeiterfassungsbericht DATEV' },
@@ -393,7 +387,6 @@ const AdminDashboard: React.FC = () => {
           )}
           {isTabAllowedForRole(adminRole, 'material') && currentTab === 'material' && <MaterialTypesTab />}
           {isTabAllowedForRole(adminRole, 'costing') && currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
-          {isTabAllowedForRole(adminRole, 'hero') && currentTab === 'hero' && HERO_INTEGRATION_UI_ENABLED && <HeroIntegrationTab />}
           {isTabAllowedForRole(adminRole, 'vacation') && currentTab === 'vacation' && <VacationTab />}
           {isTabAllowedForRole(adminRole, 'reports') && currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
           {isTabAllowedForRole(adminRole, 'reportsDatev') && currentTab === 'reportsDatev' && <ReportsTab defaultReportType="datev" allowedReportTypes={['datev']} />}

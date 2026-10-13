@@ -377,12 +377,12 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             )}
           </div>
           <div className="form-group">
-            <label>HERO-Kontakt-ID (optional):</label>
+            <label>Personalnummer (optional):</label>
             <input
               type="text"
               value={formData.heroEmployeeId}
               onChange={(e) => setFormData({ ...formData, heroEmployeeId: e.target.value })}
-              placeholder="Für späteren Zeit-Export an HERO"
+              placeholder="Erscheint auf dem DATEV-Nachweis"
             />
           </div>
           <div className="form-group">

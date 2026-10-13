@@ -119,7 +119,7 @@ const InspectionEditor: React.FC = () => {
       customerName: customer.name,
       customerPhone: customer.phone || inspection.customerPhone,
       customerEmail: customer.email || inspection.customerEmail,
-      address: inspection.address || customer.address || ''
+      address: inspection.address || customer.siteAddress || customer.address || ''
     })
   }
 

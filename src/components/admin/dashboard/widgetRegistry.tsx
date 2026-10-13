@@ -1,6 +1,5 @@
 import React from 'react'
 import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
-import { HERO_INTEGRATION_UI_ENABLED } from '../../../constants/heroIntegration'
 import type { DashboardContext, WidgetDef } from './types'
 
 /** Kleine Kennzahl (große Zahl + optionaler Verweis). Bewusst ohne Icon – clean. */
@@ -181,18 +180,9 @@ const ALL_WIDGETS: WidgetDef[] = [
     action: { type: 'tab', tab: 'employees' }
   },
   {
-    key: 'new-customer',
-    title: 'Neuer Kunde',
-    description: 'Kunde anlegen.',
-    category: 'Stammdaten',
-    kind: 'launcher',
-    defaultSize: 'small',
-    action: { type: 'modal', modal: 'customer' }
-  },
-  {
     key: 'customers',
     title: 'Kunden',
-    description: 'Kundenliste verwalten.',
+    description: 'Kundenstamm aus dem Rechnungsprogramm ansehen.',
     category: 'Stammdaten',
     kind: 'launcher',
     defaultSize: 'small',
@@ -303,19 +293,6 @@ const ALL_WIDGETS: WidgetDef[] = [
     defaultSize: 'small',
     action: { type: 'tab', tab: 'notifications' }
   },
-  ...(HERO_INTEGRATION_UI_ENABLED
-    ? [
-        {
-          key: 'hero',
-          title: 'HERO-Integration',
-          description: 'HERO-Synchronisation und Diagnose.',
-          category: 'System',
-          kind: 'launcher',
-          defaultSize: 'small',
-          action: { type: 'tab', tab: 'hero' }
-        } as WidgetDef
-      ]
-    : [])
 ]
 
 /** Widget-Pool (nach Sichtbarkeit gefiltert). */

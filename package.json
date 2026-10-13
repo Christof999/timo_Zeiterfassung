@@ -1,7 +1,7 @@
 {
   "name": "zeiterfassung",
   "version": "1.0.0",
-  "description": "Zeiterfassung mit Nachkalkulation und HERO-Anbindung",
+  "description": "Zeiterfassung mit Nachkalkulation",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

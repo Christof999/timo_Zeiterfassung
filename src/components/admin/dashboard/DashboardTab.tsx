@@ -11,7 +11,6 @@ import type {
 import { toast } from '../../ToastContainer'
 import EmployeeModal from '../EmployeeModal'
 import ProjectModal from '../ProjectModal'
-import CustomerModal from '../CustomerModal'
 import MaterialTypeModal from '../MaterialTypeModal'
 import VehicleModal from '../VehicleModal'
 import DailyReportModal from '../DailyReportModal'
@@ -167,8 +166,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
         await DataService.updateTimeEntry(timeEntry.id, {
           clockOutTime: new Date(),
           pauseTotalTime: pauseMinutes * 60 * 1000,
-          notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin',
-          heroSyncStatus: 'pending'
+          notes: (timeEntry.notes || '') + (timeEntry.notes ? ' | ' : '') + 'Ausgestempelt durch Admin'
         })
         toast.success(`${employeeName} wurde ausgestempelt`)
         loadDashboardData()
@@ -361,13 +359,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
       {openModalKey === 'project' && (
         <ProjectModal
           project={null}
-          onClose={() => setOpenModalKey(null)}
-          onSave={() => { setOpenModalKey(null); loadDashboardData() }}
-        />
-      )}
-      {openModalKey === 'customer' && (
-        <CustomerModal
-          customer={null}
           onClose={() => setOpenModalKey(null)}
           onSave={() => { setOpenModalKey(null); loadDashboardData() }}
         />

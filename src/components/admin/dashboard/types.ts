@@ -11,7 +11,6 @@ export type DashboardTabKey =
   | 'customers'
   | 'material'
   | 'costing'
-  | 'hero'
   | 'vacation'
   | 'reports'
 
@@ -19,7 +18,6 @@ export type DashboardTabKey =
 export type DashboardModalKey =
   | 'employee'
   | 'project'
-  | 'customer'
   | 'material'
   | 'vehicle'
   | 'dailyReport'

@@ -70,13 +70,18 @@ const DiagnosticsTab: React.FC = () => {
 
     setIsLoading(true)
     try {
-      const [projects, customers, timeEntries, employees, materialCredits] = await Promise.all([
+      const [projects, currentCustomers, legacyCustomers, timeEntries, employees, materialCredits] = await Promise.all([
         DataService.getAllProjects(),
-        DataService.getAllCustomers(),
+        DataService.getAllCustomers().catch(() => []),
+        DataService.getLegacyCustomers(),
         DataService.getAllTimeEntries(),
         DataService.getAllEmployees(),
         DataService.getAllMaterialCredits()
       ])
+
+      // Alte Kleinaufträge hängen an früheren Kunden der Zeiterfassung, neue am
+      // Kundenstamm des Rechnungsprogramms – die Diagnose braucht beide.
+      const customers = [...currentCustomers, ...legacyCustomers]
 
       const diagnostics = buildProjectDiagnostics({
         search: search.trim(),
