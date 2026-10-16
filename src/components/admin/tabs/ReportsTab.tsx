@@ -82,6 +82,7 @@ import {
   buildSettlementNote,
   type EmployeePrintParams
 } from './reports/printHtml'
+import { buildRegieDaySheets, buildRegieZettelHtml } from './reports/regieZettel'
 import SearchableSelect from '../../SearchableSelect'
 import ReportAddEntryModal from '../ReportAddEntryModal'
 import '../../../styles/AdminTabs.css'
@@ -1303,6 +1304,52 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       projectName: selectedProject?.name || '',
       periodLabel: period,
       getEmployeeDisplayName
+    })
+
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus()
+        printWindow.print()
+      }, 80)
+    }
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+    }, 350)
+  }
+
+  const handleRegieZettelPrint = () => {
+    if (!selectedProject) {
+      toast.error('Kein Bericht zum Drucken vorhanden')
+      return
+    }
+
+    const sheets = buildRegieDaySheets({
+      entries: projectRawEntries,
+      employees: allEmployees,
+      materialCredits: projectMaterialCredits,
+      siteTrips: projectSiteTrips,
+      siteTripRate
+    })
+    if (sheets.length === 0) {
+      toast.error('Keine Buchungen zum Drucken')
+      return
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Popup blockiert. Bitte Popups für diese Seite erlauben.')
+      return
+    }
+
+    const html = buildRegieZettelHtml({
+      sheets,
+      projectName: selectedProject.name || '',
+      clientName: selectedProject.client || selectedProject.customerName || '',
+      address: selectedProject.address || selectedProject.location || ''
     })
 
     printWindow.document.open()
@@ -3702,6 +3749,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 <div className="actions-right">
                   <button type="button" onClick={handleProjectStaffPrint} className="btn secondary-btn">
                     Mitarbeiter-Auszug drucken
+                  </button>
+                  <button type="button" onClick={handleRegieZettelPrint} className="btn secondary-btn">
+                    Regiezettel drucken
                   </button>
                   <button onClick={handlePrint} className="btn primary-btn" disabled={isPreparingPrint}>
                     {isPreparingPrint ? 'Vorbereitung…' : 'Drucken'}

@@ -157,8 +157,12 @@
 
 .actions-right {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--spacing-sm);
   align-items: center;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .actions-right .btn {
