@@ -15,6 +15,8 @@ import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
 import OvertimeReminderModal from './OvertimeReminderModal'
 import OvertimeDayFillModal from './OvertimeDayFillModal'
+import EmployeeRegieModal from './EmployeeRegieModal'
+import { isOverheadProject } from '../constants/overheadProjects'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
 import { getEmployeeDisplayName } from '../utils/employeeDisplayName'
@@ -76,6 +78,11 @@ const TimeTracking: React.FC = () => {
   /** Was sich heute aus dem Überstundenkonto auffüllen lässt (null = nichts). */
   const [dayFillPlan, setDayFillPlan] = useState<OvertimeDayFillPlan | null>(null)
   const [showDayFillModal, setShowDayFillModal] = useState(false)
+  const [regieOffer, setRegieOffer] = useState<{
+    project: Project
+    employee: Employee
+    workDate: Date
+  } | null>(null)
   /** Monatsend-Erinnerung an die Überstunden-Verrechnung (null = kein Hinweis). */
   const [overtimeReminder, setOvertimeReminder] = useState<{
     month: string
@@ -565,7 +572,15 @@ const TimeTracking: React.FC = () => {
             timeEntry={currentTimeEntry}
             project={currentProject}
             clockInTime={clockInTime}
-            onExtendedClockOutSuccess={resetClockOutState}
+            onExtendedClockOutSuccess={() => {
+              const project = currentProject
+              const user = currentUser
+              const date = clockInTime || new Date()
+              resetClockOutState()
+              if (project?.id && user && !isOverheadProject(project)) {
+                setRegieOffer({ project, employee: user, workDate: date })
+              }
+            }}
             onProjectSwitch={handleProjectSwitch}
             onUpdate={() => {
               // Reload time entry inkl. Anzeigezustand
@@ -629,6 +644,15 @@ const TimeTracking: React.FC = () => {
             plan={dayFillPlan}
             onConfirm={handleConfirmDayFill}
             onClose={() => setShowDayFillModal(false)}
+          />
+        )}
+
+        {regieOffer && (
+          <EmployeeRegieModal
+            project={regieOffer.project}
+            employee={regieOffer.employee}
+            workDate={regieOffer.workDate}
+            onClose={() => setRegieOffer(null)}
           />
         )}
 

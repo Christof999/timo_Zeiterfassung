@@ -45,6 +45,8 @@ export interface RegieMaterialLine {
 export interface RegieDaySheet {
   dateKey: string
   dateLabel: string
+  /** Stempelungen, aus denen das Blatt entstanden ist. Dient dem Abgleich mit einer Unterschrift. */
+  entryIds: string[]
   workNotes: string[]
   labor: RegieLaborLine[]
   materials: RegieMaterialLine[]
@@ -93,6 +95,7 @@ interface MaterialAcc {
 interface DayAcc {
   dateKey: string
   date: Date
+  entryIds: string[]
   notes: string[]
   labor: RegieLaborLine[]
   materials: Map<string, MaterialAcc>
@@ -140,7 +143,7 @@ export const buildRegieDaySheets = (input: RegieZettelInput): RegieDaySheet[] =>
   const ensureDay = (dateKey: string, date: Date): DayAcc => {
     const existing = days.get(dateKey)
     if (existing) return existing
-    const created: DayAcc = { dateKey, date, notes: [], labor: [], materials: new Map() }
+    const created: DayAcc = { dateKey, date, entryIds: [], notes: [], labor: [], materials: new Map() }
     days.set(dateKey, created)
     return created
   }
@@ -153,6 +156,7 @@ export const buildRegieDaySheets = (input: RegieZettelInput): RegieDaySheet[] =>
 
   for (const { entry, clockIn } of finished) {
     const day = ensureDay(getDateKey(clockIn), clockIn)
+    if (entry.id) day.entryIds.push(entry.id)
     const employee = employeesById.get(entry.employeeId)
     const name = displayName(employee, entry.employeeId)
     const rate = employeeBillingRate(employee)
@@ -220,6 +224,7 @@ export const buildRegieDaySheets = (input: RegieZettelInput): RegieDaySheet[] =>
       return {
         dateKey: day.dateKey,
         dateLabel: formatDateForDisplay(day.date),
+        entryIds: day.entryIds,
         workNotes: day.notes,
         labor: day.labor,
         materials,
@@ -243,12 +248,41 @@ const formatQuantity = (quantity: number, unitLabel: string): string => {
 
 const moneyCell = (amount: number | null): string => (amount == null ? '—' : formatCurrency(amount))
 
+/** Nur echte PNG-Data-URLs. Alles andere (Skripte, fremde Schemes) kommt nicht in den Ausdruck. */
+const PNG_DATA_URL = /^data:image\/png;base64,[a-z0-9+/=\s]+$/i
+
+export const safeSignatureDataUrl = (value: string | undefined | null): string | null => {
+  const trimmed = (value || '').replace(/\s/g, '')
+  if (!trimmed || trimmed.length > 500_000) return null
+  return PNG_DATA_URL.test(trimmed) ? trimmed : null
+}
+
+export interface RegiePrintedSignature {
+  dataUrl: string
+  signerName?: string
+  signedAtLabel: string
+  /** true, wenn nach dem Unterschreiben Stunden oder Beträge dazugekommen sind */
+  outdated?: boolean
+}
+
+/** Die Unterschrift deckt nicht mehr das, was jetzt auf dem Blatt steht. */
+export const isRegieSignatureOutdated = (
+  sheet: Pick<RegieDaySheet, 'entryIds' | 'dayTotal'>,
+  signed: { signedEntryIds: string[]; signedDayTotal: number }
+): boolean => {
+  const currentIds = [...sheet.entryIds].sort().join('\0')
+  const signedIds = [...(signed.signedEntryIds || [])].sort().join('\0')
+  return currentIds !== signedIds || Math.abs(sheet.dayTotal - (signed.signedDayTotal || 0)) > 0.009
+}
+
 export const buildRegieZettelHtml = (params: {
   sheets: RegieDaySheet[]
   projectName: string
   clientName?: string
   address?: string
   companyName?: string
+  /** Kundenunterschriften, Schlüssel ist der Kalendertag (YYYY-MM-DD). */
+  signatures?: Record<string, RegiePrintedSignature>
 }): string => {
   const company = params.companyName || COMPANY_NAME
   const created = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
@@ -303,6 +337,15 @@ export const buildRegieZettelHtml = (params: {
         sheet.workNotes.length === 0
           ? '<p class="muted">Keine Leistungsbeschreibung erfasst.</p>'
           : `<ul>${sheet.workNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+      const signature = params.signatures?.[sheet.dateKey]
+      const signatureUrl = safeSignatureDataUrl(signature?.dataUrl)
+      const signatureImage = signatureUrl
+        ? `<img class="sign-image" src="${escapeHtml(signatureUrl)}" alt="Unterschrift des Kunden" />`
+        : ''
+      const signatureNote = signatureUrl
+        ? `<p class="sign-meta">unterschrieben${signature?.signerName ? ` von ${escapeHtml(signature.signerName)}` : ''} am ${escapeHtml(signature?.signedAtLabel || '')}</p>
+    ${signature?.outdated ? '<p class="sign-warn">Nach der Unterschrift wurden Buchungen ergänzt.</p>' : ''}`
+        : ''
       return `<section class="sheet">
   <header>
     <p class="company">${escapeHtml(company)}</p>
@@ -332,8 +375,12 @@ export const buildRegieZettelHtml = (params: {
     </tbody>
   </table>
   <div class="signs">
-    <div><div class="line"></div><p>${escapeHtml(company)}</p></div>
-    <div><div class="line"></div><p>Kunde${params.clientName ? `: ${escapeHtml(params.clientName)}` : ''}</p></div>
+    <div><div class="sign-draw"></div><p>${escapeHtml(company)}</p></div>
+    <div>
+      <div class="sign-draw">${signatureImage}</div>
+      <p>Kunde${params.clientName ? `: ${escapeHtml(params.clientName)}` : ''}</p>
+      ${signatureNote}
+    </div>
   </div>
   <p class="footnote">Erstellt aus der Zeiterfassung am ${escapeHtml(created)}.</p>
 </section>`
@@ -368,8 +415,11 @@ export const buildRegieZettelHtml = (params: {
     .sums .grand th, .sums .grand td { font-size: 14px; border-top: 2px solid #222; }
     .signs { display: flex; gap: 48px; margin-top: 56px; }
     .signs > div { flex: 1; }
-    .line { border-bottom: 1px solid #222; height: 42px; }
+    .sign-draw { border-bottom: 1px solid #222; min-height: 64px; }
+    .sign-image { display: block; max-width: 100%; height: 64px; object-fit: contain; object-position: left bottom; }
     .signs p { margin: 6px 0 0; font-size: 12px; }
+    .sign-meta { color: #444; font-size: 11px; }
+    .sign-warn { color: #8a3b00; font-size: 11px; }
     .footnote { margin-top: 28px; color: #666; font-size: 11px; }
   </style>
 </head>

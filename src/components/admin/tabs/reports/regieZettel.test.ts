@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { Employee, MaterialCredit, TimeEntry } from '../../../../types'
 import type { SiteTrip } from '../../../../utils/siteTrips'
 import { formatCurrency } from './reportUtils'
-import { buildRegieDaySheets, buildRegieZettelHtml } from './regieZettel'
+import {
+  buildRegieDaySheets,
+  buildRegieZettelHtml,
+  isRegieSignatureOutdated,
+  safeSignatureDataUrl
+} from './regieZettel'
 
 const tag = (day: number, hour: number, minute = 0): Date => new Date(2026, 9, day, hour, minute)
 
@@ -72,6 +77,7 @@ describe('buildRegieDaySheets', () => {
     expect(sheets.map((sheet) => sheet.dateKey)).toEqual(['2026-10-14', '2026-10-16'])
 
     const mittwoch = sheets[0]
+    expect(mittwoch.entryIds).toEqual(['e1', 'e2'])
     expect(mittwoch.labor).toMatchObject([
       { employeeName: 'Max Huber', hours: 8, hourlyRate: 50, lineTotal: 400 },
       { employeeName: 'Lea Kurz', hours: 2, hourlyRate: 40, lineTotal: 80 }
@@ -198,6 +204,60 @@ describe('buildRegieZettelHtml', () => {
     expect(text).not.toContain('kostensatz')
     expect(html).not.toContain(formatCurrency(17.33))
     expect(html).not.toContain(formatCurrency(4.17))
+  })
+
+  it('setzt die Kundenunterschrift auf das Blatt und verwirft fremde Adressen', () => {
+    const sheets = buildRegieDaySheets({
+      entries: [stempel()],
+      employees: [mitarbeiter()]
+    })
+    const png = 'data:image/png;base64,iVBORw0KGgo='
+    const html = buildRegieZettelHtml({
+      sheets,
+      projectName: 'Bad Berger',
+      clientName: 'Familie Berger',
+      signatures: {
+        [sheets[0].dateKey]: {
+          dataUrl: png,
+          signerName: 'Frau Berger',
+          signedAtLabel: '16.10.2026, 15:00',
+          outdated: true
+        }
+      }
+    })
+    expect(html).toContain(`src="${png}"`)
+    expect(html).toContain('unterschrieben von Frau Berger')
+    expect(html).toContain('Nach der Unterschrift wurden Buchungen ergänzt.')
+
+    const ohne = buildRegieZettelHtml({
+      sheets,
+      projectName: 'Bad Berger',
+      signatures: {
+        [sheets[0].dateKey]: {
+          dataUrl: 'javascript:alert(1)',
+          signedAtLabel: 'jetzt'
+        }
+      }
+    })
+    expect(ohne).not.toContain('javascript:')
+    expect(ohne).not.toContain('<img')
+    expect(safeSignatureDataUrl('data:image/svg+xml,<script>')).toBeNull()
+  })
+
+  it('erkennt, wenn nach der Unterschrift weitere Buchungen dazukamen', () => {
+    const [sheet] = buildRegieDaySheets({
+      entries: [stempel()],
+      employees: [mitarbeiter()]
+    })
+    expect(
+      isRegieSignatureOutdated(sheet, { signedEntryIds: ['e1'], signedDayTotal: sheet.dayTotal })
+    ).toBe(false)
+    expect(
+      isRegieSignatureOutdated(sheet, { signedEntryIds: ['e1', 'e2'], signedDayTotal: sheet.dayTotal })
+    ).toBe(true)
+    expect(
+      isRegieSignatureOutdated(sheet, { signedEntryIds: ['e1'], signedDayTotal: sheet.dayTotal + 10 })
+    ).toBe(true)
   })
 
   it('erzeugt für einen leeren Zeitraum kein Blatt', () => {

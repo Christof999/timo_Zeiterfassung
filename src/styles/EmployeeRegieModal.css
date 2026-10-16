@@ -1,0 +1,119 @@
+.regie-modal {
+  max-width: 560px;
+}
+
+.regie-intro {
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.regie-date {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.regie-lines,
+.regie-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.regie-lines li,
+.regie-notes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+  line-height: 1.35;
+}
+
+.regie-notes {
+  margin-top: 8px;
+}
+
+.regie-notes li {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.regie-amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.regie-total {
+  margin: 12px 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.regie-stored {
+  margin: 8px 0 16px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.regie-stored img {
+  display: block;
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  object-position: left center;
+  background: #fff;
+}
+
+.regie-stored p {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+}
+
+.regie-warn {
+  color: #8a3b00;
+}
+
+.regie-label {
+  display: block;
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+
+.regie-signer {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-background);
+  color: inherit;
+}
+
+.regie-sign-canvas {
+  display: block;
+  width: 100%;
+  height: 140px;
+  margin-top: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #fff;
+  touch-action: none;
+}
+
+.regie-clear {
+  margin-top: 8px;
+}
+
+.regie-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.regie-actions .btn {
+  width: 100%;
+}

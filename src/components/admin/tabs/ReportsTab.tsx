@@ -82,7 +82,14 @@ import {
   buildSettlementNote,
   type EmployeePrintParams
 } from './reports/printHtml'
-import { buildRegieDaySheets, buildRegieZettelHtml } from './reports/regieZettel'
+import {
+  buildRegieDaySheets,
+  buildRegieZettelHtml,
+  isRegieSignatureOutdated,
+  safeSignatureDataUrl,
+  type RegiePrintedSignature
+} from './reports/regieZettel'
+import { getRegieSignaturesForProject } from '../../../services/regieSignatureService'
 import SearchableSelect from '../../SearchableSelect'
 import ReportAddEntryModal from '../ReportAddEntryModal'
 import '../../../styles/AdminTabs.css'
@@ -1345,26 +1352,52 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       return
     }
 
-    const html = buildRegieZettelHtml({
-      sheets,
-      projectName: selectedProject.name || '',
-      clientName: selectedProject.client || selectedProject.customerName || '',
-      address: selectedProject.address || selectedProject.location || ''
-    })
+    const writeSheet = async () => {
+      const signatures: Record<string, RegiePrintedSignature> = {}
+      try {
+        const stored = await getRegieSignaturesForProject(selectedProject.id)
+        for (const sheet of sheets) {
+          const match = stored.find((item) => item.dateKey === sheet.dateKey)
+          const dataUrl = safeSignatureDataUrl(match?.signatureDataUrl)
+          if (!match || !dataUrl) continue
+          signatures[sheet.dateKey] = {
+            dataUrl,
+            signerName: match.signerName.trim() || undefined,
+            signedAtLabel: match.signedAt.toLocaleString('de-DE', {
+              dateStyle: 'medium',
+              timeStyle: 'short'
+            }),
+            outdated: isRegieSignatureOutdated(sheet, match)
+          }
+        }
+      } catch (error) {
+        console.error('Kundenunterschriften konnten nicht geladen werden:', error)
+        toast.error('Unterschriften konnten nicht geladen werden. Der Zettel wird ohne sie gedruckt.')
+      }
 
-    printWindow.document.open()
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.onload = () => {
-      setTimeout(() => {
+      const html = buildRegieZettelHtml({
+        sheets,
+        projectName: selectedProject.name || '',
+        clientName: selectedProject.client || selectedProject.customerName || '',
+        address: selectedProject.address || selectedProject.location || '',
+        signatures
+      })
+      printWindow.document.open()
+      printWindow.document.write(html)
+      printWindow.document.close()
+      const trigger = () => {
         printWindow.focus()
         printWindow.print()
-      }, 80)
+      }
+      printWindow.onload = () => window.setTimeout(trigger, 80)
+      window.setTimeout(trigger, 350)
     }
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-    }, 350)
+
+    void writeSheet().catch((error) => {
+      console.error('Regiezettel konnte nicht erstellt werden:', error)
+      toast.error('Regiezettel konnte nicht erstellt werden')
+      printWindow.close()
+    })
   }
 
   // ==================== PROJEKT-BERICHT ====================
