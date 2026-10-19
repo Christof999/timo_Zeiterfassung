@@ -163,7 +163,7 @@ describe('buildRegieDaySheets', () => {
 })
 
 describe('buildRegieZettelHtml', () => {
-  it('druckt Stunden, Material und Anfahrten, aber keinen einzigen Preis', () => {
+  it('druckt nur Stunden und Material, keine Anfahrten und keinen einzigen Preis', () => {
     const sheets = buildRegieDaySheets({
       entries: [
         stempel({
@@ -196,6 +196,7 @@ describe('buildRegieZettelHtml', () => {
     expect(html).not.toContain('€')
     expect(html).not.toContain('VK')
     expect(html).not.toContain('Summe')
+    expect(html).not.toContain('Anfahrt')
     expect(html).toContain('Kunde: Familie Berger')
     expect((html.match(/class="sheet"/g) || []).length).toBe(1)
 

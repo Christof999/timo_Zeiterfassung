@@ -18,7 +18,7 @@ import { roundTimeToStep } from '../../../../utils/timeRounding'
  *
  * Stundenbasis wie die Nachkalkulation (15-Minuten-Raster, Pause abgezogen,
  * Rückfahrt angerechnet). Beträge rechnen wir nur intern (Abgleich der
- * Unterschrift); der Kunde sieht ausschließlich Stunden, Material und Anfahrten,
+ * Unterschrift); der Kunde sieht ausschließlich Stunden und Material,
  * keine Preise.
  */
 
@@ -314,17 +314,6 @@ export const buildRegieZettelHtml = (params: {
       )
       .join('')}</tbody>
   </table>`
-      const tripBlock =
-        sheet.tripCount === 0
-          ? ''
-          : `<h2>Anfahrt</h2>
-  <table>
-    <thead><tr><th>Position</th><th class="right">Anfahrten</th></tr></thead>
-    <tbody><tr>
-      <td>Baustelle angefahren</td>
-      <td class="right">${sheet.tripCount}</td>
-    </tr></tbody>
-  </table>`
       const notes =
         sheet.workNotes.length === 0
           ? '<p class="muted">Keine Leistungsbeschreibung erfasst.</p>'
@@ -357,7 +346,6 @@ export const buildRegieZettelHtml = (params: {
     <tbody>${laborRows}</tbody>
   </table>
   ${materialBlock}
-  ${tripBlock}
   <div class="signs">
     <div><div class="sign-draw"></div><p>${escapeHtml(company)}</p></div>
     <div>

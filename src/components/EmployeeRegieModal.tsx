@@ -341,12 +341,6 @@ const EmployeeRegieModal: React.FC<EmployeeRegieModalProps> = ({
                     </span>
                   </li>
                 ))}
-                {sheet.tripCount > 0 && (
-                  <li>
-                    Anfahrten
-                    <span className="regie-amount">{sheet.tripCount}</span>
-                  </li>
-                )}
               </ul>
               {sheet.workNotes.length > 0 && (
                 <ul className="regie-notes">
