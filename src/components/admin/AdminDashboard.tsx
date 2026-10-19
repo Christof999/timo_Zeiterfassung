@@ -11,6 +11,7 @@ import CustomersTab from './tabs/CustomersTab'
 import MaterialTypesTab from './tabs/MaterialTypesTab'
 import ReportsTab from './tabs/ReportsTab'
 import VacationTab from './tabs/VacationTab'
+import SettingsTab from './tabs/SettingsTab'
 // TEMPORÄR: Diagnose-Seite (Projekt-/Buchungszuordnung). Zum Entfernen diesen
 // Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
 import DiagnosticsTab from './tabs/DiagnosticsTab'
@@ -34,6 +35,7 @@ type TabType =
   | 'costing'
   | 'reports'
   | 'vacation'
+  | 'settings'
   | 'diagnostics'
 
 const AdminDashboard: React.FC = () => {
@@ -217,6 +219,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'vacation' as TabType, label: 'Urlaub' },
     { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
     { id: 'reportsDatev' as TabType, label: 'Zeiterfassungsbericht DATEV' },
+    { id: 'settings' as TabType, label: 'Einstellungen' },
     { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)' }
   ]
   const tabs = allTabs.filter(tab => isTabAllowedForRole(adminRole, tab.id))
@@ -390,6 +393,7 @@ const AdminDashboard: React.FC = () => {
           {isTabAllowedForRole(adminRole, 'vacation') && currentTab === 'vacation' && <VacationTab />}
           {isTabAllowedForRole(adminRole, 'reports') && currentTab === 'reports' && <ReportsTab defaultReportType="employee" allowedReportTypes={['employee']} />}
           {isTabAllowedForRole(adminRole, 'reportsDatev') && currentTab === 'reportsDatev' && <ReportsTab defaultReportType="datev" allowedReportTypes={['datev']} />}
+          {isTabAllowedForRole(adminRole, 'settings') && currentTab === 'settings' && <SettingsTab />}
           {isTabAllowedForRole(adminRole, 'diagnostics') && currentTab === 'diagnostics' && <DiagnosticsTab />}
         </div>
       </main>

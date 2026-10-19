@@ -16,6 +16,7 @@ import NavigationMenu from './NavigationMenu'
 import OvertimeReminderModal from './OvertimeReminderModal'
 import OvertimeDayFillModal from './OvertimeDayFillModal'
 import EmployeeRegieModal from './EmployeeRegieModal'
+import { isRegieZettelEnabled } from '../services/regieSettingsService'
 import { isOverheadProject } from '../constants/overheadProjects'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
@@ -578,7 +579,9 @@ const TimeTracking: React.FC = () => {
               const date = clockInTime || new Date()
               resetClockOutState()
               if (project?.id && user && !isOverheadProject(project)) {
-                setRegieOffer({ project, employee: user, workDate: date })
+                isRegieZettelEnabled().then((enabled) => {
+                  if (enabled) setRegieOffer({ project, employee: user, workDate: date })
+                })
               }
             }}
             onProjectSwitch={handleProjectSwitch}
