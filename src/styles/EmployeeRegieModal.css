@@ -44,13 +44,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.regie-total {
-  margin: 12px 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  text-align: right;
-}
-
 .regie-stored {
   margin: 8px 0 16px;
   padding: 8px;

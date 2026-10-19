@@ -17,7 +17,7 @@ import {
   type RegieDaySheet,
   type RegiePrintedSignature
 } from './admin/tabs/reports/regieZettel'
-import { convertToDate, formatCurrency, getDateKey } from './admin/tabs/reports/reportUtils'
+import { convertToDate, getDateKey } from './admin/tabs/reports/reportUtils'
 import { toast } from './ToastContainer'
 import '../styles/Modal.css'
 import '../styles/EmployeeRegieModal.css'
@@ -334,20 +334,17 @@ const EmployeeRegieModal: React.FC<EmployeeRegieModalProps> = ({
                 ))}
                 {sheet.materials.map((line) => (
                   <li key={line.name}>
-                    {line.name}{' '}
-                    {line.quantity.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
-                    {line.unitLabel ? ` ${line.unitLabel}` : ''}
+                    {line.name}
                     <span className="regie-amount">
-                      {line.lineTotal > 0 ? formatCurrency(line.lineTotal) : '—'}
+                      {line.quantity.toLocaleString('de-DE', { maximumFractionDigits: 2 })}
+                      {line.unitLabel ? ` ${line.unitLabel}` : ''}
                     </span>
                   </li>
                 ))}
                 {sheet.tripCount > 0 && (
                   <li>
-                    Anfahrt × {sheet.tripCount}
-                    <span className="regie-amount">
-                      {sheet.tripRate > 0 ? formatCurrency(sheet.tripTotal) : '—'}
-                    </span>
+                    Anfahrten
+                    <span className="regie-amount">{sheet.tripCount}</span>
                   </li>
                 )}
               </ul>
@@ -358,7 +355,6 @@ const EmployeeRegieModal: React.FC<EmployeeRegieModalProps> = ({
                   ))}
                 </ul>
               )}
-              <p className="regie-total">Summe {formatCurrency(sheet.dayTotal)}</p>
 
               {storedUrl && (
                 <div className="regie-stored">

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Employee, MaterialCredit, TimeEntry } from '../../../../types'
 import type { SiteTrip } from '../../../../utils/siteTrips'
-import { formatCurrency } from './reportUtils'
 import {
   buildRegieDaySheets,
   buildRegieZettelHtml,
@@ -164,7 +163,7 @@ describe('buildRegieDaySheets', () => {
 })
 
 describe('buildRegieZettelHtml', () => {
-  it('druckt VK und Summe, aber weder Marge noch Einkauf noch Lohnkosten', () => {
+  it('druckt Stunden, Material und Anfahrten, aber keinen einzigen Preis', () => {
     const sheets = buildRegieDaySheets({
       entries: [
         stempel({
@@ -191,10 +190,12 @@ describe('buildRegieZettelHtml', () => {
     expect(html).toContain('Familie Berger')
     expect(html).toContain('Hauptstraße 1')
     expect(html).toContain('Fuge gezogen')
-    // Der Kunde sieht nur die Stunden, nie den Stundensatz.
-    expect(html).not.toContain('VK/Std')
-    expect(html).not.toContain(formatCurrency(50))
-    expect(html).toContain(formatCurrency(sheets[0].dayTotal))
+    expect(html).toContain('8,00 h')
+    expect(html).toContain('4 kg')
+    // Der Kunde sieht Mengen, nie Preise oder Summen.
+    expect(html).not.toContain('€')
+    expect(html).not.toContain('VK')
+    expect(html).not.toContain('Summe')
     expect(html).toContain('Kunde: Familie Berger')
     expect((html.match(/class="sheet"/g) || []).length).toBe(1)
 
@@ -203,8 +204,6 @@ describe('buildRegieZettelHtml', () => {
     expect(text).not.toContain('einkauf')
     expect(text).not.toContain('lohnkosten')
     expect(text).not.toContain('kostensatz')
-    expect(html).not.toContain(formatCurrency(17.33))
-    expect(html).not.toContain(formatCurrency(4.17))
   })
 
   it('setzt die Kundenunterschrift auf das Blatt und verwirft fremde Adressen', () => {

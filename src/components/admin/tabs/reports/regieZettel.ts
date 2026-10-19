@@ -6,7 +6,6 @@ import {
   convertToDate,
   employeeBillingRate,
   escapeHtml,
-  formatCurrency,
   formatDateForDisplay,
   formatTimeForInput,
   getDateKey,
@@ -18,8 +17,9 @@ import { roundTimeToStep } from '../../../../utils/timeRounding'
  * Regiezettel: kundenfähiges Tagesblatt aus den Stempelungen.
  *
  * Stundenbasis wie die Nachkalkulation (15-Minuten-Raster, Pause abgezogen,
- * Rückfahrt angerechnet). Aufgefüllte Überstunden, Lohnkosten, Einkauf und
- * Marge kommen hier nicht vor – nur der Verkaufspreis.
+ * Rückfahrt angerechnet). Beträge rechnen wir nur intern (Abgleich der
+ * Unterschrift); der Kunde sieht ausschließlich Stunden, Material und Anfahrten,
+ * keine Preise.
  */
 
 export interface RegieLaborLine {
@@ -246,8 +246,6 @@ const formatQuantity = (quantity: number, unitLabel: string): string => {
   return unitLabel ? `${amount} ${unitLabel}` : amount
 }
 
-const moneyCell = (amount: number | null): string => (amount == null ? '—' : formatCurrency(amount))
-
 /** Nur echte PNG-Data-URLs. Alles andere (Skripte, fremde Schemes) kommt nicht in den Ausdruck. */
 const PNG_DATA_URL = /^data:image\/png;base64,[a-z0-9+/=\s]+$/i
 
@@ -306,14 +304,12 @@ export const buildRegieZettelHtml = (params: {
           ? ''
           : `<h2>Material</h2>
   <table>
-    <thead><tr><th>Material</th><th class="right">Menge</th><th class="right">VK</th><th class="right">Betrag</th></tr></thead>
+    <thead><tr><th>Material</th><th class="right">Menge</th></tr></thead>
     <tbody>${sheet.materials
       .map(
         (line) => `<tr>
       <td>${escapeHtml(line.name)}</td>
       <td class="right">${escapeHtml(formatQuantity(line.quantity, line.unitLabel))}</td>
-      <td class="right">${moneyCell(line.unitPriceEur)}</td>
-      <td class="right">${line.unitPriceEur == null && line.lineTotal === 0 ? '—' : formatCurrency(line.lineTotal)}</td>
     </tr>`
       )
       .join('')}</tbody>
@@ -323,12 +319,10 @@ export const buildRegieZettelHtml = (params: {
           ? ''
           : `<h2>Anfahrt</h2>
   <table>
-    <thead><tr><th>Position</th><th class="right">Anfahrten</th><th class="right">VK</th><th class="right">Betrag</th></tr></thead>
+    <thead><tr><th>Position</th><th class="right">Anfahrten</th></tr></thead>
     <tbody><tr>
       <td>Baustelle angefahren</td>
       <td class="right">${sheet.tripCount}</td>
-      <td class="right">${sheet.tripRate > 0 ? formatCurrency(sheet.tripRate) : '—'}</td>
-      <td class="right">${sheet.tripRate > 0 ? formatCurrency(sheet.tripTotal) : '—'}</td>
     </tr></tbody>
   </table>`
       const notes =
@@ -364,14 +358,6 @@ export const buildRegieZettelHtml = (params: {
   </table>
   ${materialBlock}
   ${tripBlock}
-  <table class="sums">
-    <tbody>
-      ${sheet.labor.length > 0 ? `<tr><th>Personal</th><td class="right">${formatCurrency(sheet.laborTotal)}</td></tr>` : ''}
-      ${sheet.materials.length > 0 ? `<tr><th>Material</th><td class="right">${formatCurrency(sheet.materialTotal)}</td></tr>` : ''}
-      ${sheet.tripCount > 0 ? `<tr><th>Anfahrten</th><td class="right">${sheet.tripRate > 0 ? formatCurrency(sheet.tripTotal) : '—'}</td></tr>` : ''}
-      <tr class="grand"><th>Summe</th><td class="right">${formatCurrency(sheet.dayTotal)}</td></tr>
-    </tbody>
-  </table>
   <div class="signs">
     <div><div class="sign-draw"></div><p>${escapeHtml(company)}</p></div>
     <div>
@@ -408,9 +394,6 @@ export const buildRegieZettelHtml = (params: {
     .right { text-align: right; }
     .muted { color: #555; font-size: 12px; }
     ul { margin: 4px 0 0; padding-left: 1.1rem; font-size: 13px; }
-    .sums { width: 280px; margin-left: auto; margin-top: 16px; }
-    .sums th { background: transparent; text-align: left; }
-    .sums .grand th, .sums .grand td { font-size: 14px; border-top: 2px solid #222; }
     .signs { display: flex; gap: 48px; margin-top: 56px; }
     .signs > div { flex: 1; }
     .sign-draw { border-bottom: 1px solid #222; min-height: 64px; }
