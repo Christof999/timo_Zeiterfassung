@@ -290,7 +290,7 @@ export const buildRegieZettelHtml = (params: {
     .map((sheet) => {
       const laborRows =
         sheet.labor.length === 0
-          ? '<tr><td colspan="6">Keine Stunden</td></tr>'
+          ? '<tr><td colspan="4">Keine Stunden</td></tr>'
           : sheet.labor
               .map(
                 (line) => `<tr>
@@ -298,8 +298,6 @@ export const buildRegieZettelHtml = (params: {
   <td>${escapeHtml(line.clockIn || '—')}</td>
   <td>${escapeHtml(line.clockOut || '—')}</td>
   <td class="right">${formatHours(line.hours)}</td>
-  <td class="right">${moneyCell(line.hourlyRate)}</td>
-  <td class="right">${line.hourlyRate == null ? '—' : formatCurrency(line.lineTotal)}</td>
 </tr>`
               )
               .join('')
@@ -361,7 +359,7 @@ export const buildRegieZettelHtml = (params: {
   ${notes}
   <h2>Personal</h2>
   <table>
-    <thead><tr><th>Mitarbeiter</th><th>Kommen</th><th>Gehen</th><th class="right">Stunden</th><th class="right">VK/Std</th><th class="right">Betrag</th></tr></thead>
+    <thead><tr><th>Mitarbeiter</th><th>Kommen</th><th>Gehen</th><th class="right">Stunden</th></tr></thead>
     <tbody>${laborRows}</tbody>
   </table>
   ${materialBlock}

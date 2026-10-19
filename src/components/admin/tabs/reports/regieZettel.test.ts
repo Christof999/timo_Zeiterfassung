@@ -191,8 +191,9 @@ describe('buildRegieZettelHtml', () => {
     expect(html).toContain('Familie Berger')
     expect(html).toContain('Hauptstraße 1')
     expect(html).toContain('Fuge gezogen')
-    expect(html).toContain('VK/Std')
-    expect(html).toContain(formatCurrency(50))
+    // Der Kunde sieht nur die Stunden, nie den Stundensatz.
+    expect(html).not.toContain('VK/Std')
+    expect(html).not.toContain(formatCurrency(50))
     expect(html).toContain(formatCurrency(sheets[0].dayTotal))
     expect(html).toContain('Kunde: Familie Berger')
     expect((html.match(/class="sheet"/g) || []).length).toBe(1)

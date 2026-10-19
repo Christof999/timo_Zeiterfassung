@@ -328,11 +328,8 @@ const EmployeeRegieModal: React.FC<EmployeeRegieModalProps> = ({
               <ul className="regie-lines">
                 {sheet.labor.map((line, index) => (
                   <li key={`${line.employeeName}-${index}`}>
-                    <strong>{line.employeeName}</strong> {line.clockIn}–{line.clockOut}, {formatHours(line.hours)}
-                    {line.hourlyRate != null ? ` × ${formatCurrency(line.hourlyRate)}` : ''}
-                    <span className="regie-amount">
-                      {line.hourlyRate != null ? formatCurrency(line.lineTotal) : '—'}
-                    </span>
+                    <strong>{line.employeeName}</strong> {line.clockIn}–{line.clockOut}
+                    <span className="regie-amount">{formatHours(line.hours)}</span>
                   </li>
                 ))}
                 {sheet.materials.map((line) => (
