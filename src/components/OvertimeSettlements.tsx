@@ -4,7 +4,11 @@ import { DataService } from '../services/dataService'
 import type { Employee, OvertimeSettlement } from '../types'
 import { toast } from './ToastContainer'
 import ThemeToggle from './ThemeToggle'
-import { minutesFromHourMinuteFields, minutesToHoursLabel } from '../utils/hoursInput'
+import {
+  floorToQuarterHour,
+  minutesFromHourMinuteFields,
+  minutesToHoursLabel
+} from '../utils/hoursInput'
 import { maxSettleableMinutes } from '../utils/overtimeBalance'
 import { monthKeyLabel, previousMonthKey, settleableMonthKeys } from '../utils/overtimeMonth'
 import { pushNotificationService } from '../services/pushNotificationService'
@@ -22,6 +26,9 @@ import '../styles/OvertimeSettlements.css'
  * Über `?month=YYYY-MM` lässt sich der Monat vorwählen – so landet der Klick
  * aus der Erinnerung direkt beim richtigen.
  */
+/** Abgerechnet wird nur in Viertelstunden (Vorgabe des Kunden). */
+const QUARTER_MINUTES = ['00', '15', '30', '45']
+
 const OvertimeSettlements: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -59,12 +66,15 @@ const OvertimeSettlements: React.FC = () => {
    */
   useEffect(() => {
     const forMonth = settlements.find(entry => entry.month === selectedMonth)
-    const vorschlag = forMonth ? forMonth.minutes : workedMinutes
-    if (vorschlag === null) {
+    const gespeichert = forMonth ? forMonth.minutes : workedMinutes
+    if (gespeichert === null) {
       setHoursInput('')
       setMinutesInput('')
       return
     }
+    // Abgerechnet wird nur in Viertelstunden – ein alter Wert wie 170:50 wird
+    // zu 170:45, der Rest bleibt auf dem Überstundenkonto.
+    const vorschlag = floorToQuarterHour(gespeichert)
     setHoursInput(String(Math.floor(vorschlag / 60)))
     setMinutesInput(String(Math.round(vorschlag % 60)).padStart(2, '0'))
   }, [selectedMonth, settlements, workedMinutes])
@@ -160,7 +170,9 @@ const OvertimeSettlements: React.FC = () => {
    * mehr abrechnet als er geleistet hat, lässt sich Überstunden auszahlen.
    */
   const maxSettleable =
-    workedMinutes === null ? 0 : maxSettleableMinutes(balanceMinutes, eintragDesMonats, workedMinutes)
+    workedMinutes === null
+      ? 0
+      : floorToQuarterHour(maxSettleableMinutes(balanceMinutes, eintragDesMonats, workedMinutes))
   const eingegebeneMinuten = minutesFromHourMinuteFields(hoursInput, minutesInput)
   /** Positiv = geht aufs Konto, negativ = wird vom Konto ausgezahlt. */
   const kontoBewegung =
@@ -176,7 +188,8 @@ const OvertimeSettlements: React.FC = () => {
     const amStueck = /^(\d{1,4}):(\d{0,2})$/.exec(value.trim())
     if (amStueck) {
       setHoursInput(amStueck[1])
-      setMinutesInput(amStueck[2])
+      const minuten = Math.min(59, Number(amStueck[2] || 0))
+      setMinutesInput(String(floorToQuarterHour(minuten)).padStart(2, '0'))
       return
     }
     setHoursInput(value.replace(/\D/g, '').slice(0, 4))
@@ -323,19 +336,23 @@ const OvertimeSettlements: React.FC = () => {
                 disabled={isSaving || workedMinutes === null}
               />
               <span className="overtime-time-colon" aria-hidden="true">:</span>
-              <input
+              <select
                 id="overtime-minutes"
-                type="text"
-                inputMode="numeric"
-                maxLength={2}
                 value={minutesInput}
-                onChange={(e) => setMinutesInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="45"
+                onChange={(e) => setMinutesInput(e.target.value)}
                 aria-label="Minuten"
                 disabled={isSaving || workedMinutes === null}
-              />
+              >
+                {QUARTER_MINUTES.map((minuten) => (
+                  <option key={minuten} value={minuten}>
+                    {minuten}
+                  </option>
+                ))}
+              </select>
             </div>
-            <small className="form-hint">Format Stunden:Minuten, z. B. 100:45</small>
+            <small className="form-hint">
+              Abgerechnet wird in Viertelstunden, z. B. 100:45 = 100,75 Std.
+            </small>
             <small className="form-hint">
               Höchstens {minutesToHoursLabel(maxSettleable)} Std:{' '}
               {workedMinutes === null ? '…' : minutesToHoursLabel(workedMinutes)} Std geleistet plus

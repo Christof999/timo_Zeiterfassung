@@ -1,6 +1,7 @@
 import type { Employee, LeaveRequest, TimeEntry } from '../../../../types'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
-import { minutesToHoursLabel } from '../../../../utils/hoursInput'
+import { floorToQuarterHour, minutesToHoursLabel } from '../../../../utils/hoursInput'
+import { contributionForMonth, previousContribution } from '../../../../utils/overtimeBalance'
 import { getReturnTravelCreditMs } from '../../../../utils/returnTravel'
 import {
   allocateOvertimePayout,
@@ -361,7 +362,7 @@ export const workMinutesFromParts = (clockIn: string, clockOut: string, pauseMin
   return Math.max(0, grossMinutes - pauseMinutes)
 }
 
-export { minutesToHoursLabel, minutesToDecimalHours } from '../../../../utils/hoursInput'
+export { floorToQuarterHour, minutesToHoursLabel, minutesToDecimalHours } from '../../../../utils/hoursInput'
 
 export const workMinutesFromOriginalEntry = (entry: TimeEntry): number => {
   if (entry.isVacationDay) return VACATION_WORK_MINUTES
@@ -508,13 +509,14 @@ export interface ReportSettlementSummary {
   /** geleistete Arbeitsstunden ohne Urlaub/Feiertag/Krankheit */
   workMinutes: number
   /**
-   * Vom Mitarbeiter gemeldete, abzurechnende Arbeitsstunden. `null` ohne
-   * übernommene Meldung – dann werden alle geleisteten Stunden abgerechnet.
+   * Abzurechnende Arbeitsstunden, auf die Viertelstunde abgerundet: die
+   * übernommene Meldung des Mitarbeiters, sonst alles Geleistete. `null`, wenn
+   * schlicht alles Geleistete abgerechnet wird.
    */
   settledWorkMinutes: number | null
   /**
    * Geleistet minus abgerechnet: positiv = geht aufs Überstundenkonto,
-   * negativ = wird vom Konto ausgezahlt. 0 ohne Meldung.
+   * negativ = wird vom Konto ausgezahlt. Enthält auch den Viertelstunden-Rest.
    */
   overtimeAccountDeltaMinutes: number
   /** Betrag der ABGERECHNETEN Arbeitsstunden (ohne Meldung = der geleisteten) */
@@ -722,11 +724,13 @@ export const buildAdjustedReport = (
   // vergütet wird aber pauschal.
   // Bezahlt wird, was der Mitarbeiter zur Abrechnung gemeldet hat – ohne
   // Meldung alles Geleistete. Die Differenz bewegt das Überstundenkonto.
-  const settledMinutes =
+  const reportedMinutes =
     typeof settledWorkMinutes === 'number' && Number.isFinite(settledWorkMinutes)
       ? Math.max(0, Math.round(settledWorkMinutes))
       : null
-  const paidWorkMinutes = settledMinutes ?? workMinutes
+  // Abgerechnet wird auf die Viertelstunde abgerundet; der Rest geht aufs
+  // Überstundenkonto (gebucht über settlementBookingFor).
+  const paidWorkMinutes = floorToQuarterHour(reportedMinutes ?? workMinutes)
   const workAmount = useFixedSalary ? 0 : amountFor(paidWorkMinutes)
   const vacationAmount = useFixedSalary ? 0 : amountFor(vacationMinutes)
   const holidayAmount = useFixedSalary ? 0 : amountFor(holidayMinutes)
@@ -763,8 +767,9 @@ export const buildAdjustedReport = (
     mealAllowanceDays,
     summary: {
       workMinutes,
-      settledWorkMinutes: settledMinutes,
-      overtimeAccountDeltaMinutes: settledMinutes === null ? 0 : workMinutes - settledMinutes,
+      settledWorkMinutes:
+        reportedMinutes === null && paidWorkMinutes === workMinutes ? null : paidWorkMinutes,
+      overtimeAccountDeltaMinutes: workMinutes - paidWorkMinutes,
       workAmount,
       openOvertimeMinutes: Math.max(0, openOvertimeMinutes),
       mealAllowanceDays,
@@ -816,3 +821,57 @@ export const buildAdjustedReportForTarget = (
     requestedPayoutMinutes: 0,
     settledWorkMinutes: targetMinutes
   })
+
+/**
+ * Monatsmeldung, die der Abrechnung entspricht – oder `null`, wenn das
+ * Überstundenkonto schon stimmt.
+ *
+ * Abgerechnet wird auf die Viertelstunde abgerundet; der Rest muss aufs Konto.
+ * Gebucht wird über die Monatsmeldung (setOvertimeSettlementMinutes), die nur
+ * die Differenz zum bisherigen Beitrag bucht – mehrfaches Drucken oder
+ * Versenden bewegt das Konto also nur einmal.
+ *
+ * @param existing gespeicherte Meldung des Monats
+ * @param meldungApplied ob die Abrechnung auf dieser Meldung beruht
+ */
+export const settlementBookingFor = (
+  summary: Pick<ReportSettlementSummary, 'workMinutes' | 'settledWorkMinutes'>,
+  existing: { minutes: number; workedMinutes?: number } | null,
+  meldungApplied: boolean
+): SettlementBooking | null => {
+  const paid = summary.settledWorkMinutes ?? summary.workMinutes
+  const booking = (workedMinutes: number): SettlementBooking => ({
+    minutes: paid,
+    workedMinutes,
+    balanceDelta: contributionForMonth(workedMinutes, paid) - previousContribution(existing)
+  })
+  if (existing) {
+    // Ohne übernommene Meldung rechnet der Bericht etwas anderes ab, als der
+    // Mitarbeiter gemeldet hat – seine Meldung wird dann nicht überschrieben.
+    // Altlasten ohne workedMinutes buchen anders und bleiben ebenfalls stehen.
+    if (!meldungApplied || typeof existing.workedMinutes !== 'number') return null
+    if (existing.minutes === paid) return null
+    return booking(existing.workedMinutes)
+  }
+  if (paid === summary.workMinutes) return null
+  return booking(summary.workMinutes)
+}
+
+export interface SettlementBooking {
+  minutes: number
+  workedMinutes: number
+  /** So weit bewegt die Buchung das Überstundenkonto. */
+  balanceDelta: number
+}
+
+/** Abrechnungssummen mit dem Kontostand, der nach der Buchung gilt. */
+export const summaryAfterBooking = (
+  summary: ReportSettlementSummary,
+  booking: SettlementBooking | null
+): ReportSettlementSummary =>
+  booking
+    ? {
+        ...summary,
+        openOvertimeMinutes: Math.max(0, summary.openOvertimeMinutes + booking.balanceDelta)
+      }
+    : summary

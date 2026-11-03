@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  floorToQuarterHour,
   minutesFromHourMinuteFields,
   minutesToDecimalHours,
   minutesToHoursLabel,
@@ -57,5 +58,14 @@ describe('minutesFromHourMinuteFields', () => {
     expect(minutesFromHourMinuteFields('152,4', '')).toBeNull()
     expect(minutesFromHourMinuteFields('152:40', '')).toBeNull()
     expect(minutesFromHourMinuteFields('-1', '0')).toBeNull()
+  })
+})
+
+describe('floorToQuarterHour', () => {
+  it('rundet immer nach unten auf volle Viertelstunden', () => {
+    expect(floorToQuarterHour(170 * 60 + 50)).toBe(170 * 60 + 45)
+    expect(floorToQuarterHour(170 * 60 + 44)).toBe(170 * 60 + 30)
+    expect(floorToQuarterHour(152 * 60 + 30)).toBe(152 * 60 + 30)
+    expect(floorToQuarterHour(14)).toBe(0)
   })
 })

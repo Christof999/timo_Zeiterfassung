@@ -99,6 +99,18 @@ describe('Abrechnung mit übernommener Meldung', () => {
     )
   })
 
+  it('rechnet die Viertelstunde ab und schreibt den Rest aufs Konto', () => {
+    // 183:50 geleistet, 170:50 gemeldet – abgerechnet 170:45, 13:05 aufs Konto.
+    const abgerundet = summary({
+      workMinutes: 183 * 60 + 50,
+      settledWorkMinutes: 170 * 60 + 45,
+      overtimeAccountDeltaMinutes: 13 * 60 + 5
+    })
+    expect(buildSettlementNote(abgerundet)).toBe(
+      'Geleistete Arbeitsstunden: 183,83 Std · davon abzurechnen: 170,75 Std · aufs Überstundenkonto: 13,08 Std'
+    )
+  })
+
   it('lässt den Vermerk ohne Meldung weg', () => {
     expect(buildSettlementNote(summary())).toBeNull()
     expect(buildSettlementNote(undefined)).toBeNull()

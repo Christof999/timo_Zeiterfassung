@@ -16,6 +16,7 @@ import {
   getReportRowChanges,
   buildAdjustedReport,
   buildAdjustedReportForTarget,
+  settlementBookingFor,
   employeeBillingRate,
   isReportSelectableEmployee,
   employeeHourlyMargin,
@@ -743,6 +744,59 @@ describe('Gemeldete Stunden übernehmen – die Tage bleiben, wie sie waren', ()
     expect(summary.settledWorkMinutes).toBeNull()
     expect(summary.overtimeAccountDeltaMinutes).toBe(0)
     expect(summary.workAmount).toBe(1000)
+  })
+
+  it('rundet eine Meldung auf die Viertelstunde ab – der Rest geht aufs Konto', () => {
+    const { summary } = uebernehmen(woche(), 40 * 60 + 50, 20)
+    expect(summary.settledWorkMinutes).toBe(40 * 60 + 45)
+    expect(summary.workAmount).toBe(815)
+    expect(summary.overtimeAccountDeltaMinutes).toBe(9 * 60 + 15)
+  })
+
+  it('rundet auch ohne Meldung die geleisteten Stunden auf die Viertelstunde ab', () => {
+    const tage = woche()
+    tage[0] = { ...tage[0], clockOut: '16:50', workHours: '9:50' }
+    const { summary } = buildAdjustedReport(tage, { hourlyRate: 20 })
+    expect(summary.workMinutes).toBe(49 * 60 + 50)
+    expect(summary.settledWorkMinutes).toBe(49 * 60 + 45)
+    expect(summary.overtimeAccountDeltaMinutes).toBe(5)
+    expect(summary.workAmount).toBe(995)
+  })
+})
+
+describe('settlementBookingFor – Viertelstunden-Rest aufs Konto', () => {
+  const geleistet = 183 * 60 + 50
+
+  it('legt ohne Meldung eine an, die den Rest aufs Konto bucht', () => {
+    expect(
+      settlementBookingFor({ workMinutes: geleistet, settledWorkMinutes: 183 * 60 + 45 }, null, false)
+    ).toEqual({ minutes: 183 * 60 + 45, workedMinutes: geleistet, balanceDelta: 5 })
+  })
+
+  it('bucht nichts, wenn schon glatte Viertelstunden geleistet wurden', () => {
+    expect(settlementBookingFor({ workMinutes: 160 * 60, settledWorkMinutes: null }, null, false)).toBeNull()
+  })
+
+  it('korrigiert eine krumme Meldung auf die abgerechnete Viertelstunde', () => {
+    // Agron: 170:50 gemeldet, abgerechnet 170:45 – die 5 Min fehlen noch auf dem Konto.
+    const meldung = { minutes: 170 * 60 + 50, workedMinutes: geleistet }
+    expect(
+      settlementBookingFor({ workMinutes: geleistet, settledWorkMinutes: 170 * 60 + 45 }, meldung, true)
+    ).toEqual({ minutes: 170 * 60 + 45, workedMinutes: geleistet, balanceDelta: 5 })
+  })
+
+  it('bucht beim zweiten Druck nichts mehr', () => {
+    const meldung = { minutes: 170 * 60 + 45, workedMinutes: geleistet }
+    expect(
+      settlementBookingFor({ workMinutes: geleistet, settledWorkMinutes: 170 * 60 + 45 }, meldung, true)
+    ).toBeNull()
+  })
+
+  it('überschreibt keine Meldung, die nicht übernommen wurde', () => {
+    const meldung = { minutes: 170 * 60 + 50, workedMinutes: geleistet }
+    expect(
+      settlementBookingFor({ workMinutes: geleistet, settledWorkMinutes: 183 * 60 + 45 }, meldung, false)
+    ).toBeNull()
   })
 })
 

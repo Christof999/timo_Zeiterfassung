@@ -20,6 +20,13 @@ export const minutesToHoursLabel = (totalMinutes: number): string => {
 export const minutesToDecimalHours = (totalMinutes: number): string =>
   (Math.round((totalMinutes / 60) * 100) / 100).toFixed(2).replace('.', ',')
 
+/**
+ * Abgerechnet werden nur volle Viertelstunden, immer nach unten: 170:50 → 170:45.
+ * Vorgabe des Kunden, damit auf der Lohnabrechnung nur ,00 / ,25 / ,50 / ,75 steht.
+ */
+export const floorToQuarterHour = (totalMinutes: number): number =>
+  Math.floor(totalMinutes / 15) * 15
+
 /** "8:30", "8,5" oder "510" (Minuten-frei) → Minuten. Ungültig → null. */
 export const parseHoursMinutesInput = (value: string): number | null => {
   const trimmed = (value || '').trim()

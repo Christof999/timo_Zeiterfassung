@@ -30,12 +30,16 @@ import {
   workMinutesFromParts,
   minutesToHoursLabel,
   minutesToDecimalHours,
+  floorToQuarterHour,
   workMinutesFromOriginalEntry,
   formatCurrency,
   buildDateFromTimeInput,
   getReportRowChanges,
   buildAdjustedReport,
   buildAdjustedReportForTarget,
+  settlementBookingFor,
+  summaryAfterBooking,
+  type SettlementBooking,
   employeeLaborCostRate,
   employeeWageRate,
   reportAttachmentFilename,
@@ -106,6 +110,10 @@ interface ReportsTabProps {
   defaultReportType?: ReportType
   allowedReportTypes?: ReportType[]
 }
+
+/** Schreibt die Monatsmeldung so, dass der Viertelstunden-Rest aufs Konto geht. */
+const bookSettlement = (employeeId: string, month: string, booking: SettlementBooking) =>
+  DataService.setOvertimeSettlementMinutes(employeeId, month, booking.minutes, booking.workedMinutes)
 
 const ReportsTab: React.FC<ReportsTabProps> = ({
   defaultReportType = 'employee',
@@ -990,6 +998,41 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
    */
   const otherSettlements = employeeSettlements.filter(entry => entry.month !== periodMonthKey)
 
+  /**
+   * Viertelstunden-Rest des angezeigten Monats, der beim Drucken/Versenden
+   * aufs Überstundenkonto gebucht wird. Nicht in der Regelarbeitszeit-Sicht:
+   * dort sind die Stunden schon umverteilt.
+   */
+  const pendingBooking =
+    periodMonthKey && selectedEmployeeId && !overtimeMode
+      ? settlementBookingFor(
+          adjustedReport.summary,
+          overtimeSettlement,
+          appliedSettlementTarget !== null
+        )
+      : null
+
+  /** Bucht den offenen Viertelstunden-Rest – idempotent über die Monatsmeldung. */
+  const bookPendingSettlement = async () => {
+    if (!pendingBooking || !periodMonthKey) return
+    const employeeId = selectedEmployeeId
+    const booking = pendingBooking
+    try {
+      await bookSettlement(employeeId, periodMonthKey, booking)
+      setEmployeeSettlements(await DataService.getOvertimeSettlements(employeeId))
+      setAppliedSettlementTarget(booking.minutes)
+      await loadInitialData()
+      toast.info(
+        `${minutesToDecimalHours(booking.balanceDelta)} Std Viertelstunden-Rest aufs Überstundenkonto gebucht.`
+      )
+    } catch (error: any) {
+      console.error('Viertelstunden-Rest konnte nicht gebucht werden:', error)
+      toast.error(
+        `Viertelstunden-Rest konnte nicht aufs Überstundenkonto gebucht werden: ${error?.message || error}`
+      )
+    }
+  }
+
   const adjustedEntries = adjustedReport.entries
   const regularWorkTimeLabel = `Mo–Do ${minutesToHoursLabel(regularWorkTimeConfig.monThu)} · Fr ${minutesToHoursLabel(regularWorkTimeConfig.fri)}`
 
@@ -1796,6 +1839,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       printWindow.document.open()
       printWindow.document.write(buildEmployeePrintHtml(currentEmployeeParams()))
       printWindow.document.close()
+      void bookPendingSettlement()
 
       printWindow.addEventListener('afterprint', cleanup, { once: true })
       printWindow.onload = () => {
@@ -1888,30 +1932,44 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                 {monthKeyLabel(overtimeSettlement.month)}
               </h4>
               <p>
-                Abzurechnen: <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>
+                Abzurechnen:{' '}
+                <strong>
+                  {minutesToDecimalHours(floorToQuarterHour(overtimeSettlement.minutes))} Std
+                </strong>
                 {typeof overtimeSettlement.workedMinutes === 'number' && (
                   <>
-                    {' '}von {minutesToHoursLabel(overtimeSettlement.workedMinutes)} Std
+                    {' '}von {minutesToDecimalHours(overtimeSettlement.workedMinutes)} Std
                     geleistet
                     {(() => {
                       const diff =
-                        overtimeSettlement.workedMinutes - overtimeSettlement.minutes
+                        overtimeSettlement.workedMinutes -
+                        floorToQuarterHour(overtimeSettlement.minutes)
                       if (diff > 0)
-                        return ` – ${minutesToHoursLabel(diff)} Std gehen aufs Überstundenkonto.`
+                        return ` – ${minutesToDecimalHours(diff)} Std gehen aufs Überstundenkonto.`
                       if (diff < 0)
-                        return ` – ${minutesToHoursLabel(-diff)} Std kommen vom Überstundenkonto.`
+                        return ` – ${minutesToDecimalHours(-diff)} Std kommen vom Überstundenkonto.`
                       return ' – nichts bleibt auf dem Überstundenkonto.'
                     })()}
                   </>
                 )}
               </p>
+              {floorToQuarterHour(overtimeSettlement.minutes) !== overtimeSettlement.minutes && (
+                <p>
+                  Gemeldet waren {minutesToDecimalHours(overtimeSettlement.minutes)} Std – abgerechnet
+                  wird auf die Viertelstunde abgerundet, der Rest wird beim Drucken oder Versenden
+                  aufs Überstundenkonto gebucht.
+                </p>
+              )}
               <p className="employee-report-note-state">
                 {appliedSettlementTarget === overtimeSettlement.minutes ? (
                   <>
                     Die Meldung ist übernommen: der Nachweis zeigt weiter alle{' '}
-                    <strong>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</strong>{' '}
+                    <strong>{minutesToDecimalHours(adjustedReport.summary.workMinutes)} Std</strong>{' '}
                     geleistete Arbeitszeit, abgerechnet werden{' '}
-                    <strong>{minutesToHoursLabel(overtimeSettlement.minutes)} Std</strong>.
+                    <strong>
+                      {minutesToDecimalHours(floorToQuarterHour(overtimeSettlement.minutes))} Std
+                    </strong>
+                    .
                   </>
                 ) : (
                   'Noch nicht übernommen – aktuell würden alle geleisteten Stunden abgerechnet.'
@@ -1958,7 +2016,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     employeeName: selectedEmployeeName,
     personnelNumber: selectedEmployeeRecord?.heroEmployeeId || '',
     periodLabel: periodMonthKey ? monthKeyLabel(periodMonthKey) : formatPeriod(),
-    summary: adjustedReport.summary
+    summary: summaryAfterBooking(adjustedReport.summary, pendingBooking)
   })
 
   const buildCurrentDatevHtml = (): string => buildDatevPrintHtml(currentDatevParams())
@@ -1994,6 +2052,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       printWindow.document.open()
       printWindow.document.write(buildCurrentDatevHtml())
       printWindow.document.close()
+      void bookPendingSettlement()
       printWindow.onload = () => window.setTimeout(triggerPrint, 80)
       // Fallback, falls onload in einzelnen Browsern nicht feuert.
       window.setTimeout(triggerPrint, 350)
@@ -2012,7 +2071,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     periodLabel: formatPeriod(),
     regularWorkTimeLabel: overtimeMode ? regularWorkTimeLabel : null,
     payoutMinutes: adjustedReport.payoutMinutes,
-    summary: adjustedReport.summary
+    summary: summaryAfterBooking(adjustedReport.summary, pendingBooking)
   })
 
   /**
@@ -2169,19 +2228,26 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
     }
 
     const monat = monthKeyForPeriod(range.start, range.end)
-    let ziel: number | null = null
-    if (batchApplyReported && monat) {
-      const meldungen = await DataService.getOvertimeSettlements(employeeId)
-      ziel = meldungen.find(entry => entry.month === monat)?.minutes ?? null
-    }
+    const meldung = monat
+      ? ((await DataService.getOvertimeSettlements(employeeId)).find(
+          entry => entry.month === monat
+        ) ?? null)
+      : null
+    const ziel = batchApplyReported && meldung ? meldung.minutes : null
+    const report =
+      ziel !== null
+        ? buildAdjustedReportForTarget(entries, options, ziel)
+        : buildAdjustedReport(entries, options)
+
+    // Der Viertelstunden-Rest geht aufs Überstundenkonto, sobald der Bericht
+    // gedruckt oder versendet wird.
+    const booking = monat ? settlementBookingFor(report.summary, meldung, ziel !== null) : null
+    if (booking && monat) await bookSettlement(employeeId, monat, booking)
 
     return {
       employee: emp,
       name: employeeDisplayName(employeeId),
-      report:
-        ziel !== null
-          ? buildAdjustedReportForTarget(entries, options, ziel)
-          : buildAdjustedReport(entries, options)
+      report: { ...report, summary: summaryAfterBooking(report.summary, booking) }
     }
   }
 
@@ -2632,6 +2698,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         reports: [anhang]
       })
       toast.success(`Bericht an ${mailRecipient.trim()} versendet.`)
+      await bookPendingSettlement()
       setMailNote('')
     } catch (error: any) {
       toast.error(error?.message || 'Versand fehlgeschlagen')
@@ -3383,7 +3450,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <tr>
                           <td>Geleistete Arbeitsstunden</td>
                           <td>
-                            {minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std
+                            {minutesToDecimalHours(adjustedReport.summary.workMinutes)} Std
                             {!adjustedReport.summary.isFixedSalary &&
                               ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                           </td>
@@ -3397,13 +3464,13 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <>
                           <tr>
                             <td>Geleistete Arbeitsstunden</td>
-                            <td>{minutesToHoursLabel(adjustedReport.summary.workMinutes)} Std</td>
+                            <td>{minutesToDecimalHours(adjustedReport.summary.workMinutes)} Std</td>
                             <td className="number-cell">—</td>
                           </tr>
                           <tr>
                             <td>Davon abzurechnen</td>
                             <td>
-                              {minutesToHoursLabel(adjustedReport.summary.settledWorkMinutes)} Std
+                              {minutesToDecimalHours(adjustedReport.summary.settledWorkMinutes)} Std
                               {!adjustedReport.summary.isFixedSalary &&
                                 ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                             </td>
@@ -3421,7 +3488,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                                   : 'Vom Überstundenkonto ausgezahlt'}
                               </td>
                               <td>
-                                {minutesToHoursLabel(
+                                {minutesToDecimalHours(
                                   Math.abs(adjustedReport.summary.overtimeAccountDeltaMinutes)
                                 )}{' '}
                                 Std
@@ -3434,7 +3501,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr>
                         <td>Urlaubsstunden</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.vacationMinutes)} Std
+                          {minutesToDecimalHours(adjustedReport.summary.vacationMinutes)} Std
                           {!adjustedReport.summary.isFixedSalary &&
                             ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
@@ -3447,7 +3514,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       <tr>
                         <td>Feiertagsstunden</td>
                         <td>
-                          {minutesToHoursLabel(adjustedReport.summary.holidayMinutes)} Std
+                          {minutesToDecimalHours(adjustedReport.summary.holidayMinutes)} Std
                           {!adjustedReport.summary.isFixedSalary &&
                             ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
@@ -3461,7 +3528,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                         <td>Krankheitstage</td>
                         <td>
                           {adjustedReport.summary.sickDays} Tage (
-                          {minutesToHoursLabel(adjustedReport.summary.sickMinutes)} Std)
+                          {minutesToDecimalHours(adjustedReport.summary.sickMinutes)} Std)
                           {!adjustedReport.summary.isFixedSalary &&
                             ` × ${formatCurrency(adjustedReport.summary.hourlyRate)}`}
                         </td>
@@ -3481,7 +3548,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                             'Monatliche Ausbildungsvergütung'
                           ) : (
                             <>
-                              {minutesToHoursLabel(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
+                              {minutesToDecimalHours(adjustedReport.summary.grossWageMinutes)} Std ×{' '}
                               {formatCurrency(adjustedReport.summary.hourlyRate)}
                             </>
                           )}
@@ -3512,7 +3579,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
                       </tr>
                       <tr className="settlement-note">
                         <td>Stand Überstundenkonto</td>
-                        <td>{minutesToHoursLabel(adjustedReport.summary.openOvertimeMinutes)} Std</td>
+                        <td>{minutesToDecimalHours(adjustedReport.summary.openOvertimeMinutes)} Std</td>
                         <td className="number-cell">—</td>
                       </tr>
                     </tbody>
