@@ -99,10 +99,3 @@ export const leaveWorkingDayKeys = (request: LeaveDayRange): string[] => {
  */
 export const effectiveLeaveWorkingDays = (request: LeaveDayRange): number =>
   leaveWorkingDayKeys(request).length
-
-/**
- * Verbrauchte Arbeitstage, begrenzt auf ein Kalenderjahr – Basis für das
- * Urlaubskonto eines Jahres.
- */
-export const leaveWorkingDaysInYear = (request: LeaveDayRange, year: number): number =>
-  leaveWorkingDayKeys(request).filter((key) => key.startsWith(`${year}-`)).length

@@ -413,7 +413,7 @@ class DataServiceClass {
     leaveRequest: LeaveRequest,
     workedDateKey: string,
     timeEntryId: string
-  ): { update: Record<string, unknown>; creditDays: number } | null {
+  ): Record<string, unknown> | null {
     if (!this.leaveRequestCoversActiveVacationDate(leaveRequest, workedDateKey)) return null
 
     const activeKeys = this.getActiveVacationDayKeys(leaveRequest)
@@ -437,7 +437,7 @@ class DataServiceClass {
       update.rejectionReason = reason
     }
 
-    return { update, creditDays: 1 }
+    return update
   }
 
   async addTimeEntry(timeEntryData: Partial<TimeEntry>): Promise<TimeEntry> {
@@ -497,21 +497,18 @@ class DataServiceClass {
         }
 
         const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
-        let vacationDaysToCredit = 0
         for (const request of vacationRequestsToCancel) {
           if (!request.id) continue
           const requestRef = doc(db, 'leaveRequests', request.id)
           const requestDoc = await transaction.get(requestRef)
           if (!requestDoc.exists()) continue
           const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
-          const cancellation = this.buildVacationCancellationUpdate(
+          const update = this.buildVacationCancellationUpdate(
             freshRequest,
             workedDateKey,
             timeEntryRef.id
           )
-          if (!cancellation) continue
-          vacationDaysToCredit += cancellation.creditDays
-          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+          if (update) vacationUpdates.push({ ref: requestRef, update })
         }
 
         transaction.set(timeEntryRef, entryData)
@@ -522,19 +519,6 @@ class DataServiceClass {
           activeClockInAt: normalizedClockInTime,
           updatedAt: new Date()
         }
-        if (vacationDaysToCredit > 0) {
-          const vd = employeeData.vacationDays || {
-            total: 30,
-            used: 0,
-            year: new Date().getFullYear()
-          }
-          employeeUpdate.vacationDays = {
-            ...vd,
-            used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
-            year: vd.year ?? new Date().getFullYear()
-          }
-        }
-
         transaction.update(employeeRef, employeeUpdate)
       })
       
@@ -613,46 +597,23 @@ class DataServiceClass {
       )
 
       await runTransaction(db, async (transaction) => {
-        const empRef = doc(db, 'employees', params.targetEmployeeId)
-        const empSnap = await transaction.get(empRef)
-        const employeeData = empSnap.exists() ? (empSnap.data() as Employee) : null
-
         const vacationUpdates: Array<{ ref: ReturnType<typeof doc>; update: Record<string, unknown> }> = []
-        let vacationDaysToCredit = 0
         for (const request of vacationRequestsToCancel) {
           if (!request.id) continue
           const requestRef = doc(db, 'leaveRequests', request.id)
           const requestDoc = await transaction.get(requestRef)
           if (!requestDoc.exists()) continue
           const freshRequest = { id: requestDoc.id, ...requestDoc.data() } as LeaveRequest
-          const cancellation = this.buildVacationCancellationUpdate(
+          const update = this.buildVacationCancellationUpdate(
             freshRequest,
             workedDateKey,
             timeEntryRef.id
           )
-          if (!cancellation) continue
-          vacationDaysToCredit += cancellation.creditDays
-          vacationUpdates.push({ ref: requestRef, update: cancellation.update })
+          if (update) vacationUpdates.push({ ref: requestRef, update })
         }
 
         transaction.set(timeEntryRef, payload)
         vacationUpdates.forEach(({ ref, update }) => transaction.update(ref, update))
-
-        if (employeeData && vacationDaysToCredit > 0) {
-          const vd = employeeData.vacationDays || {
-            total: 30,
-            used: 0,
-            year: new Date().getFullYear()
-          }
-          transaction.update(empRef, {
-            vacationDays: {
-              ...vd,
-              used: Math.max(0, (Number(vd.used) || 0) - vacationDaysToCredit),
-              year: vd.year ?? new Date().getFullYear()
-            },
-            updatedAt: new Date()
-          })
-        }
       })
       const snap = await getDoc(timeEntryRef)
       // Nachgetragener (abgeschlossener) Eintrag → Überstunden des Tags neu berechnen
@@ -969,10 +930,16 @@ class DataServiceClass {
    * verdiente Überstunden (Tages-Summen über 8,5 Std) minus genehmigte
    * „Urlaub auf Überstunden"-Tage. Setzt den Saldo neu und schreibt die
    * Tageswerte. Dient als Korrektur-/Migrations-Button.
+   *
+   * Ist ein Stand aus der Lohnabrechnung hinterlegt, ist er der Anfangsbestand:
+   * gezählt wird erst ab dem Folgemonat, sonst zählte die Zeit davor doppelt.
    */
   async recomputeOvertimeBalance(employeeId: string): Promise<number> {
     await this.authReadyPromise
     if (!employeeId) return 0
+    const employeeSnap = await getDoc(doc(db, 'employees', employeeId))
+    const opening = (employeeSnap.data() as Employee | undefined)?.overtimeOpening
+    const afterOpening = (dateOrMonth: string) => !opening || dateOrMonth.slice(0, 7) > opening.asOfMonth
     const entries = await this.getTimeEntriesByEmployeeId(employeeId)
     // Bestandsdaten korrigieren: Rückfahrt-Gutschrift nur beim letzten Ausstempeln/Tag
     await this.normalizeReturnTravelCreditsForEntries(entries)
@@ -990,7 +957,7 @@ class DataServiceClass {
     const settlements = await overtimeSettlements.getOvertimeSettlements(employeeId)
     const settledMonths = new Map<string, number>()
     for (const s of settlements) {
-      if (typeof s.workedMinutes !== 'number') continue
+      if (typeof s.workedMinutes !== 'number' || !afterOpening(s.month)) continue
       settledMonths.set(s.month, Math.max(0, s.workedMinutes - (Number(s.minutes) || 0)))
     }
 
@@ -999,7 +966,7 @@ class DataServiceClass {
     for (const [dateKey, mins] of minutesByDay) {
       const ot = Math.max(0, Math.round(mins - DataServiceClass.regularMinutesForDay(dateKey)))
       dayOvertimes.push({ dateKey, minutes: ot })
-      if (!settledMonths.has(dateKey.slice(0, 7))) earned += ot
+      if (afterOpening(dateKey) && !settledMonths.has(dateKey.slice(0, 7))) earned += ot
     }
     for (const rest of settledMonths.values()) earned += rest
 
@@ -1008,9 +975,14 @@ class DataServiceClass {
     let spent = 0
     for (const req of leaveRequests) {
       if (req.type === 'overtime' && req.status === 'approved') {
-        const reqStart = this.convertToDate(req.startDate)
+        let reqStart = this.convertToDate(req.startDate)
         const reqEnd = this.convertToDate(req.endDate)
-        spent += reqStart && reqEnd ? leaveMinutesForRange(reqStart, reqEnd) : 0
+        if (opening) {
+          const [year, month] = opening.asOfMonth.split('-').map(Number)
+          const firstCountedDay = new Date(year, month, 1)
+          if (reqStart < firstCountedDay) reqStart = firstCountedDay
+        }
+        spent += reqStart && reqEnd && reqStart <= reqEnd ? leaveMinutesForRange(reqStart, reqEnd) : 0
       }
     }
 
@@ -1018,10 +990,11 @@ class DataServiceClass {
     // Regelarbeitszeit aufgefüllt hat – sonst gäbe die Neuberechnung ihm die
     // längst entnommenen Stunden zurück.
     for (const entry of entries) {
+      if (!afterOpening(this.getDateKeyFromValue(entry.clockInTime))) continue
       spent += Math.max(0, Math.round(Number(entry.overtimeFillMinutes) || 0))
     }
 
-    const balance = Math.max(0, earned - spent)
+    const balance = Math.max(0, (opening?.minutes ?? 0) + earned - spent)
 
     // Tageswerte schreiben (für spätere delta-basierte Aktualisierung)
     for (const day of dayOvertimes) {
