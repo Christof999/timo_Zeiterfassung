@@ -9,7 +9,19 @@ import EmployeeAbsenceHistory from './EmployeeAbsenceHistory'
 import TimeEntryReportModal from './TimeEntryReportModal'
 import EmployeeAvatar from '../EmployeeAvatar'
 import { prepareEmployeePhoto } from '../../utils/employeePhoto'
+import { FULL_TIME_MONTHLY_VACATION_DAYS } from '../../utils/vacationAccount'
 import '../../styles/Modal.css'
+
+/** „12,5" → 12.5; leer oder ungültig → null. */
+const parseDecimal = (value: string): number | null => {
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const parsed = Number(trimmed.replace(',', '.'))
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+const decimalLabel = (value: number | undefined): string =>
+  value == null ? '' : String(value).replace('.', ',')
 
 interface EmployeeModalProps {
   employee: Employee | null
@@ -43,6 +55,10 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
     isApprentice: false,
     fixedMonthlySalary: 0,
     overtimeBalanceHours: '' as string,
+    payrollMonth: '',
+    vacationOpeningDays: '',
+    monthlyVacationDays: decimalLabel(FULL_TIME_MONTHLY_VACATION_DAYS),
+    overtimeOpeningHours: '',
     heroEmployeeId: '',
     isAdmin: false,
     adminRole: 'full' as AdminRole
@@ -111,6 +127,11 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         isApprentice: employee.isApprentice === true,
         fixedMonthlySalary: employee.fixedMonthlySalary || 0,
         overtimeBalanceHours,
+        payrollMonth: employee.vacationAccount?.asOfMonth || employee.overtimeOpening?.asOfMonth || '',
+        vacationOpeningDays: decimalLabel(employee.vacationAccount?.openingDays),
+        monthlyVacationDays: decimalLabel(employee.vacationAccount?.monthlyDays ?? FULL_TIME_MONTHLY_VACATION_DAYS),
+        overtimeOpeningHours:
+          employee.overtimeOpening != null ? decimalLabel(Math.round((employee.overtimeOpening.minutes / 60) * 100) / 100) : '',
         heroEmployeeId: employee.heroEmployeeId || '',
         isAdmin: (employee as any).isAdmin === true,
         adminRole: resolveAdminRole(employee)
@@ -132,6 +153,10 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         isApprentice: false,
         fixedMonthlySalary: 0,
         overtimeBalanceHours: '',
+        payrollMonth: '',
+        vacationOpeningDays: '',
+        monthlyVacationDays: decimalLabel(FULL_TIME_MONTHLY_VACATION_DAYS),
+        overtimeOpeningHours: '',
         heroEmployeeId: '',
         isAdmin: false,
         adminRole: 'full'
@@ -176,12 +201,40 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         }
       }
 
+      // Stand laut Lohnabrechnung: nur vollständig übernehmen.
+      const openingDays = parseDecimal(formData.vacationOpeningDays)
+      const monthlyDays = parseDecimal(formData.monthlyVacationDays)
+      const openingOvertimeHours = parseDecimal(formData.overtimeOpeningHours)
+      if ((openingDays != null || openingOvertimeHours != null) && !formData.payrollMonth) {
+        toast.error('Bitte den Monat der Lohnabrechnung angeben.')
+        setIsLoading(false)
+        return
+      }
+      if (openingDays != null) {
+        if (monthlyDays == null) {
+          toast.error('Bitte den Urlaubsanspruch je Monat angeben (Vollzeit Bau: 2,5).')
+          setIsLoading(false)
+          return
+        }
+        employeeData.vacationAccount = { openingDays, asOfMonth: formData.payrollMonth, monthlyDays }
+      }
+      const overtimeOpening =
+        openingOvertimeHours != null
+          ? { minutes: Math.round(openingOvertimeHours * 60), asOfMonth: formData.payrollMonth }
+          : null
+      const overtimeOpeningChanged =
+        overtimeOpening != null &&
+        (overtimeOpening.minutes !== employee?.overtimeOpening?.minutes ||
+          overtimeOpening.asOfMonth !== employee?.overtimeOpening?.asOfMonth)
+      if (overtimeOpening) employeeData.overtimeOpening = overtimeOpening
+
       if (formData.password) {
         employeeData.password = formData.password
       }
 
-      if (employee?.id) {
-        await DataService.updateEmployee(employee.id, employeeData)
+      let employeeId = employee?.id
+      if (employeeId) {
+        await DataService.updateEmployee(employeeId, employeeData)
         toast.success('Mitarbeiter erfolgreich aktualisiert')
       } else {
         if (!formData.password) {
@@ -189,8 +242,14 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
           setIsLoading(false)
           return
         }
-        await DataService.createEmployee(employeeData)
+        employeeId = await DataService.createEmployee(employeeData)
         toast.success('Mitarbeiter erfolgreich erstellt')
+      }
+
+      // Neuer Stand aus der Lohnabrechnung → Konto ab diesem Stand neu aufbauen,
+      // sonst bliebe der alte, selbst gezählte Saldo stehen.
+      if (overtimeOpeningChanged && employeeId) {
+        await DataService.recomputeOvertimeBalance(employeeId)
       }
 
       onSave()
@@ -403,6 +462,46 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
               </button>
             )}
           </div>
+          <fieldset className="form-group">
+            <legend>Stand laut Lohnabrechnung</legend>
+            <label htmlFor="payroll-month">Monat der Lohnabrechnung:</label>
+            <input
+              id="payroll-month"
+              type="month"
+              value={formData.payrollMonth}
+              onChange={e => setFormData({ ...formData, payrollMonth: e.target.value })}
+            />
+            <label htmlFor="vacation-opening">Resturlaub (Tage):</label>
+            <input
+              id="vacation-opening"
+              type="text"
+              inputMode="decimal"
+              placeholder="z.B. 11 oder 8,92"
+              value={formData.vacationOpeningDays}
+              onChange={e => setFormData({ ...formData, vacationOpeningDays: e.target.value })}
+            />
+            <label htmlFor="vacation-monthly">Urlaubsanspruch je Monat (Tage):</label>
+            <input
+              id="vacation-monthly"
+              type="text"
+              inputMode="decimal"
+              value={formData.monthlyVacationDays}
+              onChange={e => setFormData({ ...formData, monthlyVacationDays: e.target.value })}
+            />
+            <label htmlFor="overtime-opening">Überstunden (Stunden, optional):</label>
+            <input
+              id="overtime-opening"
+              type="text"
+              inputMode="decimal"
+              placeholder="z.B. 46,5"
+              value={formData.overtimeOpeningHours}
+              onChange={e => setFormData({ ...formData, overtimeOpeningHours: e.target.value })}
+            />
+            <small>
+              Bau Vollzeit: 2,5 Tage je Monat. Ein Monat wird gutgeschrieben, sobald er vorbei ist.
+              Neue Überstunden zählen ab dem Folgemonat dazu.
+            </small>
+          </fieldset>
           <div className="form-group">
             <label>Personalnummer (optional):</label>
             <input

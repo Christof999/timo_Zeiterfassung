@@ -1,3 +1,5 @@
+import type { VacationAccount } from '../utils/vacationAccount'
+
 export interface Employee {
   id?: string
   profileImage?: string
@@ -25,20 +27,15 @@ export interface Employee {
   /** Personalnummer für den DATEV-Nachweis (Feldname stammt aus der früheren HERO-Anbindung) */
   heroEmployeeId?: string
   heroContactNr?: string
-  vacationDays?: {
-    /** Urlaubsanspruch des Jahres in Tagen. */
-    total: number
-    /**
-     * Altlast: wurde früher beim Genehmigen hochgezählt, heute nicht mehr.
-     * Der Verbrauch wird aus den genehmigten Anträgen abgeleitet
-     * (`leaveWorkingDaysInYear`), damit Feiertage und Stornos korrekt
-     * herausfallen. Nicht als Basis für neue Berechnungen verwenden.
-     */
-    used: number
-    year: number
-  }
+  /** Urlaubskonto laut Lohnabrechnung; ohne Angabe noch nicht übernommen. */
+  vacationAccount?: VacationAccount
   /** Optional: Überstunden-Saldo in Minuten (wird bei Zeiterfassungs-Abrechnung reduziert, falls gesetzt). */
   overtimeBalanceMinutes?: number | null
+  /**
+   * Überstundenstand laut Lohnabrechnung zum Ende von `asOfMonth`.
+   * Ausgangspunkt für „Neu berechnen": davor zählt nur dieser Stand.
+   */
+  overtimeOpening?: { minutes: number; asOfMonth: string }
   /**
    * Umfang der Admin-Rechte. 'full' = kompletter Admin-Bereich,
    * 'payroll' = nur Zeiterfassungsbericht und Mitarbeiter (für die

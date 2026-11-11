@@ -57,15 +57,6 @@ export async function createEmployee(employeeData: Partial<Employee>): Promise<s
       throw new Error('Dieser Benutzername ist bereits vergeben.')
     }
 
-    // Standard-Urlaubsdaten hinzufügen
-    if (!employeeData.vacationDays) {
-      employeeData.vacationDays = {
-        total: 30,
-        used: 0,
-        year: new Date().getFullYear()
-      }
-    }
-
     const docRef = await addDoc(employeesRef, employeeData)
     return docRef.id
   } catch (error) {

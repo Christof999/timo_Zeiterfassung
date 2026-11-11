@@ -8,11 +8,8 @@ import EmployeePageHeader from './EmployeePageHeader'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 import { REGULAR_MINUTES_MON_THU, leaveMinutesForRange } from '../utils/regularWorkTime'
-import {
-  countLeaveWorkingDays,
-  effectiveLeaveWorkingDays,
-  leaveWorkingDaysInYear
-} from '../utils/workingDays'
+import { countLeaveWorkingDays, effectiveLeaveWorkingDays } from '../utils/workingDays'
+import { formatAsOfMonth, formatVacationDays, vacationBalance } from '../utils/vacationAccount'
 import { getBavariaHolidayName } from '../utils/bavariaHolidays'
 
 // Reguläre Tagesarbeitszeit in Minuten (= Kosten eines „Urlaub auf Überstunden"-Tages).
@@ -212,26 +209,11 @@ const VacationRequests: React.FC = () => {
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  // Urlaubskonto: "Genutzt" wird komplett aus den genehmigten Anträgen des
-  // laufenden Jahres abgeleitet – ohne Wochenenden, ohne gesetzliche Feiertage
-  // und ohne stornierte Tage. Das gilt damit auch rückwirkend für Anträge, die
-  // noch mit der alten Zählung (Feiertage inklusive) gespeichert wurden.
-  //
-  // Der Zähler `vacationDays.used` wird bewusst nicht mehr addiert: er wurde
-  // früher beim Genehmigen hochgezählt, inzwischen nicht mehr. Würde man ihn
-  // weiter als Basis nehmen, zählten alte Urlaube doppelt – einmal im Zähler,
-  // einmal über die Ableitung.
-  const currentYear = new Date().getFullYear()
-  const vacationAccount = currentUser?.vacationDays || { total: 30, used: 0, year: currentYear }
-  const totalVacationDays = Number(vacationAccount.total || 30)
-
-  const usedForAccount = leaveRequests.reduce((sum, request) => {
-    if (request.type !== 'vacation' || request.status !== 'approved') {
-      return sum
-    }
-    return sum + leaveWorkingDaysInYear(request, currentYear)
-  }, 0)
-  const remaining = Math.max(0, totalVacationDays - usedForAccount)
+  // Urlaubskonto: Stand der Lohnabrechnung plus Monatsanspruch, abzüglich der
+  // seither genehmigten Urlaubstage (ohne Wochenenden, Feiertage, Stornos).
+  const account = currentUser?.vacationAccount
+  const balance = account ? vacationBalance(account, leaveRequests, new Date()) : null
+  const entitlement = account && balance ? account.openingDays + balance.earned : 0
 
   // Überstundenkonto
   const overtimeMinutes = Math.max(0, Number(currentUser?.overtimeBalanceMinutes) || 0)
@@ -267,27 +249,37 @@ const VacationRequests: React.FC = () => {
 
       {/* Urlaubskonto */}
       <section className="vacation-account employee-card" aria-label="Urlaubskonto">
-        <h3>Dein Urlaubskonto {currentYear}</h3>
-        <div className="vacation-stats">
-          <div className="stat">
-            <span className="stat-value">{remaining}</span>
-            <span className="stat-label">Verfügbar</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{usedForAccount}</span>
-            <span className="stat-label">Genutzt</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{totalVacationDays}</span>
-            <span className="stat-label">Gesamt</span>
-          </div>
-        </div>
-        <div className="vacation-progress">
-          <div
-            className="vacation-progress-bar"
-            style={{ width: `${totalVacationDays > 0 ? Math.min(100, (usedForAccount / totalVacationDays) * 100) : 0}%` }}
-          />
-        </div>
+        <h3>Dein Urlaubskonto</h3>
+        {account && balance ? (
+          <>
+            <div className="vacation-stats">
+              <div className="stat">
+                <span className="stat-value">{formatVacationDays(balance.remaining)}</span>
+                <span className="stat-label">Verfügbar</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">{formatVacationDays(balance.taken)}</span>
+                <span className="stat-label">Genommen/verplant</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">{formatVacationDays(entitlement)}</span>
+                <span className="stat-label">Anspruch</span>
+              </div>
+            </div>
+            <div className="vacation-progress">
+              <div
+                className="vacation-progress-bar"
+                style={{ width: `${entitlement > 0 ? Math.min(100, (balance.taken / entitlement) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="vacation-overtime-line">
+              Resturlaub laut Lohnabrechnung {formatAsOfMonth(account.asOfMonth)}:{' '}
+              {formatVacationDays(account.openingDays)} Tage · danach {formatVacationDays(account.monthlyDays)} Tage je Monat
+            </p>
+          </>
+        ) : (
+          <p className="vacation-overtime-line">Dein Resturlaub wird noch aus der Lohnabrechnung übernommen.</p>
+        )}
         <p className="vacation-overtime-line">
           Überstundenkonto: <strong>{overtimeHoursLabel} h</strong>
           {canUseOvertime ? ` · bis zu ${overtimeDaysAvailable} Tag(e) als „Urlaub auf Überstunden“ möglich` : ''}
@@ -349,9 +341,9 @@ const VacationRequests: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className={`working-days-info ${workingDays > remaining ? 'warning' : 'info'}`}>
-                  {workingDays > remaining ? (
-                    <>{workingDays} Arbeitstage beantragt, aber nur {remaining} verfügbar</>
+                <div className={`working-days-info ${balance && workingDays > balance.remaining ? 'warning' : 'info'}`}>
+                  {balance && workingDays > balance.remaining ? (
+                    <>{workingDays} Arbeitstage beantragt, aber nur {formatVacationDays(balance.remaining)} verfügbar</>
                   ) : (
                     <>{workingDays} Arbeitstage</>
                   )}
