@@ -3,6 +3,8 @@ import { DataService } from '../services/dataService'
 import type { Project, Customer } from '../types'
 import { OVERHEAD_PROJECT_DEFS, overheadKindOf } from '../constants/overheadProjects'
 import SearchableSelect, { type SearchableOption } from './SearchableSelect'
+import ProjectSiteCard from './ProjectSiteCard'
+import { ProjectOfferDetails } from './ProjectOfferDetails'
 import '../styles/ClockInForm.css'
 
 export interface ClockInTarget {
@@ -82,6 +84,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
     return <div className="loading">Projekte werden geladen...</div>
   }
 
+  const selectedProject = projects.find(project => project.id === selectedProjectId) ?? null
   const canSubmit =
     mode === 'project' ? !!selectedProjectId : !!selectedCustomerId && customers.length > 0
 
@@ -110,7 +113,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
             type="button"
             role="tab"
             aria-selected={mode === 'project'}
-            className={`btn ${mode === 'project' ? 'primary-btn' : 'secondary-btn'}`}
+            className="clock-in-mode-btn"
             onClick={() => setMode('project')}
           >
             Projekt
@@ -119,7 +122,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
             type="button"
             role="tab"
             aria-selected={mode === 'customer'}
-            className={`btn ${mode === 'customer' ? 'primary-btn' : 'secondary-btn'}`}
+            className="clock-in-mode-btn"
             onClick={() => setMode('customer')}
           >
             Kunde (Kleinauftrag)
@@ -158,6 +161,7 @@ const ClockInForm: React.FC<ClockInFormProps> = ({ onClockIn }) => {
               )}
             </div>
           )}
+          {mode === 'project' && selectedProjectId && <ProjectSiteCard project={selectedProject}><ProjectOfferDetails project={selectedProject} /></ProjectSiteCard>}
           <button type="submit" className="btn primary-btn" disabled={!canSubmit || isClockingIn}>
             {isClockingIn ? 'Wird eingestempelt…' : 'Einstempeln'}
           </button>

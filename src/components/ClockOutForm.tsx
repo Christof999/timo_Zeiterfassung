@@ -5,6 +5,8 @@ import ExtendedClockOutModal from './ExtendedClockOutModal'
 import LiveDocumentationModal from './LiveDocumentationModal'
 import ProjectSwitchModal from './ProjectSwitchModal'
 import { toast } from './ToastContainer'
+import ProjectSiteCard from './ProjectSiteCard'
+import { ProjectOfferDetails } from './ProjectOfferDetails'
 import '../styles/ClockOutForm.css'
 
 interface ClockOutFormProps {
@@ -107,18 +109,9 @@ const ClockOutForm: React.FC<ClockOutFormProps> = ({
 
   return (
     <div className="clock-out-form">
-      <div className="active-project-info">
-        <h3>Aktives Projekt</h3>
-        <div className="project-details">
-          <p className="project-name">
-            <strong>{project?.name || 'Unbekanntes Projekt'}</strong>
-          </p>
-          <p className="project-client">Kunde: {project?.client || '-'}</p>
-          <p className="project-location">
-            Adresse: {project?.address || project?.location || '-'}
-          </p>
-        </div>
-      </div>
+      <ProjectSiteCard project={project} badge="Aktuelles Projekt">
+        <ProjectOfferDetails project={project} />
+      </ProjectSiteCard>
 
       <p className="clock-in-info">
         Eingestempelt seit: {formatTime(clockInTime)}

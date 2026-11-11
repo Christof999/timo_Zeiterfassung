@@ -6,7 +6,7 @@ import { getInvoiceCustomers } from './invoiceCustomers'
 
 /**
  * Kundenstamm – maßgeblich ist das Rechnungsprogramm. Dort werden Kunden
- * angelegt und gepflegt; die Zeiterfassung liest nur (siehe invoiceCustomers.ts).
+ * gepflegt. Das Aufmaß kann zusätzlich neue Kunden im selben Stamm anlegen.
  */
 export async function getAllCustomers(): Promise<Customer[]> {
   return getInvoiceCustomers()

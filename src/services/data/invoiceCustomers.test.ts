@@ -39,6 +39,33 @@ describe('mapInvoiceCustomer', () => {
     expect(customer.siteAddress).toBe('Musterweg 1, 91154 Roth')
   })
 
+  it('übernimmt Zahlungsziel und Skontovereinbarung aus dem Rechnungsprogramm', () => {
+    const customer = mapInvoiceCustomer('x', {
+      name: 'Muster', paymentTerms: 30, cashDiscount: { percentage: 2.5, days: 10 }
+    })
+    expect(customer.paymentTerms).toBe(30)
+    expect(customer.cashDiscount).toEqual({ percentage: 2.5, days: 10 })
+  })
+
+  it('übernimmt auch sofortige Fälligkeit und den Wechsel zurück auf netto', () => {
+    const customer = mapInvoiceCustomer('x', {
+      name: 'Muster', paymentTerms: 0, cashDiscount: null
+    })
+    expect(customer.paymentTerms).toBe(0)
+    expect(customer.cashDiscount).toBeUndefined()
+  })
+
+  it.each([
+    { paymentTerms: -1, cashDiscount: { percentage: 101, days: 10 } },
+    { paymentTerms: '30', cashDiscount: { percentage: '2', days: 10 } },
+    { paymentTerms: 2.5, cashDiscount: { percentage: 2, days: 0 } },
+    { paymentTerms: Infinity, cashDiscount: { percentage: 2, days: 1.5 } },
+  ])('übernimmt keine ungültigen Zahlungskonditionen: %j', (data) => {
+    const customer = mapInvoiceCustomer('x', { name: 'Muster', ...data })
+    expect(customer.paymentTerms).toBeUndefined()
+    expect(customer.cashDiscount).toBeUndefined()
+  })
+
   it('kommt mit lückenhaften Datensätzen zurecht', () => {
     expect(mapInvoiceCustomer('x', { name: 'Muster', isActive: false })).toEqual({
       id: 'x',

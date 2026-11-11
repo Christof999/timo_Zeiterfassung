@@ -1,5 +1,8 @@
 import type { Employee } from '../types'
 
+export const getEmployeeInitials = (name: string): string =>
+  name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]!.toUpperCase()).join('') || '?'
+
 /** Anzeigename auch wenn nur `name` oder `username` gesetzt ist (häufig ohne firstName/lastName). */
 export function getEmployeeDisplayName(employee: Employee | null | undefined): string {
   if (!employee) return ''

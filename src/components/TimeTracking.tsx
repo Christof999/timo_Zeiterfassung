@@ -13,6 +13,7 @@ import SchoolDayModal from './SchoolDayModal'
 import RecentActivities from './RecentActivities'
 import { canAddManualTimeEntries } from '../constants/manualTimeEntry'
 import NavigationMenu from './NavigationMenu'
+import EmployeeAvatar from './EmployeeAvatar'
 import OvertimeReminderModal from './OvertimeReminderModal'
 import OvertimeDayFillModal from './OvertimeDayFillModal'
 import EmployeeRegieModal from './EmployeeRegieModal'
@@ -33,6 +34,7 @@ import {
   writeDismissedMonth
 } from '../utils/overtimeReminder'
 import { APP_DISPLAY_NAME } from '../constants/appBranding'
+import { ActionRow } from './ProjectSiteCard'
 import '../styles/TimeTracking.css'
 
 /** Frühestmöglicher Einstempel-Zeitpunkt (06:30 Uhr) in Minuten ab Mitternacht. */
@@ -454,117 +456,20 @@ const TimeTracking: React.FC = () => {
   return (
     <div className="time-tracking-container">
       <header className="time-tracking-header">
-        <div className="time-tracking-logo">
-          <img 
-            src="/brand-logo.png" 
-            alt="Logo" 
-            className="time-tracking-logo-image"
-          />
-          <h1>{APP_DISPLAY_NAME}</h1>
-          <p>Mitarbeiter-Zeiterfassung</p>
+        <div className="time-tracking-bar">
+          <img src="/brand-logo.png" alt="Logo" className="time-tracking-logo-image" />
+          <div className="time-tracking-title"><h1>{APP_DISPLAY_NAME}</h1><p>{getEmployeeDisplayName(currentUser)}</p></div>
+          <EmployeeAvatar name={getEmployeeDisplayName(currentUser)} photo={currentUser.profileImage} />
+          <ThemeToggle variant="icon" />
+          <NavigationMenu onLogout={handleLogout} />
         </div>
       </header>
-
       <main className="time-tracking-main">
-        <div className="user-info-section">
-          <div className="user-info-row">
-            <NavigationMenu onLogout={handleLogout} />
-            <p className="user-info-greeting">
-              Angemeldet als: <strong>{getEmployeeDisplayName(currentUser)}</strong>
-            </p>
-            <ThemeToggle variant="icon" className="user-info-theme-toggle" />
-          </div>
-          {typeof currentUser?.overtimeBalanceMinutes === 'number' && (
-            <p className="user-info-overtime">
-              Überstundenkonto:{' '}
-              <strong>
-                {`${Math.floor(Math.max(0, currentUser.overtimeBalanceMinutes) / 60)}:${String(
-                  Math.max(0, currentUser.overtimeBalanceMinutes) % 60
-                ).padStart(2, '0')} h`}
-              </strong>
-            </p>
-          )}
-        </div>
-
-        {(canManualTimeEntry || canRetroactiveDocumentation) && (
-          <div className="manual-time-entry-banner">
-            <p className="manual-time-entry-banner-text">
-              {canManualTimeEntry
-                ? 'Sie können vergessene Stempelzeiten nachtragen sowie Dokumentation zu abgeschlossenen Tagen ergänzen.'
-                : 'Sie können Dokumentation (Fotos/Notizen) zu bereits abgeschlossenen Arbeitstagen ergänzen.'}
-            </p>
-            <div className="manual-time-entry-actions">
-              {canManualTimeEntry && (
-                <button
-                  type="button"
-                  className="manual-time-entry-open-btn"
-                  onClick={() => setShowManualEntryModal(true)}
-                >
-                  Stempelzeit nachtragen
-                </button>
-              )}
-              {canRetroactiveDocumentation && (
-                <button
-                  type="button"
-                  className="manual-time-entry-secondary-btn"
-                  onClick={() => setShowRetroDocListModal(true)}
-                >
-                  Bericht nachtragen
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="time-status-section">
-          <h2>Status: <span className={currentTimeEntry ? 'status-clocked-in' : 'status-clocked-out'}>
-            {currentTimeEntry ? 'Eingestempelt' : 'Nicht eingestempelt'}
-          </span></h2>
-          <div className="clock">
-            <span>{elapsedTime}</span>
-          </div>
-        </div>
-
-        {!currentTimeEntry && dayFillPlan && (
-          <div className="day-fill-banner">
-            <p className="day-fill-banner-text">
-              Heute sind <strong>{minutesToHoursLabel(dayFillPlan.workedMinutes)} Std</strong> von{' '}
-              <strong>{minutesToHoursLabel(dayFillPlan.regularMinutes)} Std</strong> erfasst. Sie
-              können {minutesToHoursLabel(dayFillPlan.fillMinutes)} Std aus Ihrem
-              Überstundenkonto auffüllen.
-            </p>
-            <button
-              type="button"
-              className="day-fill-btn"
-              onClick={() => setShowDayFillModal(true)}
-            >
-              Tag mit Überstunden auffüllen
-            </button>
-          </div>
-        )}
-
-        {/* Abwesenheiten: Krankmeldung für alle, Berufsschule und Handwerkskammer nur für Azubis */}
-        <div className="absence-actions">
-          <button
-            type="button"
-            className="btn secondary-btn absence-actions-btn"
-            onClick={() => setShowSickLeaveModal(true)}
-          >
-            Krank
-          </button>
-          {currentUser.isApprentice === true &&
-            (Object.keys(SCHOOL_DAY_LABELS) as SchoolDayKind[]).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                className="btn secondary-btn absence-actions-btn"
-                onClick={() => setSchoolDayKind(kind)}
-              >
-                {SCHOOL_DAY_LABELS[kind]}
-              </button>
-            ))}
-        </div>
-
+        <section className="time-status-section" aria-label="Status">
+          <h2 className={currentTimeEntry ? 'status-clocked-in' : 'status-clocked-out'}>{currentTimeEntry ? 'Eingestempelt' : 'Nicht eingestempelt'}</h2>
+          <div className="clock">{elapsedTime}</div>
+          {typeof currentUser.overtimeBalanceMinutes === 'number' && <p className="time-status-overtime">Überstundenkonto <strong>{`${Math.floor(Math.max(0, currentUser.overtimeBalanceMinutes) / 60)}:${String(Math.max(0, currentUser.overtimeBalanceMinutes) % 60).padStart(2, '0')} h`}</strong></p>}
+        </section>
         {!currentTimeEntry ? (
           <ClockInForm onClockIn={handleClockIn} />
         ) : (
@@ -606,6 +511,15 @@ const TimeTracking: React.FC = () => {
             }}
           />
         )}
+
+        <section className="site-card" aria-label="Weitere Aktionen">
+          <h3 className="card-title">Weitere Aktionen</h3>
+          {!currentTimeEntry && dayFillPlan && <ActionRow icon="fill" title="Tag mit Überstunden auffüllen" hint={`${minutesToHoursLabel(dayFillPlan.workedMinutes)} von ${minutesToHoursLabel(dayFillPlan.regularMinutes)} Std erfasst – ${minutesToHoursLabel(dayFillPlan.fillMinutes)} Std aus dem Konto`} onClick={() => setShowDayFillModal(true)} />}
+          {canManualTimeEntry && <ActionRow icon="clock" title="Stempelzeit nachtragen" hint="Vergessene Zeiten ergänzen" onClick={() => setShowManualEntryModal(true)} />}
+          {canRetroactiveDocumentation && <ActionRow icon="report" title="Bericht nachtragen" hint="Fotos und Notizen zu abgeschlossenen Tagen" onClick={() => setShowRetroDocListModal(true)} />}
+          <ActionRow icon="sick" title="Krank melden" onClick={() => setShowSickLeaveModal(true)} />
+          {currentUser.isApprentice === true && (Object.keys(SCHOOL_DAY_LABELS) as SchoolDayKind[]).map(kind => <ActionRow key={kind} icon="school" title={SCHOOL_DAY_LABELS[kind]} onClick={() => setSchoolDayKind(kind)} />)}
+        </section>
 
         <RecentActivities employeeId={currentUser.id!} refreshKey={activitiesRefreshKey} />
 

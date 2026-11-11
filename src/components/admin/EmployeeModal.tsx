@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DataService } from '../../services/dataService'
 import type { AdminRole, Employee, TimeEntry, Project } from '../../types'
 import { ADMIN_ROLE_LABELS, resolveAdminRole } from '../../utils/adminRole'
@@ -7,6 +7,8 @@ import { DEFAULT_MEAL_ALLOWANCE_EUR } from './tabs/reports/reportUtils'
 import EmployeeTimeEntriesSection from './EmployeeTimeEntriesSection'
 import EmployeeAbsenceHistory from './EmployeeAbsenceHistory'
 import TimeEntryReportModal from './TimeEntryReportModal'
+import EmployeeAvatar from '../EmployeeAvatar'
+import { prepareEmployeePhoto } from '../../utils/employeePhoto'
 import '../../styles/Modal.css'
 
 interface EmployeeModalProps {
@@ -16,6 +18,16 @@ interface EmployeeModalProps {
 }
 
 const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave }) => {
+  const [profileImage, setProfileImage] = useState(employee?.profileImage || '')
+  const [readingPhoto, setReadingPhoto] = useState(false)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const choosePhoto = async (file?: File) => {
+    if (!file) return
+    setReadingPhoto(true)
+    try { setProfileImage(await prepareEmployeePhoto(file)) }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'Das Bild konnte nicht geladen werden.') }
+    finally { setReadingPhoto(false) }
+  }
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -56,6 +68,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
   }
 
   useEffect(() => {
+    setProfileImage(employee?.profileImage || '')
     if (employee) {
       // Wenn firstName/lastName vorhanden sind, verwende diese
       // Ansonsten versuche name zu splitten
@@ -128,10 +141,12 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (readingPhoto || isLoading) return
     setIsLoading(true)
 
     try {
       const employeeData: Partial<Employee> = {
+        profileImage,
         firstName: formData.firstName,
         lastName: formData.lastName,
         name: `${formData.firstName} ${formData.lastName}`.trim(),
@@ -146,7 +161,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
         // Ohne Azubi-Kennzeichen darf kein Fixlohn stehen bleiben – sonst
         // rechnet der Bericht später mit einem Wert, den niemand mehr sieht.
         fixedMonthlySalary: formData.isApprentice ? formData.fixedMonthlySalary : 0,
-        heroEmployeeId: formData.heroEmployeeId.trim() || undefined,
+        heroEmployeeId: formData.heroEmployeeId.trim(),
         isAdmin: formData.isAdmin,
         adminRole: formData.adminRole
       }
@@ -189,12 +204,24 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{employee ? 'Mitarbeiter bearbeiten' : 'Neuer Mitarbeiter'}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit} className="modal-form">
+          <div className="employee-photo-editor">
+            <EmployeeAvatar name={`${formData.firstName} ${formData.lastName}`} photo={profileImage} />
+            <div>
+              <strong>Profilbild</strong>
+              <div className="employee-photo-actions">
+                <button type="button" className="btn secondary-btn btn-sm" disabled={readingPhoto || isLoading} onClick={() => photoInput.current?.click()}>{readingPhoto ? 'Bild wird vorbereitet …' : profileImage ? 'Bild ändern' : 'Bild auswählen'}</button>
+                {profileImage && <button type="button" className="btn secondary-btn btn-sm" disabled={readingPhoto || isLoading} onClick={() => setProfileImage('')}>Entfernen</button>}
+              </div>
+              <small>JPG, PNG oder WebP · bis 10 MB. Wird mit dem Mitarbeiter gespeichert.</small>
+              <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Profilbild auswählen" disabled={readingPhoto || isLoading} onChange={event => { void choosePhoto(event.target.files?.[0]); event.target.value = '' }} />
+            </div>
+          </div>
           <div className="form-group">
             <label>Vorname:</label>
             <input
@@ -399,7 +426,7 @@ const EmployeeModal: React.FC<EmployeeModalProps> = ({ employee, onClose, onSave
             <button type="button" onClick={onClose} className="btn secondary-btn">
               Abbrechen
             </button>
-            <button type="submit" className="btn primary-btn" disabled={isLoading}>
+            <button type="submit" className="btn primary-btn" disabled={isLoading || readingPhoto}>
               {isLoading ? 'Speichere...' : 'Speichern'}
             </button>
           </div>

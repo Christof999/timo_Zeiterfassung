@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { DataService } from '../../services/dataService'
 import type {
   Project,
@@ -17,6 +17,8 @@ import { offerHoursUsage, quotedLaborHours, sumBookedHours } from '../../utils/o
 import OfferHoursBar from './OfferHoursBar'
 import { roundedSpanMs } from '../../utils/timeRounding'
 import { collectEntryDocumentation } from '../../utils/entryDocumentation'
+import ProjectSiteCard from '../ProjectSiteCard'
+import ProjectRegiePanel from './ProjectRegiePanel'
 import '../../styles/Modal.css'
 
 interface ProjectDetailModalProps {
@@ -57,8 +59,6 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
   const [moveTargetProjectId, setMoveTargetProjectId] = useState('')
   const [moveUiOpen, setMoveUiOpen] = useState(false)
   const [isMovingEntry, setIsMovingEntry] = useState(false)
-  const [detailInfoHeight, setDetailInfoHeight] = useState<number | null>(null)
-  const [isDetailInfoResizing, setIsDetailInfoResizing] = useState(false)
   const [offerPositions, setOfferPositions] = useState<OfferPosition[]>(project.offerPositions || [])
   const [offerMeta, setOfferMeta] = useState<Project['offerMeta'] | null>(project.offerMeta || null)
   // Editor für die Materialliste (Soll-Positionen): null = geschlossen, -1 = neue Position, sonst Index.
@@ -71,74 +71,15 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
     unitPriceEur: string
   }>({ name: '', kind: 'material', unit: '', quantity: '', unitPriceEur: '' })
   const [isSavingPositions, setIsSavingPositions] = useState(false)
-  const modalContentRef = useRef<HTMLDivElement | null>(null)
-  const detailInfoRef = useRef<HTMLDivElement | null>(null)
-
-  const setDetailHeightFromPointer = (clientY: number) => {
-    const detailsRect = detailInfoRef.current?.getBoundingClientRect()
-    const modalRect = modalContentRef.current?.getBoundingClientRect()
-    if (!detailsRect || !modalRect || modalRect.height <= 0) return
-
-    const minHeight = 120
-    const maxHeight = Math.max(minHeight, Math.floor(modalRect.height * 0.62))
-    const nextHeight = Math.round(clientY - detailsRect.top)
-    const clampedHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
-    setDetailInfoHeight(clampedHeight)
-  }
-
-  const startDetailResize = (clientY: number) => {
-    setDetailHeightFromPointer(clientY)
-    setIsDetailInfoResizing(true)
-  }
-
   useEffect(() => {
     loadProjectData()
   }, [project])
 
-  useEffect(() => {
-    setDetailInfoHeight(null)
-    setIsDetailInfoResizing(false)
-  }, [project.id])
 
   useEffect(() => {
     setMoveUiOpen(false)
     setMoveTargetProjectId('')
   }, [timeEntryDetail?.id])
-
-  useEffect(() => {
-    if (!isDetailInfoResizing) return
-
-    const handleMouseMove = (event: MouseEvent) => {
-      event.preventDefault()
-      setDetailHeightFromPointer(event.clientY)
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (!event.touches.length) return
-      event.preventDefault()
-      setDetailHeightFromPointer(event.touches[0].clientY)
-    }
-
-    const stopResizing = () => {
-      setIsDetailInfoResizing(false)
-    }
-
-    document.body.style.cursor = 'row-resize'
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', stopResizing)
-    window.addEventListener('touchmove', handleTouchMove, { passive: false })
-    window.addEventListener('touchend', stopResizing)
-    window.addEventListener('touchcancel', stopResizing)
-
-    return () => {
-      document.body.style.cursor = ''
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', stopResizing)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', stopResizing)
-      window.removeEventListener('touchcancel', stopResizing)
-    }
-  }, [isDetailInfoResizing])
 
   const loadProjectData = async () => {
     setIsLoading(true)
@@ -805,12 +746,16 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div ref={modalContentRef} className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content project-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{project.name}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
+        <div className="project-detail-body">
+          <div className="project-detail-info">
+            <ProjectSiteCard project={project} />
+            <ProjectRegiePanel project={project} />
         {offerUsage != null && !isLoading && (
           <div className={`offer-hours-card offer-hours-project${offerTone ? ` ${offerTone}` : ''}`}>
             <div className="offer-hours-card-head">
@@ -828,16 +773,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           </div>
         )}
         
-        <div
-          ref={detailInfoRef}
-          className="project-detail-info"
-          style={detailInfoHeight !== null ? { height: `${detailInfoHeight}px`, maxHeight: 'none' } : undefined}
-        >
-          <p><strong>Kunde:</strong> {project.client || '-'}</p>
-          <p><strong>Status:</strong> {project.status || 'Aktiv'}</p>
-          {(project.address || project.location) && (
-            <p><strong>Adresse:</strong> {project.address || project.location}</p>
-          )}
+            <p><strong>Status:</strong> {project.status || 'Aktiv'}</p>
           {project.description && (
             <div className="project-description">
               <strong>Beschreibung:</strong>
@@ -1002,30 +938,13 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
           </div>
         </div>
 
-        <div
-          className={`project-detail-resizer ${isDetailInfoResizing ? 'is-resizing' : ''}`}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Höhe des oberen Bereichs anpassen"
-          title="Ziehen, um den unteren Medienbereich zu vergrößern"
-          onDoubleClick={() => setDetailInfoHeight(null)}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            startDetailResize(event.clientY)
-          }}
-          onTouchStart={(event) => {
-            if (!event.touches.length) return
-            event.preventDefault()
-            startDetailResize(event.touches[0].clientY)
-          }}
-        />
-
+        <div className="project-detail-media">
         <div className="project-tabs">
           <button 
             className={`project-tab-btn ${activeTab === 'construction-site' ? 'active' : ''}`}
             onClick={() => setActiveTab('construction-site')}
           >
-            Baustellenfotos
+            Fotos
           </button>
           <button 
             className={`project-tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
@@ -1399,6 +1318,8 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
               )}
             </div>
           ) : null}
+        </div>
+        </div>
         </div>
       </div>
 

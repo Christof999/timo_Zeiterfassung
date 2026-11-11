@@ -57,35 +57,70 @@
   border-bottom: none;
 }
 
+/* Projektansicht: feste Höhe, damit sie auch ohne Fotos fast die ganze Seite füllt. Oben bleibt ein Streifen frei – erkennbar als Blatt. */
 .modal-content.project-detail-modal {
-  max-width: 95vw;
-  max-height: 95vh;
-  max-height: 95dvh;
+  height: 94vh;
+  height: 94dvh;
+  max-height: 100%;
+  max-width: 1200px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .modal-content.project-detail-modal {
+    width: 95vw;
+    height: 90vh;
+    height: 90dvh;
+  }
 }
 
 .modal-content.project-detail-modal .modal-header {
   flex-shrink: 0;
 }
 
-.modal-content.project-detail-modal .project-detail-info {
-  flex-shrink: 0;
-  overflow-y: auto;
-  max-height: 32vh;
-  min-height: 120px;
-}
-
-.modal-content.project-detail-modal .project-tabs {
-  flex-shrink: 0;
-}
-
-.modal-content.project-detail-modal .project-tab-content {
+/* Handy: ein Scrollbereich, die Reiter kleben beim Scrollen oben. */
+.project-detail-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.project-detail-body .project-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+/* Desktop: links Projekt, rechts Baustelle; jede Spalte scrollt für sich. */
+@media (min-width: 1024px) {
+  .project-detail-body {
+    display: grid;
+    grid-template-columns: minmax(360px, 2fr) 3fr;
+    overflow: hidden;
+  }
+
+  .project-detail-body .project-detail-info {
+    min-height: 0;
+    overflow-y: auto;
+    border-bottom: 0;
+    border-right: 1px solid var(--border-color);
+  }
+
+  .project-detail-media {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .project-detail-media .project-tab-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
 }
 
 @keyframes modalSlideUp {
@@ -363,15 +398,6 @@
   margin-top: var(--spacing-sm);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-}
-
-.modal-form .clock-in-mode-toggle {
-  display: flex;
-  gap: var(--spacing-sm);
-}
-
-.modal-form .clock-in-mode-toggle .btn {
-  flex: 1;
 }
 
 .modal-form .no-data {
@@ -1344,66 +1370,18 @@
   color: var(--danger-color, #b91c1c);
 }
 
-/* ===== Abwesenheitshistorie am Mitarbeiter (Admin) ===== */
-.absence-history-empty {
-  color: var(--text-secondary, #64748b);
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-.absence-history-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm, 0.5rem);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.absence-history-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  padding: 0.6rem 0.85rem;
-  border: 1px solid var(--border-color, #e2e8f0);
-  border-radius: 10px;
-}
-
-.absence-history-item-range {
-  font-weight: 600;
-}
-
-.absence-history-item-meta {
-  color: var(--text-secondary, #64748b);
-  font-size: 0.85rem;
-}
-
-.absence-history-note-link {
-  margin-left: auto;
-  font-size: 0.85rem;
-}
-
-.absence-history-missing-note {
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: var(--danger-color, #b91c1c);
-}
-
-.absence-history-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.8);
-}
-
-.absence-history-lightbox img {
-  max-width: 100%;
-  max-height: 90vh;
-  border-radius: 12px;
-  object-fit: contain;
-}
+/* Mitarbeiter-Dialoge folgen den Karten auf der Zeiterfassungs-Startseite. */
+.modal-content.employee-dialog { border-color: var(--border-color); border-radius: var(--radius-xl) var(--radius-xl) 0 0; box-shadow: var(--shadow-lg); }
+.employee-dialog .modal-header { padding: 18px 20px; gap: 12px; border-bottom: 1px solid var(--border-color); }
+.employee-dialog .modal-header::before { display: none; }
+.employee-dialog .modal-header :is(h2, h3) { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.employee-dialog :is(.modal-form, .modal-body) { padding: 20px; }
+.employee-dialog :is(.modal-close, .close-modal-btn) { flex-shrink: 0; width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0; border: 0; background: var(--light-color); color: var(--text-color); }
+.employee-dialog .form-group { margin-bottom: 16px; }
+.employee-dialog .form-group > label { font-size: var(--font-size-sm); }
+.employee-dialog :is(input, select, textarea) { border-radius: var(--radius-md); }
+.employee-dialog .modal-actions { padding-top: 16px; margin-top: 16px; gap: 12px; border-top: 1px solid var(--border-color); }
+.employee-dialog .btn { border-radius: var(--radius-md); box-shadow: none; }
+.employee-dialog .secondary-btn { border: 1px solid var(--border-color); background: var(--card-background); color: var(--text-color); }
+.employee-dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+@media (min-width: 768px) { .modal-content.employee-dialog { border-radius: var(--radius-xl); } }

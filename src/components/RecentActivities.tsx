@@ -49,7 +49,7 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
       : date instanceof Date
       ? date
       : new Date(date)
-    return d.toLocaleDateString('de-DE')
+    return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
   }
 
   const formatTime = (date: Date | Timestamp | any) => {
@@ -89,8 +89,8 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
   }
 
   return (
-    <div className="recent-activities">
-      <h3>Letzte Aktivitäten</h3>
+    <section className="recent-activities" aria-label="Letzte Aktivitäten">
+      <h3 className="card-title">Letzte Aktivitäten</h3>
       {activities.length === 0 ? (
         <p>Keine Aktivitäten vorhanden</p>
       ) : (
@@ -102,32 +102,28 @@ const RecentActivities: React.FC<RecentActivitiesProps> = ({ employeeId, refresh
                 ? `Kleinauftrag: ${entry.customerName || 'Kunde'}`
                 : getProjectName(entry.projectId)
             const workHours = calculateWorkHours(entry)
+            const pause = entry.pauseTotalTime && entry.pauseTotalTime > 0
+              ? ` · Pause ${(entry.pauseTotalTime / (1000 * 60 * 60)).toFixed(2).replace('.', ',')} h`
+              : ''
 
             return (
               <li key={entry.id} className="recent-activity-item">
-                <p className="recent-activity-title">{projectName}</p>
-                <p>Datum: {formatDate(entry.clockInTime)}</p>
-                <p>Eingestempelt: {formatTime(entry.clockInTime)}</p>
-                {entry.clockOutTime && (
-                  <>
-                    <p>Ausgestempelt: {formatTime(entry.clockOutTime)}</p>
-                    {entry.pauseTotalTime && entry.pauseTotalTime > 0 && (
-                      <p>Pausenzeit: {(entry.pauseTotalTime / (1000 * 60 * 60)).toFixed(2).replace('.', ',')}h</p>
-                    )}
-                    {workHours && (
-                      <p>Arbeitsstunden: {workHours}h</p>
-                    )}
-                  </>
-                )}
-                {!entry.clockOutTime && (
-                  <p className="recent-activity-status">Noch eingestempelt</p>
-                )}
+                <div>
+                  <p className="recent-activity-title">{projectName}</p>
+                  <p className="recent-activity-meta">
+                    {formatDate(entry.clockInTime)} · {formatTime(entry.clockInTime)}
+                    {entry.clockOutTime ? `–${formatTime(entry.clockOutTime)}${pause}` : ''}
+                  </p>
+                </div>
+                {entry.clockOutTime
+                  ? workHours && <span className="recent-activity-hours">{workHours} h</span>
+                  : <span className="recent-activity-status">läuft</span>}
               </li>
             )
           })}
         </ul>
       )}
-    </div>
+    </section>
   )
 }
 

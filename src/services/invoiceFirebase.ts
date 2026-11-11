@@ -5,8 +5,8 @@ import { getAuth, signInAnonymously, type Auth } from 'firebase/auth'
 /**
  * Zweite Firebase-Verbindung: die Datenbank des Rechnungsprogramms.
  *
- * Dort liegt der Kundenstamm, der für beide Programme gilt. Die Zeiterfassung
- * liest ihn nur – angelegt und gepflegt werden Kunden im Rechnungsprogramm.
+ * Dort liegt der gemeinsame Kundenstamm. Beim Aufmaß kann die Zeiterfassung
+ * neue Kunden und Angebotsentwürfe direkt dort anlegen.
  * Das Gegenstück dort heißt `timeTrackingFirebase.ts` und greift umgekehrt auf
  * die Zeiterfassung zu.
  */

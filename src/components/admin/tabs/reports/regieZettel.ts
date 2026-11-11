@@ -12,6 +12,7 @@ import {
   parseDateInputAsLocalDate
 } from './reportUtils'
 import { roundTimeToStep } from '../../../../utils/timeRounding'
+import { customerEntryNote } from '../../../../utils/projectRegie'
 
 /**
  * Regiezettel: kundenfähiges Tagesblatt aus den Stempelungen.
@@ -170,7 +171,8 @@ export const buildRegieDaySheets = (input: RegieZettelInput): RegieDaySheet[] =>
       hourlyRate: rate > 0 ? rate : null,
       lineTotal: rate > 0 ? round2(hours * rate) : 0
     })
-    pushNote(day.notes, entry.notes ? `${name}: ${entry.notes}` : '')
+    const note = customerEntryNote({ ...entry })
+    pushNote(day.notes, note ? `${name}: ${note}` : '')
     for (const block of entry.liveDocumentation || []) {
       const author = (block.addedByName || '').trim() || name
       pushNote(day.notes, block.notes ? `${author}: ${block.notes}` : '')

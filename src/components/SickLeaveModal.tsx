@@ -157,7 +157,7 @@ const SickLeaveModal: React.FC<SickLeaveModalProps> = ({ employee, onClose, onSu
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Krankmeldung</h2>
           <button type="button" className="close-modal-btn" onClick={onClose}>

@@ -5,6 +5,8 @@ import { toast } from '../../ToastContainer'
 import EmployeeModal from '../EmployeeModal'
 import ListSearch from '../ListSearch'
 import '../../../styles/AdminTabs.css'
+import EmployeeAvatar from '../../EmployeeAvatar'
+import { getEmployeeDisplayName } from '../../../utils/employeeDisplayName'
 
 const EmployeesTab: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -109,7 +111,7 @@ const EmployeesTab: React.FC = () => {
             <tbody>
               {filteredEmployees.map((employee) => (
                 <tr key={employee.id}>
-                  <td data-label="Name">{employee.name || `${employee.firstName} ${employee.lastName}`}</td>
+                  <td data-label="Name"><span className="employee-identity"><EmployeeAvatar name={getEmployeeDisplayName(employee)} photo={employee.profileImage} />{getEmployeeDisplayName(employee)}</span></td>
                   <td data-label="Benutzername">{employee.username}</td>
                   <td data-label="Position">{employee.position || '-'}</td>
                   <td data-label="Status">

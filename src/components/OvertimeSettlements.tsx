@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DataService } from '../services/dataService'
 import type { Employee, OvertimeSettlement } from '../types'
 import { toast } from './ToastContainer'
-import ThemeToggle from './ThemeToggle'
+import EmployeePageHeader from './EmployeePageHeader'
 import {
   floorToQuarterHour,
   minutesFromHourMinuteFields,
@@ -268,16 +268,11 @@ const OvertimeSettlements: React.FC = () => {
   )
 
   return (
-    <div className="overtime-container">
-      <header className="overtime-header">
-        <button onClick={() => navigate('/time-tracking')} className="back-btn">
-          Zurück
-        </button>
-        <h1>Stunden abrechnen</h1>
-        <ThemeToggle variant="icon" className="overtime-header-theme-toggle" />
-      </header>
+    <div className="employee-page overtime-container">
+      <EmployeePageHeader title="Stunden abrechnen" employee={currentUser} />
+      <main className="employee-page-main">
 
-      <div className="overtime-account card">
+      <section className="overtime-account employee-card">
         <h3>{monthKeyLabel(selectedMonth)}</h3>
         <div className="overtime-stats">
           <div className="stat">
@@ -295,14 +290,14 @@ const OvertimeSettlements: React.FC = () => {
             <span className="stat-label">Überstundenkonto</span>
           </div>
         </div>
-        <p className="overtime-account-note">
+        <details className="employee-help"><summary>So funktioniert die Abrechnung</summary><p>
           Grundlage sind Ihre gestempelten Stunden des Monats. Was Sie davon nicht abrechnen
           lassen, wird dem Überstundenkonto gutgeschrieben. Sie können auch mehr abrechnen als
           geleistet – dann werden Überstunden vom Konto ausgezahlt.
-        </p>
-      </div>
+        </p></details>
+      </section>
 
-      <div className="overtime-form card">
+      <section className="overtime-form employee-card">
         <h3>Wie viele Stunden sollen für {monthKeyLabel(selectedMonth)} abgerechnet werden?</h3>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -382,10 +377,10 @@ const OvertimeSettlements: React.FC = () => {
             {isSaving ? 'Speichere…' : 'Übernehmen'}
           </button>
         </form>
-      </div>
+      </section>
 
-      <div className="overtime-push card">
-        <h3>Erinnerung aufs Handy</h3>
+      <details className="overtime-push employee-card">
+        <summary className="employee-disclosure">Erinnerung aufs Handy</summary>
         {pushState.supported ? (
           <>
             <p className="overtime-push-status">
@@ -393,7 +388,7 @@ const OvertimeSettlements: React.FC = () => {
             </p>
             <button
               type="button"
-              className={`btn ${pushState.active ? 'secondary-btn' : 'primary-btn'}`}
+              className="btn secondary-btn"
               onClick={handleTogglePush}
               disabled={isTogglingPush}
             >
@@ -411,9 +406,9 @@ const OvertimeSettlements: React.FC = () => {
         ) : (
           <p className="overtime-push-status">{pushState.reason}</p>
         )}
-      </div>
+      </details>
 
-      <div className="overtime-history card">
+      <section className="overtime-history employee-card">
         <h3>Abgerechnete Monate</h3>
         {history.length === 0 ? (
           <p className="overtime-empty">Bisher wurden keine Stunden abgerechnet.</p>
@@ -443,7 +438,8 @@ const OvertimeSettlements: React.FC = () => {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
+      </main>
     </div>
   )
 }

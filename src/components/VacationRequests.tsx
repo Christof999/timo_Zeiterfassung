@@ -4,7 +4,7 @@ import { DataService } from '../services/dataService'
 import type { Employee, LeaveRequest } from '../types'
 import { SCHOOL_DAY_LABELS } from '../types'
 import { toast } from './ToastContainer'
-import ThemeToggle from './ThemeToggle'
+import EmployeePageHeader from './EmployeePageHeader'
 import { getTodayLocalDateString } from '../utils/dateUtils'
 import '../styles/VacationRequests.css'
 import { REGULAR_MINUTES_MON_THU, leaveMinutesForRange } from '../utils/regularWorkTime'
@@ -261,18 +261,13 @@ const VacationRequests: React.FC = () => {
   }
 
   return (
-    <div className="vacation-container">
-      <header className="vacation-header">
-        <button onClick={() => navigate('/time-tracking')} className="back-btn">
-          Zurück
-        </button>
-        <h1>Urlaubsanträge</h1>
-        <ThemeToggle variant="icon" className="vacation-header-theme-toggle" />
-      </header>
+    <div className="employee-page vacation-container">
+      <EmployeePageHeader title="Urlaubsanträge" employee={currentUser} />
+      <main className="employee-page-main">
 
       {/* Urlaubskonto */}
-      <div className="vacation-account card">
-        <h3>Ihr Urlaubskonto {currentYear}</h3>
+      <section className="vacation-account employee-card" aria-label="Urlaubskonto">
+        <h3>Dein Urlaubskonto {currentYear}</h3>
         <div className="vacation-stats">
           <div className="stat">
             <span className="stat-value">{remaining}</span>
@@ -297,7 +292,7 @@ const VacationRequests: React.FC = () => {
           Überstundenkonto: <strong>{overtimeHoursLabel} h</strong>
           {canUseOvertime ? ` · bis zu ${overtimeDaysAvailable} Tag(e) als „Urlaub auf Überstunden“ möglich` : ''}
         </p>
-      </div>
+      </section>
 
       {/* Neuen Antrag Button */}
       {!showForm && (
@@ -326,8 +321,9 @@ const VacationRequests: React.FC = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Bis:</label>
+                <label htmlFor="vacation-end">Bis:</label>
                 <input
+                  id="vacation-end"
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
@@ -371,8 +367,9 @@ const VacationRequests: React.FC = () => {
             )}
 
             <div className="form-group">
-              <label>Art des Urlaubs:</label>
+              <label htmlFor="vacation-type">Art des Urlaubs:</label>
               <select
+                id="vacation-type"
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as LeaveRequest['type'] })}
               >
@@ -386,8 +383,9 @@ const VacationRequests: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label>Grund / Bemerkung (optional):</label>
+              <label htmlFor="vacation-reason">Grund / Bemerkung (optional):</label>
               <textarea
+                id="vacation-reason"
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 placeholder="z.B. Familienfeier, Umzug..."
@@ -408,14 +406,14 @@ const VacationRequests: React.FC = () => {
       )}
 
       {/* Liste der Anträge */}
-      <div className="requests-list">
+      <section className="requests-list site-card">
         <h3>Meine Anträge</h3>
         
         {leaveRequests.length === 0 ? (
           <p className="no-data">Noch keine Urlaubsanträge vorhanden</p>
         ) : (
           leaveRequests.map((request) => (
-            <div key={request.id} className={`request-card card status-${request.status}`}>
+            <article key={request.id} className={`request-card status-${request.status}`}>
               <div className="request-header">
                 <span className="request-type">{getTypeLabel(request.type, request.schoolKind)}</span>
                 {getStatusBadge(request.status)}
@@ -452,10 +450,11 @@ const VacationRequests: React.FC = () => {
                   </button>
                 )}
               </div>
-            </div>
+            </article>
           ))
         )}
-      </div>
+      </section>
+      </main>
     </div>
   )
 }

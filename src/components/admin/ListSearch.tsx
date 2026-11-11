@@ -1,5 +1,6 @@
 import React from 'react'
 import '../../styles/AdminTabs.css'
+import Icon from '../Icon'
 
 interface ListSearchProps {
   value: string
@@ -10,7 +11,7 @@ interface ListSearchProps {
 const ListSearch: React.FC<ListSearchProps> = ({ value, onChange, placeholder }) => {
   return (
     <div className="list-search">
-      <span className="list-search-icon" aria-hidden="true">🔍</span>
+      <span className="list-search-icon"><Icon name="search" /></span>
       <input
         type="search"
         className="list-search-input"

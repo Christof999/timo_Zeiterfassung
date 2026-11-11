@@ -144,6 +144,7 @@ module.exports = async (req, res) => {
     grossWage,
     note,
     senderName,
+    reportKind,
     reportHtml,
     attachmentFilename,
     reports,
@@ -220,7 +221,10 @@ module.exports = async (req, res) => {
         // Das Postfach meldet sich mit seiner eigenen Adresse an; ohne
         // Anzeigename stünde beim Empfänger nur die nackte Mailadresse.
         fromName: senderName || 'Fliesen Reislöhner',
-        template: 'zeitbericht',
+        ...(reportKind === 'project-regie' ? {
+          subject: `Regiebericht gesamt – ${String(employeeName || 'Projekt')}`,
+          text: `Guten Tag,\n\nanbei erhalten Sie den Gesamt-Regiebericht für Ihr Projekt ${String(employeeName || '')}.\n\nMit freundlichen Grüßen\n${senderName || 'Fliesen Reislöhner GmbH'}`
+        } : { template: 'zeitbericht' }),
         variables: {
           employeeName: employeeName || 'Mitarbeiter',
           periodLabel: periodLabel || '',

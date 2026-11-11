@@ -81,7 +81,7 @@ const SchoolDayModal: React.FC<SchoolDayModalProps> = ({ employee, kind, onClose
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{SCHOOL_DAY_LABELS[kind]}</h2>
           <button type="button" className="close-modal-btn" onClick={onClose}>

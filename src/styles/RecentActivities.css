@@ -1,132 +1,83 @@
+/* Letzte Aktivitäten: eine kompakte Zeile pro Eintrag, Stunden rechts */
 .recent-activities {
   background: var(--card-background);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-  animation: slideUp 0.5s var(--transition-base) 0.3s backwards;
-}
-
-.recent-activities h3 {
-  margin-bottom: var(--spacing-lg);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.recent-activities h3::before {
-  content: '';
-  width: 4px;
-  height: 16px;
-  background: var(--primary-gradient);
-  border-radius: var(--radius-full);
+  overflow: hidden;
 }
 
 .recent-activities > p {
+  margin: 0;
+  padding: var(--spacing-lg) 18px;
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   text-align: center;
-  padding: var(--spacing-xl) 0;
-  margin: 0;
 }
 
 .recent-activities-list {
   list-style: none;
+  margin: 8px 0 0;
   padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
 }
 
 .recent-activity-item {
-  padding: var(--spacing-lg);
-  background: var(--light-color);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  transition: all var(--transition-base);
-  position: relative;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 12px 18px;
 }
 
-/* Dezenter linker Rand */
-.recent-activity-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--border-color);
-  transition: background var(--transition-base);
+.recent-activity-item + .recent-activity-item {
+  border-top: 1px solid var(--border-color);
 }
 
-.recent-activity-item:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--primary-light);
-}
-
-.recent-activity-item:hover::before {
-  background: var(--primary-color);
-}
-
-.recent-activity-title {
-  color: var(--text-color);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  display: block;
-  margin-bottom: var(--spacing-sm);
+.recent-activity-item > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .recent-activity-item p {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
 }
 
-/* Status "Noch eingestempelt" */
+.recent-activity-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-color);
+  overflow-wrap: anywhere;
+}
+
+.recent-activity-meta {
+  margin-top: 2px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.recent-activity-hours {
+  flex-shrink: 0;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color);
+}
+
 .recent-activity-status {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  color: var(--success-color);
-  font-style: normal;
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-xs);
-  background: var(--success-light);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: var(--radius-full);
-  margin-top: var(--spacing-sm);
+  background: var(--success-light);
+  color: var(--success-color);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .recent-activity-status::before {
   content: '';
   width: 6px;
   height: 6px;
-  background: var(--success-color);
   border-radius: 50%;
-}
-
-@media (max-width: 480px) {
-  .recent-activities {
-    padding: var(--spacing-lg);
-    border-radius: var(--radius-lg);
-  }
-
-  .recent-activity-item {
-    padding: var(--spacing-md);
-    font-size: var(--font-size-xs);
-  }
-
-  .recent-activities-list {
-    gap: var(--spacing-xs);
-  }
+  background: currentColor;
 }

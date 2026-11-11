@@ -11,22 +11,13 @@ import LvSection from './LvSection'
 import PhotosSection from './PhotosSection'
 import RoomEditor from './RoomEditor'
 import '../../styles/Besichtigung.css'
+import { reverseGeocode } from '../../utils/reverseGeocode'
+import EmployeePageHeader from '../EmployeePageHeader'
+import { getCurrentUser } from '../../services/data/session'
 
 const SAVE_DELAY_MS = 800
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
-
-/** Adresse aus den Koordinaten – OpenStreetMap, ohne Schlüssel. */
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=de`
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const data = await response.json()
-  const a = data?.address || {}
-  const street = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ')
-  const city = [a.postcode, a.city || a.town || a.village || a.municipality].filter(Boolean).join(' ')
-  return [street, city].filter(Boolean).join(', ') || data?.display_name || ''
-}
 
 const InspectionEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -133,7 +124,7 @@ const InspectionEditor: React.FC = () => {
       async (pos) => {
         const geo = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) }
         try {
-          const address = await reverseGeocode(geo.lat, geo.lng)
+          const address = await reverseGeocode(geo.lat, geo.lng, inspection.id)
           update({ geo, address: address || inspection.address })
           if (!address) toast.error('Zum Standort wurde keine Adresse gefunden.')
         } catch {
@@ -195,20 +186,10 @@ const InspectionEditor: React.FC = () => {
 
   return (
     <div className="inspection-page">
-      <header className="inspection-header">
-        <button type="button" className="icon-btn" onClick={goBack} aria-label="Zurück">
-          ←
-        </button>
-        <div className="inspection-header-title">
-          <h1>Besichtigung</h1>
-          <span className={`save-state ${saveState}`} onClick={saveState === 'error' ? () => void flush() : undefined}>
-            {saveLabel}
-          </span>
-        </div>
-        <button type="button" className="icon-btn danger" onClick={handleDelete} aria-label="Besichtigung löschen">
-          🗑
-        </button>
-      </header>
+      <EmployeePageHeader title="Besichtigung" employee={getCurrentUser()} back={{ onClick: goBack }}>
+        <span className={`save-state ${saveState}`} onClick={saveState === 'error' ? () => void flush() : undefined}>{saveLabel}</span>
+        <button type="button" className="icon-btn danger" onClick={handleDelete} aria-label="Besichtigung löschen">🗑</button>
+      </EmployeePageHeader>
 
       {inspection.offerNumber && (
         <div className="offer-banner">Angebot {inspection.offerNumber} wurde im Rechnungsprogramm erstellt.</div>
@@ -284,7 +265,7 @@ const InspectionEditor: React.FC = () => {
             target="_blank"
             rel="noreferrer"
           >
-            Standort auf der Karte (± {inspection.geo.accuracy ?? '?'} m)
+            Standort auf OpenStreetMap (± {inspection.geo.accuracy ?? '?'} m)
           </a>
         )}
       </section>

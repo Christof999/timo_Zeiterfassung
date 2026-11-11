@@ -23,7 +23,11 @@ import '../../../styles/Dashboard.css'
 interface DashboardTabProps {
   admin: { id?: string; username: string; name: string }
   onNavigate: (tab: DashboardTabKey) => void
+  /** Steht zwischen Begrüßung und Kacheln: eigene Stempeluhr, Hilfe, Push. */
+  children?: React.ReactNode
 }
+
+const greeting = (hour: number) => (hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend')
 
 const genId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `w-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -38,7 +42,7 @@ const buildDefaultLayout = (): DashboardWidgetInstance[] =>
     size: getWidgetDef(key)?.defaultSize || 'small'
   }))
 
-const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
+const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate, children }) => {
   const adminKey = admin.id || admin.username
 
   // --- Live-Daten ---
@@ -301,7 +305,10 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
   return (
     <div className="dashboard-tab">
       <div className="dw-toolbar">
-        <h3>Dashboard</h3>
+        <div>
+          <h3>{greeting(new Date().getHours())}{admin.name ? `, ${admin.name.trim().split(/\s+/)[0]}` : ''}</h3>
+          <p className="dw-date">{new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        </div>
         <div className="dw-toolbar-actions">
           {editMode && (
             <>
@@ -322,6 +329,8 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ admin, onNavigate }) => {
           </button>
         </div>
       </div>
+
+      {children}
 
       {editMode && (
         <p className="dw-edit-hint">

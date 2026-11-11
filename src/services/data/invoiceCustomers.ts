@@ -36,6 +36,14 @@ export const mapInvoiceCustomer = (id: string, data: Record<string, any>): Custo
     ...(text(data.contact?.phone) ? { phone: text(data.contact.phone) } : {}),
     ...(address ? { address } : {}),
     ...(siteAddress ? { siteAddress } : {}),
+    ...(Number.isInteger(data.paymentTerms) && data.paymentTerms >= 0
+      ? { paymentTerms: data.paymentTerms }
+      : {}),
+    ...(typeof data.cashDiscount?.percentage === 'number' &&
+      data.cashDiscount.percentage > 0 && data.cashDiscount.percentage <= 100 &&
+      Number.isInteger(data.cashDiscount.days) && data.cashDiscount.days > 0
+      ? { cashDiscount: { percentage: data.cashDiscount.percentage, days: data.cashDiscount.days } }
+      : {}),
     isActive: data.isActive !== false,
     source: 'rechnung'
   }

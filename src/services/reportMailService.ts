@@ -49,6 +49,7 @@ export interface ReportMailAttachment {
 }
 
 export interface SendReportMailInput {
+  reportKind?: 'project-regie'
   to: string
   employeeName: string
   periodLabel: string

@@ -1,5 +1,6 @@
 export interface Employee {
   id?: string
+  profileImage?: string
   username: string
   password?: string
   name?: string
@@ -146,6 +147,8 @@ export interface Customer {
   address?: string
   /** Baustellenadresse aus dem Rechnungsprogramm; ohne eigene Angabe die Kundenadresse */
   siteAddress?: string
+  paymentTerms?: number
+  cashDiscount?: { percentage: number; days: number }
   notes?: string
   isActive?: boolean
   /** 'rechnung' = Kundenstamm des Rechnungsprogramms; 'hero'/'manual' nur noch bei früheren Kunden */

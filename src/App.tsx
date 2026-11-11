@@ -19,6 +19,7 @@ import './styles/App.css'
 const AdminLogin = lazy(() => import('./components/admin/AdminLogin'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const InspectionEditor = lazy(() => import('./components/besichtigung/InspectionEditor'))
+const MeasurementsPage = lazy(() => import('./components/measurements/MeasurementsPage'))
 
 function App() {
   const isPhotoDiagnostic = window.location.pathname === '/foto-test'
@@ -77,6 +78,8 @@ function App() {
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/vacation" element={<VacationRequests />} />
           <Route path="/overtime" element={<OvertimeSettlements />} />
+          <Route path="/aufmass" element={<MeasurementsPage />} />
+          <Route path="/aufmass/:id" element={<MeasurementsPage />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/besichtigung/:id" element={<InspectionEditor />} />

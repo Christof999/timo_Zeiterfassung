@@ -26,7 +26,7 @@ const OvertimeReminderModal: React.FC<OvertimeReminderModalProps> = ({
 
   return (
     <div className="modal-overlay overtime-reminder-overlay" onClick={onDismiss}>
-      <div className="modal-content overtime-reminder-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog overtime-reminder-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Stunden abrechnen – {monthKeyLabel(month)}</h3>
           <button

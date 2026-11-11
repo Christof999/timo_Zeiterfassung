@@ -6,418 +6,214 @@
   background: var(--light-color);
 }
 
-/* Header */
+/* Kopfleiste: Betrieb, angemeldeter Mitarbeiter, Hell/Dunkel und Menü */
 .time-tracking-header {
   background: var(--card-background);
-  padding: var(--spacing-lg) var(--spacing-md);
-  text-align: center;
-  border-bottom: 1px solid var(--border-light);
-  box-shadow: var(--shadow-sm);
+  padding: 10px var(--spacing-md);
+  padding-top: max(10px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 100;
-  /* Safe Area Support */
-  padding-top: max(var(--spacing-lg), env(safe-area-inset-top));
 }
 
-.time-tracking-logo {
+.time-tracking-bar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .time-tracking-logo-image {
-  width: clamp(56px, 10vw, 72px);
-  height: clamp(56px, 10vw, 72px);
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--card-background);
-  padding: var(--spacing-sm);
-  box-shadow: var(--shadow);
-  transition: transform var(--transition-base);
+  padding: 4px;
+  box-shadow: var(--shadow-sm);
 }
 
-.time-tracking-logo-image:hover {
-  transform: scale(1.02);
+.time-tracking-title {
+  flex: 1;
+  min-width: 0;
 }
 
-.time-tracking-logo h1 {
-  font-size: clamp(1.125rem, 3.5vw, 1.375rem);
+.time-tracking-title h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin: 0;
-  font-weight: 700;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: -0.01em;
   color: var(--text-color);
-  letter-spacing: -0.02em;
 }
 
-.time-tracking-logo p {
-  font-size: clamp(0.75rem, 2vw, 0.8125rem);
+.time-tracking-title p {
   margin: 0;
-  color: var(--text-muted);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Main Content */
 .time-tracking-main {
   flex: 1;
-  padding: var(--spacing-lg) var(--spacing-md);
+  width: 100%;
   max-width: 640px;
   margin: 0 auto;
-  width: 100%;
+  padding: var(--spacing-md);
   padding-bottom: calc(var(--spacing-2xl) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
 }
 
-/* User Info Section - Kompakt und elegant */
-.user-info-section {
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--card-background);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
-  animation: slideUp 0.4s var(--transition-base) backwards;
-}
-
-.user-info-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  width: 100%;
-  min-width: 0;
-}
-
-.user-info-greeting {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
-  color: var(--text-secondary);
-  text-align: right;
-}
-
-.user-info-theme-toggle {
-  flex-shrink: 0;
-}
-
-@media (min-width: 769px) {
-  .user-info-row .nav-menu {
-    order: -1;
-  }
-
-  .user-info-greeting {
-    text-align: left;
-  }
-}
-
-@media (max-width: 400px) {
-  .user-info-row {
-    flex-wrap: wrap;
-  }
-
-  .user-info-greeting {
-    order: 3;
-    flex-basis: 100%;
-    text-align: left;
-  }
-
-  .user-info-theme-toggle {
-    margin-left: auto;
-  }
-}
-
-.user-info-greeting strong {
-  color: var(--text-color);
-  font-weight: 600;
-}
-
-/* Time Status Card */
+/* Statuskarte: Zustand, laufende Uhr, Überstundenkonto */
 .time-status-section {
   background: var(--card-background);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl) var(--spacing-lg);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-lg);
   text-align: center;
-  position: relative;
-  overflow: hidden;
-  animation: slideUp 0.5s var(--transition-base) 0.1s backwards;
-}
-
-.time-status-section::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: var(--primary-gradient);
-}
-
-.time-status-section::after {
-  content: none;
 }
 
 .time-status-section h2 {
-  margin-bottom: var(--spacing-lg);
-  font-size: clamp(0.875rem, 2.5vw, 0.9375rem);
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.time-status-section h2::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .status-clocked-in {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
   color: var(--success-color);
-  font-weight: 700;
-  font-size: clamp(0.9375rem, 3vw, 1rem);
-  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--success-light);
-  border-radius: var(--radius-full);
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.status-clocked-in::before {
-  content: '';
-  width: 10px;
-  height: 10px;
-  background: var(--success-color);
-  border-radius: 50%;
 }
 
 .status-clocked-out {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
   color: var(--text-secondary);
-  font-weight: 600;
-  font-size: clamp(0.9375rem, 3vw, 1rem);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--border-light);
-  border-radius: var(--radius-full);
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.status-clocked-out::before {
-  content: '';
-  width: 10px;
-  height: 10px;
-  background: var(--medium-gray);
-  border-radius: 50%;
+  background: var(--light-color);
 }
 
 .clock {
-  font-size: clamp(2.5rem, 12vw, 4rem);
-  font-weight: 700;
+  margin-top: var(--spacing-md);
+  font-size: clamp(2.75rem, 13vw, 4rem);
+  font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
-  color: var(--text-color);
-  margin-top: var(--spacing-lg);
   letter-spacing: -0.03em;
   line-height: 1;
-  position: relative;
-  z-index: 1;
-}
-
-.clock span {
   color: var(--text-color);
 }
 
-/* Responsive Design */
-@media (max-width: 480px) {
-  .time-tracking-main {
-    padding: var(--spacing-md) var(--spacing-sm);
-    gap: var(--spacing-md);
-  }
-
-  .time-status-section {
-    padding: var(--spacing-xl) var(--spacing-lg);
-    border-radius: var(--radius-lg);
-  }
-
-  .user-info-section {
-    padding: var(--spacing-md);
-    border-radius: var(--radius-lg);
-  }
+.time-status-overtime {
+  margin: var(--spacing-md) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
-/* Landscape Mode */
+.time-status-overtime strong {
+  color: var(--text-color);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mein Plan: Einsätze von der Plantafel des Büros */
+.my-plan {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.my-plan ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.my-plan-today li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 12px 18px;
+}
+
+.my-plan-today li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.my-plan-today strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.my-plan-today small,
+.my-plan-note {
+  display: block;
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.my-plan-today .btn {
+  flex-shrink: 0;
+}
+
+.my-plan-empty {
+  margin: 0;
+  padding: 12px 18px 16px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.my-plan .my-plan-later {
+  border-top: 1px solid var(--border-color);
+  padding: 8px 0;
+}
+
+.my-plan-later li {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: 6px 18px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.my-plan-later li > span {
+  flex-shrink: 0;
+  min-width: 4.5rem;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color);
+}
+
 @media (max-height: 500px) and (orientation: landscape) {
-  .time-tracking-header {
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .time-tracking-logo-image {
-    width: 44px;
-    height: 44px;
-  }
-
-  .time-tracking-logo h1 {
-    font-size: 1rem;
-  }
-
-  .time-tracking-logo p {
-    display: none;
-  }
-
   .time-status-section {
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-md);
   }
 
   .clock {
     font-size: 2.5rem;
     margin-top: var(--spacing-sm);
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .time-tracking-container {
-    background: var(--light-color);
-  }
-}
-
-/* Stempelzeit nachtragen (befugte Mitarbeiter) */
-.manual-time-entry-banner {
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--card-background);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.manual-time-entry-banner-text {
-  margin: 0;
-  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.manual-time-entry-open-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--btn-padding-y, 12px) var(--btn-padding-x, var(--spacing-md));
-  min-height: var(--btn-height, 44px);
-  border-radius: var(--radius-md);
-  font-size: var(--btn-font-size, 0.9375rem);
-  font-weight: var(--font-weight-semibold, 600);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  background: var(--card-background);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.manual-time-entry-open-btn:hover:not(:disabled) {
-  background: var(--light-color);
-  border-color: var(--medium-gray, var(--border-color));
-  transform: translateY(-1px);
-}
-
-.manual-time-entry-open-btn:active:not(:disabled) {
-  background: var(--border-light);
-  transform: translateY(0);
-}
-
-.user-info-overtime {
-  margin: 4px 0 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary, #555);
-  text-align: center;
-}
-
-/* ===== Abwesenheiten: Krankmeldung und Ausbildungstag ===== */
-.absence-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm, 0.5rem);
-  justify-content: center;
-  margin: 0 0 var(--spacing-md, 1rem);
-}
-
-.absence-actions-btn {
-  flex: 1 1 auto;
-  min-width: 10rem;
-  max-width: 20rem;
-}
-
-/* ===== Tag mit Überstunden auffüllen ===== */
-.day-fill-banner {
-  padding: var(--spacing-md) var(--spacing-lg);
-  margin: 0 0 var(--spacing-md, 1rem);
-  background: var(--card-background);
-  border: 1px solid var(--border-light);
-  border-left: 3px solid var(--primary-color, #2563eb);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.day-fill-banner-text {
-  margin: 0;
-  font-size: clamp(0.8125rem, 2.5vw, 0.875rem);
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.day-fill-banner-text strong {
-  color: var(--text-color);
-  font-variant-numeric: tabular-nums;
-}
-
-.day-fill-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--btn-padding-y, 12px) var(--btn-padding-x, var(--spacing-md));
-  min-height: var(--btn-height, 44px);
-  border-radius: var(--radius-md);
-  font-size: var(--btn-font-size, 0.9375rem);
-  font-weight: var(--font-weight-semibold, 600);
-  font-family: inherit;
-  cursor: pointer;
-  background: var(--card-background);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-  -webkit-tap-highlight-color: transparent;
-  /* Nur was sich bewegt – kein `all`, das auch Farben mitzieht. */
-  transition:
-    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 160ms ease,
-    border-color 160ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .day-fill-btn:hover {
-    background: var(--light-color);
-    border-color: var(--medium-gray, var(--border-color));
-  }
-}
-
-.day-fill-btn:active {
-  transform: scale(0.97);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .day-fill-btn {
-    transition: background-color 160ms ease, border-color 160ms ease;
-  }
-
-  .day-fill-btn:active {
-    transform: none;
   }
 }

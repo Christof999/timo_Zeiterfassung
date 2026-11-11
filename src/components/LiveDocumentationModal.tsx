@@ -122,7 +122,7 @@ const LiveDocumentationModal: React.FC<LiveDocumentationModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Dokumentation hinzufügen</h3>
           <button

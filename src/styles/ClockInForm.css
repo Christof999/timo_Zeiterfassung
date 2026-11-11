@@ -1,9 +1,9 @@
 .clock-in-form {
   background: var(--card-background);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-color);
   animation: slideUp 0.5s var(--transition-base) 0.2s backwards;
 }
 
@@ -26,14 +26,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.clock-in-form label::before {
-  content: '';
-  width: 4px;
-  height: 16px;
-  background: var(--primary-gradient);
-  border-radius: var(--radius-full);
 }
 
 .clock-in-form select {
@@ -100,11 +92,6 @@
 }
 
 @media (max-width: 480px) {
-  .clock-in-form {
-    padding: var(--spacing-lg);
-    border-radius: var(--radius-lg);
-  }
-
   .clock-in-form select {
     padding: var(--spacing-md);
   }
@@ -114,14 +101,35 @@
   }
 }
 
+/* Umschalter Projekt / Kunde als Segment, damit nur „Einstempeln“ gefüllt ist */
 .clock-in-mode-toggle {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: 4px;
   margin-bottom: var(--spacing-lg);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
 }
 
-.clock-in-mode-toggle .btn {
+.clock-in-mode-btn {
   flex: 1;
+  min-height: 40px;
+  padding: 8px var(--spacing-sm);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.clock-in-mode-btn[aria-selected='true'] {
+  background: var(--card-background);
+  color: var(--text-color);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Suchfeld über der Projekt-/Kundenauswahl */

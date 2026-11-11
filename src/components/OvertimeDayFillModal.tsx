@@ -44,7 +44,7 @@ const OvertimeDayFillModal: React.FC<OvertimeDayFillModalProps> = ({
       onClick={isSaving ? undefined : onClose}
     >
       <div
-        className="modal-content overtime-fill-modal"
+        className="modal-content employee-dialog overtime-fill-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -1,0 +1,8 @@
+archive-*/
+node_modules/
+dist/
+.git/
+.env*
+*.log
+tmp/
+scripts/

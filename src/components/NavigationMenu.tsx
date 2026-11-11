@@ -29,16 +29,14 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
     }
   }, [isOpen])
 
-  const handleOverlayClick = () => {
-    setIsOpen(false)
-  }
+  const close = () => setIsOpen(false)
 
   return (
     <>
-      <button 
-        className={`nav-toggle ${isOpen ? 'nav-toggle--hidden' : ''}`}
+      <button
+        className="nav-toggle"
         onClick={() => setIsOpen(true)}
-        aria-label="Navigation umschalten"
+        aria-label="Menü öffnen"
         aria-expanded={isOpen}
       >
         <span className="nav-hamburger-line"></span>
@@ -46,43 +44,19 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ onLogout }) => {
         <span className="nav-hamburger-line"></span>
       </button>
 
-      <nav className={`nav-menu nav-menu--employee ${isOpen ? 'active' : ''}`} aria-hidden={!isOpen}>
-        <button 
-          className="nav-menu-close" 
-          onClick={() => setIsOpen(false)}
-          aria-label="Menü schließen"
-        >
-          ×
-        </button>
-        <Link 
-          to="/vacation" 
-          className="nav-item btn primary-btn" 
-          onClick={() => setIsOpen(false)}
-        >
-          Urlaubsanträge
-        </Link>
-        <Link
-          to="/overtime"
-          className="nav-item btn primary-btn"
-          onClick={() => setIsOpen(false)}
-        >
-          Überstunden verrechnen
-        </Link>
-        <button
-          onClick={() => {
-            setIsOpen(false)
-            onLogout()
-          }} 
-          className="nav-item btn secondary-btn"
-        >
-          Abmelden
-        </button>
+      <nav className={`nav-menu nav-menu--employee ${isOpen ? 'active' : ''}`} aria-label="Mitarbeitermen?" inert={!isOpen}>
+        <div className="nav-menu-head"><strong>Menü</strong><button type="button" className="nav-menu-close" onClick={close} aria-label="Menü schließen">×</button></div>
+        <Link to="/time-tracking" className="nav-item" onClick={close}>Zeiterfassung</Link>
+        <Link to="/aufmass" className="nav-item" onClick={close}>Aufmaß</Link>
+        <Link to="/vacation" className="nav-item" onClick={close}>Urlaubsanträge</Link>
+        <Link to="/overtime" className="nav-item" onClick={close}>Überstunden verrechnen</Link>
+        <button onClick={() => { close(); onLogout() }} className="nav-item nav-item-logout">Abmelden</button>
       </nav>
 
       {isOpen && (
         <div 
           className={`nav-overlay ${isOpen ? 'active' : ''}`} 
-          onClick={handleOverlayClick}
+          onClick={close}
           aria-hidden="true"
         />
       )}

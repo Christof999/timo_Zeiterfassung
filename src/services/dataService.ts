@@ -587,9 +587,7 @@ class DataServiceClass {
         workedDateKey
       )
 
-      const noteBase = params.notes?.trim() ?? ''
-      const auditNote = `Nachtrag durch ${params.addedByDisplayName}`
-      const notes = noteBase ? `${noteBase} | ${auditNote}` : auditNote
+      const notes = params.notes?.trim() ?? ''
 
       const rawPayload: Record<string, unknown> = {
         entryId: timeEntryRef.id,

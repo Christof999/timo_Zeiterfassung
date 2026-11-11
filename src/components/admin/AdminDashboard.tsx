@@ -4,6 +4,7 @@ import { DataService } from '../../services/dataService'
 import { pushNotificationService } from '../../services/pushNotificationService'
 import { toast } from '../ToastContainer'
 import ThemeToggle from '../ThemeToggle'
+import Icon, { type IconName } from '../Icon'
 import DashboardTab from './dashboard/DashboardTab'
 import EmployeesTab from './tabs/EmployeesTab'
 import ProjectsTab from './tabs/ProjectsTab'
@@ -16,6 +17,7 @@ import SettingsTab from './tabs/SettingsTab'
 // Import, den Tab-Eintrag und die Zeile in der Tab-Ausgabe löschen.
 import DiagnosticsTab from './tabs/DiagnosticsTab'
 import InspectionsTab from '../besichtigung/InspectionsTab'
+import MeasurementsPage from '../measurements/MeasurementsPage'
 import { allowedAdminTabs, isTabAllowedForRole, resolveAdminRole } from '../../utils/adminRole'
 import MoergelChat from './MoergelChat'
 import { APP_DISPLAY_NAME } from '../../constants/appBranding'
@@ -31,12 +33,22 @@ type TabType =
   | 'projectsArchived'
   | 'customers'
   | 'inspections'
+  | 'measurements'
   | 'material'
   | 'costing'
   | 'reports'
   | 'vacation'
   | 'settings'
   | 'diagnostics'
+
+/** Gruppe je Reiter in der Seitenleiste – vollständig, damit kein neuer Reiter verschwindet. */
+const NAV_GROUP: Record<TabType, string> = {
+  overview: '', notifications: '',
+  employees: 'Betrieb', projects: 'Betrieb', customers: 'Betrieb', inspections: 'Betrieb', measurements: 'Betrieb', vacation: 'Betrieb',
+  costing: 'Auswertung', reports: 'Auswertung', reportsDatev: 'Auswertung',
+  material: 'Verwaltung', projectsArchived: 'Verwaltung', settings: 'Verwaltung', diagnostics: 'Verwaltung',
+}
+const NAV_GROUP_ORDER = ['', 'Betrieb', 'Auswertung', 'Verwaltung']
 
 const AdminDashboard: React.FC = () => {
   const location = useLocation()
@@ -204,23 +216,24 @@ const AdminDashboard: React.FC = () => {
 
   // Eingeschränkte Rollen (z. B. Lohnabrechnung) sehen nur ihre eigenen Tabs.
   const adminRole = resolveAdminRole(currentAdmin)
-  const allTabs = [
-    { id: 'overview' as TabType, label: 'Übersicht' },
+  const allTabs: { id: TabType; label: string; icon: IconName }[] = [
+    { id: 'overview' as TabType, label: 'Übersicht', icon: 'home' },
     ...(hasPushSubscription || currentTab === 'notifications'
-      ? [{ id: 'notifications' as TabType, label: 'Benachrichtigungen' }]
+      ? [{ id: 'notifications' as TabType, label: 'Benachrichtigungen', icon: 'bell' as const }]
       : []),
-    { id: 'employees' as TabType, label: 'Mitarbeiter' },
-    { id: 'projects' as TabType, label: 'Projekte' },
-    { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte' },
-    { id: 'customers' as TabType, label: 'Kunden' },
-    { id: 'inspections' as TabType, label: 'Besichtigungen' },
-    { id: 'material' as TabType, label: 'Material' },
-    { id: 'costing' as TabType, label: 'Nachkalkulation' },
-    { id: 'vacation' as TabType, label: 'Urlaub' },
-    { id: 'reports' as TabType, label: 'Zeiterfassungsbericht' },
-    { id: 'reportsDatev' as TabType, label: 'Zeiterfassungsbericht DATEV' },
-    { id: 'settings' as TabType, label: 'Einstellungen' },
-    { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)' }
+    { id: 'employees' as TabType, label: 'Mitarbeiter', icon: 'users' },
+    { id: 'projects' as TabType, label: 'Projekte', icon: 'folder' },
+    { id: 'projectsArchived' as TabType, label: 'Archivierte Projekte', icon: 'archive' },
+    { id: 'customers' as TabType, label: 'Kunden', icon: 'building' },
+    { id: 'inspections' as TabType, label: 'Besichtigungen', icon: 'search' },
+    { id: 'measurements' as TabType, label: 'Aufmaß', icon: 'report' },
+    { id: 'material' as TabType, label: 'Material', icon: 'box' },
+    { id: 'costing' as TabType, label: 'Nachkalkulation', icon: 'chart' },
+    { id: 'vacation' as TabType, label: 'Urlaub', icon: 'sun' },
+    { id: 'reports' as TabType, label: 'Zeiterfassungsbericht', icon: 'report' },
+    { id: 'reportsDatev' as TabType, label: 'Zeiterfassungsbericht DATEV', icon: 'export' },
+    { id: 'settings' as TabType, label: 'Einstellungen', icon: 'sliders' },
+    { id: 'diagnostics' as TabType, label: 'Diagnose (temporär)', icon: 'wrench' }
   ]
   const tabs = allTabs.filter(tab => isTabAllowedForRole(adminRole, tab.id))
 
@@ -233,18 +246,19 @@ const AdminDashboard: React.FC = () => {
         aria-expanded={isPushPanelOpen}
         aria-controls="admin-push-content"
       >
-        <div className="admin-push-header">
-          <div>
-            <h3>iPhone Homescreen-Benachrichtigungen</h3>
-            <p>Aktiviere Push für dieses Admin-Gerät.</p>
-          </div>
-          <div className="admin-push-toggle-right">
-            <span className={`admin-push-badge ${hasPushSubscription ? 'active' : 'inactive'}`}>
-              {hasPushSubscription ? 'Aktiv' : 'Nicht aktiv'}
-            </span>
-            <span className={`admin-push-chevron ${isPushPanelOpen ? 'open' : ''}`} aria-hidden="true">▾</span>
-          </div>
-        </div>
+        <span className="admin-push-header">
+          <span className="dash-row-icon"><Icon name="bell" /></span>
+          <span className="admin-push-text">
+            <strong>
+              Push-Benachrichtigungen
+              <span className={`admin-push-badge ${hasPushSubscription ? 'active' : 'inactive'}`}>
+                {hasPushSubscription ? 'Aktiv' : 'Nicht aktiv'}
+              </span>
+            </strong>
+            <span>Für dieses Gerät, auch am iPhone-Homescreen.</span>
+          </span>
+          <span className={`admin-push-chevron ${isPushPanelOpen ? 'open' : ''}`} aria-hidden="true" />
+        </span>
       </button>
 
       {isPushPanelOpen && (
@@ -314,72 +328,78 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="admin-dashboard-container">
       <header className="admin-dashboard-header">
-        <div className="admin-header-start">
-          <button 
-            className="admin-nav-toggle"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Navigation umschalten"
-          >
-            <span className="admin-hamburger-line"></span>
-            <span className="admin-hamburger-line"></span>
-            <span className="admin-hamburger-line"></span>
-          </button>
-        </div>
-        <div className="admin-logo">
-          <img 
-            src="/brand-logo.png" 
-            alt="Logo" 
-            className="admin-logo-image"
-          />
+        <button
+          className="admin-nav-toggle"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-label="Navigation umschalten"
+          aria-expanded={isMenuOpen}
+        >
+          <span className="admin-hamburger-line"></span>
+          <span className="admin-hamburger-line"></span>
+          <span className="admin-hamburger-line"></span>
+        </button>
+        <img src="/brand-logo.png" alt="Logo" className="admin-logo-image" />
+        <div className="admin-title">
           <h1>{APP_DISPLAY_NAME}</h1>
-          <p className="admin-logo-subtitle">Admin Panel</p>
+          <p>Verwaltung</p>
         </div>
         <div className="admin-header-controls">
-          <div className="admin-controls">
-            <ThemeToggle variant="icon" />
-            <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
-            <button onClick={handleLogout} className="btn secondary-btn">
-              Abmelden
-            </button>
-          </div>
+          <span className="admin-name">{currentAdmin.name || 'Administrator'}</span>
+          <ThemeToggle variant="icon" />
+          <button onClick={handleLogout} className="admin-logout" aria-label="Abmelden" title="Abmelden">
+            <Icon name="logout" />
+          </button>
         </div>
       </header>
 
       <main className="admin-dashboard-main">
         <nav className={`dashboard-tabs ${isMenuOpen ? 'open' : ''}`}>
-          <button 
+          <button
             className="admin-menu-close"
             onClick={() => setIsMenuOpen(false)}
             aria-label="Menü schließen"
           >
             ×
           </button>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              className={`tab-btn ${currentTab === tab.id ? 'active' : ''}`}
-              onClick={() => {
-                setCurrentTab(tab.id)
-                setIsMenuOpen(false)
-              }}
-            >
-              <span className="tab-label">{tab.label}</span>
-            </button>
-          ))}
+          {NAV_GROUP_ORDER.map((group) => {
+            const groupTabs = tabs.filter((tab) => NAV_GROUP[tab.id] === group)
+            if (!groupTabs.length) return null
+            return (
+              <div key={group || 'start'} className="tab-group">
+                {group && <p className="tab-group-title">{group}</p>}
+                {groupTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`tab-btn ${currentTab === tab.id ? 'active' : ''}`}
+                    aria-current={currentTab === tab.id ? 'page' : undefined}
+                    onClick={() => {
+                      setCurrentTab(tab.id)
+                      setIsMenuOpen(false)
+                    }}
+                  >
+                    <Icon name={tab.icon} />
+                    <span className="tab-label">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </nav>
+        {isMenuOpen && <div className="admin-menu-backdrop" onClick={() => setIsMenuOpen(false)} aria-hidden="true" />}
 
         <div className="dashboard-content">
           {!isTabAllowedForRole(adminRole, currentTab) && (
             <p className="no-data">Für diesen Bereich fehlen die Berechtigungen.</p>
           )}
-          {isTabAllowedForRole(adminRole, 'overview') && currentTab === 'overview' && !hasPushSubscription && renderPushSettings(false)}
           {isTabAllowedForRole(adminRole, 'notifications') && currentTab === 'notifications' && renderPushSettings(true)}
 
           {isTabAllowedForRole(adminRole, 'overview') && currentTab === 'overview' && (
             <DashboardTab
               admin={{ id: currentAdmin.id, username: currentAdmin.username, name: currentAdmin.name }}
               onNavigate={(tab) => setCurrentTab(tab as TabType)}
-            />
+            >
+              {!hasPushSubscription && <div className="dash-rows">{renderPushSettings(false)}</div>}
+            </DashboardTab>
           )}
           {isTabAllowedForRole(adminRole, 'employees') && currentTab === 'employees' && <EmployeesTab />}
           {isTabAllowedForRole(adminRole, 'projects') && currentTab === 'projects' && <ProjectsTab variant="active" />}
@@ -388,6 +408,7 @@ const AdminDashboard: React.FC = () => {
           {isTabAllowedForRole(adminRole, 'inspections') && currentTab === 'inspections' && (
             <InspectionsTab adminName={currentAdmin.name || currentAdmin.username} />
           )}
+          {isTabAllowedForRole(adminRole, 'measurements') && currentTab === 'measurements' && <MeasurementsPage embedded />}
           {isTabAllowedForRole(adminRole, 'material') && currentTab === 'material' && <MaterialTypesTab />}
           {isTabAllowedForRole(adminRole, 'costing') && currentTab === 'costing' && <ReportsTab defaultReportType="project" allowedReportTypes={['project']} />}
           {isTabAllowedForRole(adminRole, 'vacation') && currentTab === 'vacation' && <VacationTab />}

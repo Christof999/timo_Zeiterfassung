@@ -1,6 +1,6 @@
 import React from 'react'
-import { formatClockInLocationLabel, getClockInCoordinates } from '../../../utils/geoDisplay'
-import type { DashboardContext, WidgetDef } from './types'
+import LiveBoard from './LiveBoard'
+import type { WidgetDef } from './types'
 
 /** Kleine Kennzahl (große Zahl + optionaler Verweis). Bewusst ohne Icon – clean. */
 const StatTile: React.FC<{
@@ -24,68 +24,6 @@ const StatTile: React.FC<{
   return <div className="dw-stat">{content}</div>
 }
 
-/** Live-Aktivitäten (eingestempelte Mitarbeiter) inkl. Admin-Ausstempeln. */
-const LiveActivityWidget: React.FC<{ ctx: DashboardContext }> = ({ ctx }) => {
-  const { liveActivities, nowTick, clockingOutId, onAdminClockOut } = ctx.data
-  if (liveActivities.length === 0) {
-    return <p className="dw-empty">Aktuell ist niemand eingestempelt.</p>
-  }
-  return (
-    <div className="dw-activity-list">
-      {liveActivities.map((activity) => {
-        const clockInTime =
-          activity.timeEntry.clockInTime instanceof Date
-            ? activity.timeEntry.clockInTime
-            : (activity.timeEntry.clockInTime as any)?.toDate?.() ||
-              new Date(activity.timeEntry.clockInTime as any)
-        const durationMs = nowTick - clockInTime.getTime()
-        const h = Math.floor(durationMs / 3_600_000)
-        const m = Math.floor((durationMs % 3_600_000) / 60_000)
-        const duration = h > 0 ? `${h}h ${m}min` : `${m}min`
-        const timeString = clockInTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-        const employeeName =
-          activity.employee?.name ||
-          `${activity.employee?.firstName || ''} ${activity.employee?.lastName || ''}`.trim() ||
-          'Unbekannter Mitarbeiter'
-        const projectName = activity.project?.name || 'Kein Projekt'
-        const isClockingOut = clockingOutId === activity.timeEntry.id
-        const locationLabel = formatClockInLocationLabel(activity.timeEntry)
-        const coords = getClockInCoordinates(activity.timeEntry)
-        const mapsHref = coords ? `https://www.google.com/maps?q=${coords.lat},${coords.lng}` : null
-
-        return (
-          <div key={activity.timeEntry.id} className="dw-activity-item">
-            <div className="dw-activity-info">
-              <strong>{employeeName}</strong>
-              <span className="dw-activity-project">{projectName}</span>
-              <span className="dw-activity-meta">
-                seit {timeString} · {duration}
-              </span>
-              {locationLabel && mapsHref && (
-                <a href={mapsHref} target="_blank" rel="noopener noreferrer" className="dw-activity-loc">
-                  {locationLabel}
-                </a>
-              )}
-            </div>
-            <button
-              type="button"
-              className="btn clock-out-btn"
-              disabled={isClockingOut}
-              onClick={() => onAdminClockOut(activity.timeEntry, employeeName)}
-            >
-              {isClockingOut ? '…' : 'Ausstempeln'}
-            </button>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/**
- * Der „Pool" aller Funktionen. Jede Funktion der App ist hier genau einmal als
- * Widget registriert – Launcher (öffnet Tab/Modal) oder Insight (Live-Daten).
- */
 const ALL_WIDGETS: WidgetDef[] = [
   // --- Kennzahlen (Insight) ---
   {
@@ -144,11 +82,11 @@ const ALL_WIDGETS: WidgetDef[] = [
   {
     key: 'live-activity',
     title: 'Live-Aktivitäten',
-    description: 'Wer ist gerade eingestempelt – mit direktem Ausstempeln.',
+    description: 'Wer ist gerade wo eingestempelt – Liste, Karte und Tagesblatt je Mitarbeiter.',
     category: 'Kennzahlen',
     kind: 'insight',
     defaultSize: 'large',
-    render: (ctx) => <LiveActivityWidget ctx={ctx} />
+    render: (ctx) => <LiveBoard ctx={ctx} />
   },
   {
     key: 'admin-clock-in',

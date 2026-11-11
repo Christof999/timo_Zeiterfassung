@@ -172,7 +172,7 @@ const AdminClockInModal: React.FC<AdminClockInModalProps> = ({ onClose, onSaved 
                   type="button"
                   role="tab"
                   aria-selected={mode === 'project'}
-                  className={`btn ${mode === 'project' ? 'primary-btn' : 'secondary-btn'}`}
+                  className="clock-in-mode-btn"
                   onClick={() => setMode('project')}
                 >
                   Projekt
@@ -181,7 +181,7 @@ const AdminClockInModal: React.FC<AdminClockInModalProps> = ({ onClose, onSaved 
                   type="button"
                   role="tab"
                   aria-selected={mode === 'customer'}
-                  className={`btn ${mode === 'customer' ? 'primary-btn' : 'secondary-btn'}`}
+                  className="clock-in-mode-btn"
                   onClick={() => setMode('customer')}
                 >
                   Kunde (Kleinauftrag)

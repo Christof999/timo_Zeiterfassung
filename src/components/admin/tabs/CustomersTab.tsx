@@ -69,6 +69,8 @@ const CustomersTab: React.FC = () => {
                 <th>Kontakt</th>
                 <th>Adresse</th>
                 <th>Baustelle</th>
+                <th>Zahlungsziel</th>
+                <th>Skonto</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -83,6 +85,14 @@ const CustomersTab: React.FC = () => {
                     {customer.siteAddress && customer.siteAddress !== customer.address
                       ? customer.siteAddress
                       : '-'}
+                  </td>
+                  <td data-label="Zahlungsziel">
+                    {customer.paymentTerms !== undefined ? `${customer.paymentTerms} Tage netto` : '-'}
+                  </td>
+                  <td data-label="Skonto">
+                    {customer.cashDiscount
+                      ? `${customer.cashDiscount.percentage.toLocaleString('de-DE')} % innerhalb von ${customer.cashDiscount.days} Tagen`
+                      : 'Ohne Skonto'}
                   </td>
                   <td data-label="Status">
                     <span className={`status-badge ${customer.isActive !== false ? 'active' : 'inactive'}`}>

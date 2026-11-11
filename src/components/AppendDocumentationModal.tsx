@@ -333,7 +333,7 @@ const AppendDocumentationModal: React.FC<AppendDocumentationModalProps> = ({
       className="modal-overlay retro-doc-detail-overlay"
       onClick={isSubmitting ? undefined : onClose}
     >
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Eintrag ansehen & korrigieren</h3>
           <button

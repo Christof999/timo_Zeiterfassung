@@ -28,3 +28,6 @@ Thumbs.db
 *-backup.*
 *-old.*
 
+.vercel
+.env*
+archive-*/

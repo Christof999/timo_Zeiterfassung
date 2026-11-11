@@ -4,6 +4,7 @@ import type { LeaveRequest, SchoolDayKind } from '../../types'
 import { SCHOOL_DAY_LABELS } from '../../types'
 import { convertToDate } from '../../services/data/shared'
 import { effectiveLeaveWorkingDays } from '../../utils/workingDays'
+import '../../styles/EmployeeAbsenceHistory.css'
 
 interface EmployeeAbsenceHistoryProps {
   employeeId: string

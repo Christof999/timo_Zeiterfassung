@@ -205,7 +205,7 @@ const ExtendedClockOutModal: React.FC<ExtendedClockOutModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Arbeitsende dokumentieren</h3>
           <button type="button" className="close-modal-btn" onClick={onClose} disabled={isSubmitting}>

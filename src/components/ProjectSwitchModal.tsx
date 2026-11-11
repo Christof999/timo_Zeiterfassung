@@ -97,7 +97,7 @@ const ProjectSwitchModal: React.FC<ProjectSwitchModalProps> = ({
       className="modal-overlay project-switch-overlay"
       onClick={isSwitching ? undefined : onClose}
     >
-      <div className="modal-content project-switch-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content employee-dialog project-switch-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Projekt wechseln</h3>
           <button
