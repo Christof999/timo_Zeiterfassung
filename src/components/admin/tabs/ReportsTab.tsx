@@ -603,8 +603,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
    * @param employeeIdOverride dasselbe für den Mitarbeiter: beim Durchblättern
    *   im Sammellauf steht der nächste Mitarbeiter noch nicht im State.
    * @param options.applyReportedHours gemeldete Stunden gleich übernehmen
-   *   (Sammellauf). In der Einzelansicht entscheidet das weiterhin der Klick
-   *   auf „Übernehmen".
+   *   (Standard). Nur der Sammellauf kann das über seine Checkbox abschalten.
    */
   const handleEmployeeSearch = async (
     range?: { start: string; end: string },
@@ -638,15 +637,21 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
       // Alle Meldungen des Mitarbeiters laden, nicht nur die des gewählten
       // Zeitraums: Der Bericht startet im laufenden Monat, gemeldet wird aber
       // der Vormonat. Ohne die übrigen Meldungen bliebe der Hinweis unsichtbar.
-      // In der Einzelansicht wird nichts automatisch angewendet – das
-      // entscheidet die Lohnbuchhaltung mit „Übernehmen".
       const settlements = await DataService.getOvertimeSettlements(employeeId)
       setEmployeeSettlements(settlements)
 
-      if (options?.applyReportedHours) {
-        const monat = monthKeyForPeriod(von, bis)
-        const meldung = monat ? settlements.find(entry => entry.month === monat) : null
-        setAppliedSettlementTarget(meldung ? meldung.minutes : null)
+      // Die Meldung des Monats gilt sofort. Musste sie erst per Klick
+      // übernommen werden, gingen Nachweise mit allen geleisteten Stunden
+      // raus, obwohl der Mitarbeiter Stunden aufs Konto gelegt hatte.
+      // „Zurücksetzen" verwirft sie weiterhin bewusst.
+      const monat = monthKeyForPeriod(von, bis)
+      const meldung = monat ? settlements.find(entry => entry.month === monat) : null
+      if (meldung && (options?.applyReportedHours ?? true)) {
+        // Die manuelle Überstunden-Sicht würde sonst mit der Meldung konkurrieren.
+        setOvertimeMode(false)
+        setPayoutInput('0:00')
+        setAppliedPayoutMinutes(0)
+        setAppliedSettlementTarget(meldung.minutes)
       }
     } catch (error) {
       console.error('Fehler:', error)
@@ -1923,7 +1928,7 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         )}
 
         {/* Meldung des Mitarbeiters: was er für den Monat abgerechnet
-            haben möchte. Angewendet wird sie erst auf Klick. */}
+            haben möchte. Beim Laden schon übernommen, abwählbar per „Zurücksetzen". */}
         {overtimeSettlement && reportEntries.length > 0 && (
           <div className="employee-report-note no-print">
             <div className="employee-report-note-text">
