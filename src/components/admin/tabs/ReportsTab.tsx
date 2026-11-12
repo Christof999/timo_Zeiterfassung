@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { DataService } from '../../../services/dataService'
 import type { Employee, TimeEntry, Project, FileUpload, TimeReportSettlement, OvertimeSettlement, MaterialCredit, MaterialType } from '../../../types'
-import { SCHOOL_DAY_LABELS } from '../../../types'
 import { toast } from '../../ToastContainer'
 import { formatDateForInputLocal } from '../../../utils/dateUtils'
 import { getReturnTravelCreditMs } from '../../../utils/returnTravel'
@@ -13,13 +12,10 @@ import {
   type ReportType,
   type ReportEntry,
   type EmployeeSummary,
-  type AbsenceKind,
   convertToDate,
   formatDateForDisplay,
   getDateKey,
-  getApprovedLeaveDates,
-  enumerateDays,
-  isWeekendDate,
+  buildAbsenceReportEntries,
   DEFAULT_MEAL_ALLOWANCE_EUR,
   parseMealAllowanceInput,
   formatTimeForInput,
@@ -74,7 +70,6 @@ import {
 } from '../../../services/reportMailService'
 import {
   DEFAULT_REGULAR_WORK_TIME,
-  regularMinutesForDate,
   regularMinutesForDateKey,
   type RegularWorkTimeConfig
 } from '../../../utils/regularWorkTime'
@@ -448,143 +443,9 @@ const ReportsTab: React.FC<ReportsTabProps> = ({
         .filter((dateKey) => !!dateKey)
     )
 
-    /**
-     * Baut eine bezahlte Abwesenheitszeile. Vergütet wird immer mit der
-     * Regelarbeitszeit des Wochentags (Mo–Do 8 Std, Fr 6 Std).
-     */
-    const buildAbsenceRow = (
-      date: Date,
-      kind: AbsenceKind,
-      idPrefix: string,
-      projectName: string,
-      notes: string
-    ): ReportEntry => {
-      const dateKey = getDateKey(date)
-      const minutes = regularMinutesForDate(date, regularWorkTimeConfig)
-      const syntheticClockIn = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0, 0, 0)
-      const syntheticClockOut = new Date(syntheticClockIn.getTime() + minutes * 60 * 1000)
-      const originalEntry: TimeEntry = {
-        id: `${idPrefix}-${dateKey}`,
-        employeeId,
-        projectId: kind,
-        clockInTime: syntheticClockIn,
-        clockOutTime: syntheticClockOut,
-        pauseTotalTime: 0,
-        notes,
-        isVacationDay: kind === 'vacation'
-      }
-      return {
-        id: originalEntry.id,
-        originalEntry,
-        source: 'leave-request',
-        date: formatDateForDisplay(date),
-        dateRaw: date,
-        dateKey,
-        projectId: kind,
-        projectName,
-        clockIn: '',
-        clockOut: '',
-        pauseMinutes: 0,
-        pauseMs: 0,
-        workHours: minutesToHoursLabel(minutes),
-        notes,
-        originalNotes: notes,
-        isEdited: false,
-        isReadOnly: true,
-        absenceKind: kind,
-        holidayName: getBavariaHolidayName(date)
-      }
-    }
-
-    // Feiertage zuerst: an einem gesetzlichen Feiertag kann niemand Urlaub
-    // nehmen oder krank sein, der Feiertag hat Vorrang.
-    const holidayEntries: ReportEntry[] = enumerateDays(start, end)
-      .filter((date) => !isWeekendDate(date) && !!getBavariaHolidayName(date))
-      .filter((date) => !occupiedTimeEntryDates.has(getDateKey(date)))
-      .map((date) =>
-        buildAbsenceRow(
-          date,
-          'holiday',
-          'holiday',
-          'Feiertag',
-          `Gesetzlicher Feiertag: ${getBavariaHolidayName(date)}`
-        )
-      )
-
-    const blockedDates = new Set([
-      ...occupiedTimeEntryDates,
-      // Auch bestempelte Feiertage sperren Urlaub/Krankheit für diesen Tag.
-      ...enumerateDays(start, end)
-        .filter((date) => !!getBavariaHolidayName(date))
-        .map((date) => getDateKey(date))
-    ])
-
-    const vacationEntries: ReportEntry[] = getApprovedLeaveDates(
-      leaveRequests,
-      'vacation',
-      start,
-      end,
-      blockedDates
-    ).map(({ date, request }) => {
-      const reason = (request.reason || '').trim()
-      return buildAbsenceRow(
-        date,
-        'vacation',
-        `vacation-${request.id || ''}`,
-        'Urlaub',
-        reason ? `Genehmigter Urlaub: ${reason}` : 'Genehmigter Urlaub'
-      )
-    })
-
-    const vacationDates = new Set(vacationEntries.map((entry) => entry.dateKey))
-    const sickEntries: ReportEntry[] = getApprovedLeaveDates(
-      leaveRequests,
-      'sick',
-      start,
-      end,
-      new Set([...blockedDates, ...vacationDates])
-    ).map(({ date, request }) => {
-      const reason = (request.reason || '').trim()
-      return buildAbsenceRow(
-        date,
-        'sick',
-        `sick-${request.id || ''}`,
-        'Krankheit',
-        reason ? `Krankheitstag: ${reason}` : 'Krankheitstag'
-      )
-    })
-
-    // Berufsschule: bei Azubis soll auf dem Nachweis stehen, warum an dem Tag
-    // nicht gearbeitet wurde (Wunsch der Lohnbuchhaltung).
-    const sickDates = new Set(sickEntries.map((entry) => entry.dateKey))
-    const schoolEntries: ReportEntry[] = getApprovedLeaveDates(
-      leaveRequests,
-      'school',
-      start,
-      end,
-      new Set([...blockedDates, ...vacationDates, ...sickDates])
-    ).map(({ date, request }) => {
-      const reason = (request.reason || '').trim()
-      // Ohne Angabe (Meldung durch den Admin) gilt der Tag als Berufsschule.
-      const label = SCHOOL_DAY_LABELS[request.schoolKind || 'school']
-      return {
-        ...buildAbsenceRow(
-          date,
-          'school',
-          `school-${request.id || ''}`,
-          label,
-          reason && reason !== label ? `${label}: ${reason}` : label
-        ),
-        schoolKind: request.schoolKind
-      }
-    })
-
     return [
       ...entries,
-      ...holidayEntries,
-      ...vacationEntries,
-      ...sickEntries,
-      ...schoolEntries
+      ...buildAbsenceReportEntries(employeeId, leaveRequests, start, end, occupiedTimeEntryDates, regularWorkTimeConfig)
     ].sort((a, b) => {
       const ta = a.dateRaw?.getTime() || 0
       const tb = b.dateRaw?.getTime() || 0

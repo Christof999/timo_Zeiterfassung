@@ -1,4 +1,4 @@
-import { enumerateDays, minutesToHoursLabel, type AdjustedReportEntry } from './reportUtils'
+import { enumerateDays, minutesToHoursLabel, type AdjustedReportEntry, type AbsenceKind } from './reportUtils'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
 import { SCHOOL_DAY_LABELS } from '../../../../types'
 
@@ -42,11 +42,12 @@ export const roundDatevDuration = (minutes: number): number =>
     : Math.floor(minutes / DATEV_DURATION_STEP_MINUTES) * DATEV_DURATION_STEP_MINUTES
 
 /** Kürzel der DATEV-Vorlage für die mit „*" überschriebene Spalte. */
-export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S' | 'HK'
+export type DatevKey = '' | 'K' | 'U' | 'UU' | 'F' | 'SA' | 'SU' | 'S' | 'HK' | 'Ü'
 
 export const DATEV_KEY_LEGEND: Array<{ key: Exclude<DatevKey, ''>; label: string }> = [
   { key: 'K', label: 'Krank' },
   { key: 'U', label: 'Urlaub' },
+  { key: 'Ü', label: 'Urlaub auf Überstunden' },
   { key: 'UU', label: 'unbezahlter Urlaub' },
   { key: 'F', label: 'Feiertag' },
   { key: 'SA', label: 'Stundenweise abwesend' },
@@ -75,16 +76,18 @@ export interface DatevDayRow {
   remark: string
 }
 
-const KEY_BY_ABSENCE: Record<string, DatevKey> = {
+const KEY_BY_ABSENCE: Record<AbsenceKind, DatevKey> = {
   sick: 'K',
   vacation: 'U',
+  overtime: 'Ü',
   holiday: 'F',
   school: 'S'
 }
 
-const REMARK_BY_ABSENCE: Record<string, string> = {
+const REMARK_BY_ABSENCE: Record<AbsenceKind, string> = {
   sick: 'Krank',
   vacation: 'Urlaub',
+  overtime: 'Urlaub auf Überstunden',
   holiday: 'Feiertag',
   school: 'Berufsschule'
 }

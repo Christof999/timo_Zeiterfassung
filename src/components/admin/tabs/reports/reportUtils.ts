@@ -1,4 +1,7 @@
 import type { Employee, LeaveRequest, TimeEntry } from '../../../../types'
+import { SCHOOL_DAY_LABELS } from '../../../../types'
+import { getBavariaHolidayName } from '../../../../utils/bavariaHolidays'
+import { DEFAULT_REGULAR_WORK_TIME, regularMinutesForDate, type RegularWorkTimeConfig } from '../../../../utils/regularWorkTime'
 import { formatDateForInputLocal } from '../../../../utils/dateUtils'
 import { floorToQuarterHour, minutesToHoursLabel } from '../../../../utils/hoursInput'
 import { contributionForMonth, previousContribution } from '../../../../utils/overtimeBalance'
@@ -21,7 +24,7 @@ export type ReportEntrySource = 'time-entry' | 'leave-request'
  * Bezahlte Abwesenheit; alle werden mit der Regelarbeitszeit vergütet.
  * `school` = Berufsschultag eines Azubis.
  */
-export type AbsenceKind = 'vacation' | 'holiday' | 'sick' | 'school'
+export type AbsenceKind = 'vacation' | 'holiday' | 'sick' | 'school' | 'overtime'
 
 export const VACATION_WORK_MINUTES = 8 * 60
 export const VACATION_WORK_HOURS_LABEL = '8:00'
@@ -287,6 +290,165 @@ export const getApprovedVacationDates = (
 ): Array<{ date: Date; request: LeaveRequest }> =>
   getApprovedLeaveDates(requests, 'vacation', rangeStart, rangeEnd, blockedDates)
 
+/** Bezahlte Abwesenheiten für Einzelbericht, Sammellauf und DATEV. */
+export const buildAbsenceReportEntries = (
+  employeeId: string,
+  leaveRequests: LeaveRequest[],
+  start: Date,
+  end: Date,
+  occupiedTimeEntryDates: Set<string>,
+  regularWorkTimeConfig: RegularWorkTimeConfig = DEFAULT_REGULAR_WORK_TIME
+): ReportEntry[] => {
+  /**
+   * Baut eine bezahlte Abwesenheitszeile. Vergütet wird immer mit der
+   * Regelarbeitszeit des Wochentags (Mo–Do 8 Std, Fr 6 Std).
+   */
+  const buildAbsenceRow = (
+    date: Date,
+    kind: AbsenceKind,
+    idPrefix: string,
+    projectName: string,
+    notes: string
+  ): ReportEntry => {
+    const dateKey = getDateKey(date)
+    const minutes = regularMinutesForDate(date, regularWorkTimeConfig)
+    const syntheticClockIn = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 7, 0, 0, 0)
+    const syntheticClockOut = new Date(syntheticClockIn.getTime() + minutes * 60 * 1000)
+    const originalEntry: TimeEntry = {
+      id: `${idPrefix}-${dateKey}`,
+      employeeId,
+      projectId: kind,
+      clockInTime: syntheticClockIn,
+      clockOutTime: syntheticClockOut,
+      pauseTotalTime: 0,
+      notes,
+      isVacationDay: kind === 'vacation'
+    }
+    return {
+      id: originalEntry.id,
+      originalEntry,
+      source: 'leave-request',
+      date: formatDateForDisplay(date),
+      dateRaw: date,
+      dateKey,
+      projectId: kind,
+      projectName,
+      clockIn: '',
+      clockOut: '',
+      pauseMinutes: 0,
+      pauseMs: 0,
+      workHours: minutesToHoursLabel(minutes),
+      notes,
+      originalNotes: notes,
+      isEdited: false,
+      isReadOnly: true,
+      absenceKind: kind,
+      holidayName: getBavariaHolidayName(date)
+    }
+  }
+
+  // Feiertage zuerst: an einem gesetzlichen Feiertag kann niemand Urlaub
+  // nehmen oder krank sein, der Feiertag hat Vorrang.
+  const holidayEntries: ReportEntry[] = enumerateDays(start, end)
+    .filter((date) => !isWeekendDate(date) && !!getBavariaHolidayName(date))
+    .filter((date) => !occupiedTimeEntryDates.has(getDateKey(date)))
+    .map((date) =>
+      buildAbsenceRow(
+        date,
+        'holiday',
+        'holiday',
+        'Feiertag',
+        `Gesetzlicher Feiertag: ${getBavariaHolidayName(date)}`
+      )
+    )
+
+  const blockedDates = new Set([
+    ...occupiedTimeEntryDates,
+    // Auch bestempelte Feiertage sperren Urlaub/Krankheit für diesen Tag.
+    ...enumerateDays(start, end)
+      .filter((date) => !!getBavariaHolidayName(date))
+      .map((date) => getDateKey(date))
+  ])
+
+  const vacationEntries: ReportEntry[] = getApprovedLeaveDates(
+    leaveRequests,
+    'vacation',
+    start,
+    end,
+    blockedDates
+  ).map(({ date, request }) => {
+    const reason = (request.reason || '').trim()
+    return buildAbsenceRow(
+      date,
+      'vacation',
+      `vacation-${request.id || ''}`,
+      'Urlaub',
+      reason ? `Genehmigter Urlaub: ${reason}` : 'Genehmigter Urlaub'
+    )
+  })
+
+  const vacationDates = new Set(vacationEntries.map((entry) => entry.dateKey))
+  const overtimeEntries: ReportEntry[] = getApprovedLeaveDates(
+    leaveRequests,
+    'overtime',
+    start,
+    end,
+    new Set([...blockedDates, ...vacationDates])
+  ).map(({ date, request }) => {
+    const reason = (request.reason || '').trim()
+    return buildAbsenceRow(
+      date,
+      'overtime',
+      `overtime-${request.id || ''}`,
+      'Urlaub auf Überstunden',
+      reason ? `Urlaub auf Überstunden: ${reason}` : 'Urlaub auf Überstunden'
+    )
+  })
+  const overtimeDates = new Set(overtimeEntries.map((entry) => entry.dateKey))
+  const sickEntries: ReportEntry[] = getApprovedLeaveDates(
+    leaveRequests,
+    'sick',
+    start,
+    end,
+    new Set([...blockedDates, ...vacationDates, ...overtimeDates])
+  ).map(({ date, request }) => {
+    const reason = (request.reason || '').trim()
+    return buildAbsenceRow(
+      date,
+      'sick',
+      `sick-${request.id || ''}`,
+      'Krankheit',
+      reason ? `Krankheitstag: ${reason}` : 'Krankheitstag'
+    )
+  })
+
+  // Berufsschule: bei Azubis soll auf dem Nachweis stehen, warum an dem Tag
+  // nicht gearbeitet wurde (Wunsch der Lohnbuchhaltung).
+  const sickDates = new Set(sickEntries.map((entry) => entry.dateKey))
+  const schoolEntries: ReportEntry[] = getApprovedLeaveDates(
+    leaveRequests,
+    'school',
+    start,
+    end,
+    new Set([...blockedDates, ...vacationDates, ...overtimeDates, ...sickDates])
+  ).map(({ date, request }) => {
+    const reason = (request.reason || '').trim()
+    // Ohne Angabe (Meldung durch den Admin) gilt der Tag als Berufsschule.
+    const label = SCHOOL_DAY_LABELS[request.schoolKind || 'school']
+    return {
+      ...buildAbsenceRow(
+        date,
+        'school',
+        `school-${request.id || ''}`,
+        label,
+        reason && reason !== label ? `${label}: ${reason}` : label
+      ),
+      schoolKind: request.schoolKind
+    }
+  })
+  return [...holidayEntries, ...vacationEntries, ...overtimeEntries, ...sickEntries, ...schoolEntries]
+}
+
 export const formatTimeForInput = (date: Date | null): string => {
   if (!date) return ''
   return date.toLocaleTimeString('de-DE', {
@@ -531,6 +693,10 @@ export interface ReportSettlementSummary {
   vacationDays: number
   vacationMinutes: number
   vacationAmount: number
+  /** Bezahlter Freizeitausgleich aus dem bereits belasteten Überstundenkonto. */
+  overtimeLeaveDays: number
+  overtimeLeaveMinutes: number
+  overtimeLeaveAmount: number
   holidayMinutes: number
   holidayAmount: number
   sickDays: number
@@ -705,6 +871,8 @@ export const buildAdjustedReport = (
     adjusted.filter((entry) => entry.absenceKind === kind).length
   const vacationMinutes = minutesOfKind('vacation')
   const vacationDays = daysOfKind('vacation')
+  const overtimeLeaveDays = daysOfKind('overtime')
+  const overtimeLeaveMinutes = minutesOfKind('overtime')
   const holidayMinutes = minutesOfKind('holiday')
   const sickMinutes = minutesOfKind('sick')
   const sickDays = daysOfKind('sick')
@@ -733,6 +901,7 @@ export const buildAdjustedReport = (
   const paidWorkMinutes = floorToQuarterHour(reportedMinutes ?? workMinutes)
   const workAmount = useFixedSalary ? 0 : amountFor(paidWorkMinutes)
   const vacationAmount = useFixedSalary ? 0 : amountFor(vacationMinutes)
+  const overtimeLeaveAmount = useFixedSalary ? 0 : amountFor(overtimeLeaveMinutes)
   const holidayAmount = useFixedSalary ? 0 : amountFor(holidayMinutes)
   const sickAmount = useFixedSalary ? 0 : amountFor(sickMinutes)
   const schoolAmount = useFixedSalary ? 0 : amountFor(schoolMinutes)
@@ -744,10 +913,10 @@ export const buildAdjustedReport = (
   // abgerechnet (Wunsch der Steuerkanzlei). Er steht deshalb nur noch mit der
   // Anzahl der Tage auf dem Beleg und ist im Bruttolohn NICHT enthalten – sonst
   // würde er doppelt vergütet.
-  const grossWageMinutes = paidWorkMinutes + holidayMinutes + sickMinutes + schoolMinutes
+  const grossWageMinutes = paidWorkMinutes + holidayMinutes + sickMinutes + schoolMinutes + overtimeLeaveMinutes
   const grossWageAmount = useFixedSalary
     ? round2(Math.max(0, fixedMonthlySalary))
-    : round2(workAmount + holidayAmount + sickAmount + schoolAmount)
+    : round2(workAmount + holidayAmount + sickAmount + schoolAmount + overtimeLeaveAmount)
 
   return {
     entries: adjusted,
@@ -778,6 +947,9 @@ export const buildAdjustedReport = (
       vacationDays,
       vacationMinutes,
       vacationAmount,
+      overtimeLeaveDays,
+      overtimeLeaveMinutes,
+      overtimeLeaveAmount,
       holidayMinutes,
       holidayAmount,
       sickDays,

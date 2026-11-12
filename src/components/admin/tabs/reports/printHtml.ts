@@ -236,6 +236,13 @@ export const buildSettlementSummaryLines = (summary: ReportSettlementSummary): S
 
   const lines: SummaryLine[] = [
     ...workLines,
+    ...(summary.overtimeLeaveDays > 0
+      ? [{
+          label: 'Urlaub auf Überstunden',
+          detail: timesRate(`${days(summary.overtimeLeaveDays)} (${hours(summary.overtimeLeaveMinutes)})`),
+          amount: amountOrDash(summary.overtimeLeaveAmount)
+        }]
+      : []),
     {
       label: 'Feiertagsstunden',
       detail: timesRate(hours(summary.holidayMinutes)),
